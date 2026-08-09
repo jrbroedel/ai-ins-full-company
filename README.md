@@ -86,4 +86,4 @@ Key findings from the regulatory research behind this build (August 2026) are ca
 
 ## Status
 
-Early design phase. No production data. No live regulatory sign-off on any state rating table entry. Database (Azure Database for PostgreSQL) and ERP/front-end (Odoo Community) are decided but not yet built — see `docs/decisions/0001-database-and-erp.md` and `docs/decisions/0002-cloud-provider-azure.md`. Odoo's Azure Blob Storage integration approach (community module vs. custom) is unscoped.
+Early design phase. No production data. No live regulatory sign-off on any state rating table entry. Database (Azure Database for PostgreSQL) and ERP/front-end (Odoo Community) are decided but not yet built — see `docs/decisions/0001-database-and-erp.md` and `docs/decisions/0002-cloud-provider-azure.md`. Odoo's Azure Blob Storage integration approach is scoped (leaning OCA's `fs_storage`/`fs_attachment` modules) but not yet hands-on verified — see `docs/decisions/0003-odoo-azure-blob-integration.md`.

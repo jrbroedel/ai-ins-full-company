@@ -23,12 +23,12 @@ ADR 0001 described object storage generically as "S3-compatible" specifically be
 
 - Any future code (Odoo customization, pipeline document-handling logic) needs to be written against Azure's Blob SDK, not a generic S3 client - there's no "just change the endpoint" option here.
 - If a future third-party tool or library assumes S3 compatibility (some do, as a de facto standard), it may need an adapter or may not support Azure Blob directly - check this per-tool as they get selected, don't assume compatibility.
-- Odoo itself does not have official first-party Azure Blob Storage support for its filestore - community modules exist for this but haven't been evaluated yet. This is new scoping work, not previously covered by the "custom quota-share module" estimate in ADR 0001.
+- Odoo does not have official first-party Azure Blob Storage support that covers our use case - it has a native "Cloud Storage" feature that supports Azure, but it's scoped to chatter/email attachments only and explicitly excludes generated documents and Documents/Sign files. **Scoped in ADR 0003** - recommends OCA's `fs_storage`/`fs_attachment` modules instead.
 
 ## Consequences
 
 - The database recommendation from ADR 0001 (PostgreSQL) is unaffected and reinforced - Azure Database for PostgreSQL is a first-party managed Postgres offering, no compatibility concern there.
-- New, not-yet-scoped work: evaluating/selecting an Odoo-Azure Blob Storage integration approach (community module vs. custom filestore backend).
+- New, not-yet-scoped work: evaluating/selecting an Odoo-Azure Blob Storage integration approach (community module vs. custom filestore backend). **Resolved by ADR 0003.**
 - Anywhere earlier documentation or code references "S3" or assumes S3 API compatibility, it should be read as superseded by this ADR - flag and correct on sight rather than treating as still-accurate.
 
 ## Alternatives considered and rejected
