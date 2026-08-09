@@ -1,0 +1,493 @@
+{
+  "note": "All names, addresses, VINs, and identifiers are fictional test data. Each profile below is designed to stress-test a specific failure mode in an automated underwriting pipeline.",
+  "sample_applications": [
+    {
+      "profile_label": "Fraud indicator - garaging address mismatch",
+      "test_purpose": "Applicant's mailing address and stated garaging address are in different states with no plausible connection (a common indicator of rate evasion, where applicants list a low-rate address that isn't where the car is actually kept).",
+      "applicant": {
+        "applicant_id": "APP-0005",
+        "first_name": "Wesley",
+        "last_name": "Carmody",
+        "date_of_birth": "1979-04-08",
+        "ssn_last4": "0000",
+        "email": "w.carmody@example.com",
+        "phone": "555-010-0005",
+        "mailing_address": {"street": "220 Elm Terrace", "city": "Burlington", "state": "VT", "zip": "05401"},
+        "occupation": "Consultant",
+        "years_licensed": 22,
+        "license_number_state": "VT",
+        "license_status": "valid",
+        "credit_based_insurance_score_band": "good"
+      },
+      "additional_drivers": [],
+      "vehicles": [
+        {
+          "vehicle_id": "VEH-0005",
+          "year": 2024,
+          "make": "Lamborghini",
+          "model": "Huracan",
+          "trim": "Tecnica",
+          "vin": "ZHWUC0000RL000005",
+          "vehicle_category": "exotic",
+          "purchase_price": 268000,
+          "current_appraised_value": 255000,
+          "appraisal_date": "2026-02-01",
+          "appraisal_source": "Dealer invoice",
+          "agreed_value_requested": true,
+          "annual_mileage": 6000,
+          "primary_use": "pleasure",
+          "garaging_address": {"street": "900 Ocean Dr", "city": "Miami Beach", "state": "FL", "zip": "33139"},
+          "garage_type": "gated_community",
+          "security_features": ["alarm", "GPS_tracker"],
+          "modifications": null,
+          "existing_liens": true,
+          "lienholder_name": "Sunbelt Auto Capital"
+        }
+      ],
+      "coverage_requested": {
+        "liability_bodily_injury_limits": "250/500",
+        "liability_property_damage_limit": 250000,
+        "uninsured_underinsured_motorist": true,
+        "comprehensive_deductible": 1000,
+        "collision_deductible": 1000,
+        "agreed_value_endorsement": true,
+        "spare_parts_coverage": false,
+        "roadside_transport_flatbed_only": true,
+        "umbrella_policy_requested": false,
+        "umbrella_limit": null
+      },
+      "prior_insurance": {
+        "current_carrier": "None - new purchase",
+        "years_with_current_carrier": 0,
+        "current_policy_expiration": null,
+        "reason_for_shopping": "New vehicle purchase",
+        "any_nonrenewal_or_cancellation_history": false,
+        "cancellation_reason": null
+      },
+      "claims_history_5yr": []
+    },
+    {
+      "profile_label": "Fraud indicator - undisclosed household driver",
+      "test_purpose": "Public/third-party data (simulated here) shows a licensed driver at the same address who is not listed on the application — a common way applicants exclude a high-risk driver to lower premium. Pipeline should flag for cross-reference against DMV/household data feeds.",
+      "applicant": {
+        "applicant_id": "APP-0006",
+        "first_name": "Renata",
+        "last_name": "Foss",
+        "date_of_birth": "1982-12-01",
+        "ssn_last4": "0000",
+        "email": "r.foss@example.com",
+        "phone": "555-010-0006",
+        "mailing_address": {"street": "14 Birchwood Ln", "city": "Bloomfield Hills", "state": "MI", "zip": "48304"},
+        "occupation": "Attorney",
+        "years_licensed": 20,
+        "license_number_state": "MI",
+        "license_status": "valid",
+        "credit_based_insurance_score_band": "excellent"
+      },
+      "additional_drivers": [],
+      "external_data_flags": {
+        "note": "Populated by pipeline enrichment, not applicant-submitted",
+        "unlisted_household_resident_with_valid_license": true,
+        "unlisted_resident_relationship_guess": "child, age ~19, 2 violations on record"
+      },
+      "vehicles": [
+        {
+          "vehicle_id": "VEH-0006",
+          "year": 2025,
+          "make": "Bentley",
+          "model": "Continental GT",
+          "trim": "Speed",
+          "vin": "SCBFR000000000006",
+          "vehicle_category": "production_luxury",
+          "purchase_price": 285000,
+          "current_appraised_value": 279000,
+          "appraisal_date": "2026-06-01",
+          "appraisal_source": "Dealer invoice",
+          "agreed_value_requested": true,
+          "annual_mileage": 5000,
+          "primary_use": "pleasure",
+          "garaging_address": {"street": "14 Birchwood Ln", "city": "Bloomfield Hills", "state": "MI", "zip": "48304"},
+          "garage_type": "attached_locked",
+          "security_features": ["alarm", "GPS_tracker", "immobilizer"],
+          "modifications": null,
+          "existing_liens": true,
+          "lienholder_name": "Great Lakes Premier Bank"
+        }
+      ],
+      "coverage_requested": {
+        "liability_bodily_injury_limits": "500/500",
+        "liability_property_damage_limit": 500000,
+        "uninsured_underinsured_motorist": true,
+        "comprehensive_deductible": 1000,
+        "collision_deductible": 1000,
+        "agreed_value_endorsement": true,
+        "spare_parts_coverage": false,
+        "roadside_transport_flatbed_only": true,
+        "umbrella_policy_requested": true,
+        "umbrella_limit": 3000000
+      },
+      "prior_insurance": {
+        "current_carrier": "PURE",
+        "years_with_current_carrier": 4,
+        "current_policy_expiration": "2026-09-01",
+        "reason_for_shopping": "Rate comparison",
+        "any_nonrenewal_or_cancellation_history": false,
+        "cancellation_reason": null
+      },
+      "claims_history_5yr": []
+    },
+    {
+      "profile_label": "DUI / high-severity violation history",
+      "test_purpose": "Applicant has a DUI conviction within the lookback period. Tests whether the pipeline correctly triggers a hard decline or mandatory human-underwriter referral rather than a score-based soft rejection, since DUI history is often a manual-review-required rule in most states rather than a scorable variable.",
+      "applicant": {
+        "applicant_id": "APP-0007",
+        "first_name": "Marcus",
+        "last_name": "Delaine",
+        "date_of_birth": "1985-06-23",
+        "ssn_last4": "0000",
+        "email": "m.delaine@example.com",
+        "phone": "555-010-0007",
+        "mailing_address": {"street": "310 Highland Park Rd", "city": "Dallas", "state": "TX", "zip": "75201"},
+        "occupation": "Business Owner",
+        "years_licensed": 25,
+        "license_number_state": "TX",
+        "license_status": "valid - restricted (ignition interlock required)",
+        "credit_based_insurance_score_band": "good"
+      },
+      "additional_drivers": [],
+      "violation_history": [
+        {
+          "date": "2025-01-19",
+          "type": "DUI",
+          "conviction": true,
+          "bac_level": 0.14
+        }
+      ],
+      "vehicles": [
+        {
+          "vehicle_id": "VEH-0007",
+          "year": 2023,
+          "make": "Range Rover",
+          "model": "Autobiography",
+          "trim": "P530",
+          "vin": "SALGS0000PA000007",
+          "vehicle_category": "production_luxury",
+          "purchase_price": 155000,
+          "current_appraised_value": 128000,
+          "appraisal_date": "2026-04-01",
+          "appraisal_source": "Independent appraiser",
+          "agreed_value_requested": false,
+          "annual_mileage": 11000,
+          "primary_use": "commute",
+          "garaging_address": {"street": "310 Highland Park Rd", "city": "Dallas", "state": "TX", "zip": "75201"},
+          "garage_type": "attached_locked",
+          "security_features": ["alarm"],
+          "modifications": null,
+          "existing_liens": true,
+          "lienholder_name": "Lone Star Auto Trust"
+        }
+      ],
+      "coverage_requested": {
+        "liability_bodily_injury_limits": "100/300",
+        "liability_property_damage_limit": 100000,
+        "uninsured_underinsured_motorist": true,
+        "comprehensive_deductible": 1000,
+        "collision_deductible": 1000,
+        "agreed_value_endorsement": false,
+        "spare_parts_coverage": false,
+        "roadside_transport_flatbed_only": false,
+        "umbrella_policy_requested": false,
+        "umbrella_limit": null
+      },
+      "prior_insurance": {
+        "current_carrier": "Assigned risk / SR-22 filing carrier",
+        "years_with_current_carrier": 1,
+        "current_policy_expiration": "2026-08-20",
+        "reason_for_shopping": "SR-22 requirement, seeking standard market re-entry",
+        "any_nonrenewal_or_cancellation_history": true,
+        "cancellation_reason": "Non-renewed following DUI conviction"
+      },
+      "claims_history_5yr": []
+    },
+    {
+      "profile_label": "Incomplete application - missing required fields",
+      "test_purpose": "Applicant submitted a partial form. Tests whether the pipeline correctly routes to a 'needs information' state rather than either auto-declining or, worse, auto-approving on defaulted/null values.",
+      "applicant": {
+        "applicant_id": "APP-0008",
+        "first_name": "Yuki",
+        "last_name": "Tanaka",
+        "date_of_birth": null,
+        "ssn_last4": null,
+        "email": "y.tanaka@example.com",
+        "phone": "555-010-0008",
+        "mailing_address": {"street": "45 Crestline Ave", "city": "Scottsdale", "state": "AZ", "zip": null},
+        "occupation": null,
+        "years_licensed": null,
+        "license_number_state": "AZ",
+        "license_status": null,
+        "credit_based_insurance_score_band": "not_available"
+      },
+      "additional_drivers": [],
+      "vehicles": [
+        {
+          "vehicle_id": "VEH-0008",
+          "year": 2022,
+          "make": "Aston Martin",
+          "model": "DB11",
+          "trim": null,
+          "vin": null,
+          "vehicle_category": "exotic",
+          "purchase_price": null,
+          "current_appraised_value": null,
+          "appraisal_date": null,
+          "appraisal_source": null,
+          "agreed_value_requested": true,
+          "annual_mileage": null,
+          "primary_use": "pleasure",
+          "garaging_address": {"street": "45 Crestline Ave", "city": "Scottsdale", "state": "AZ", "zip": null},
+          "garage_type": null,
+          "security_features": [],
+          "modifications": null,
+          "existing_liens": null,
+          "lienholder_name": null
+        }
+      ],
+      "coverage_requested": {
+        "liability_bodily_injury_limits": null,
+        "liability_property_damage_limit": null,
+        "uninsured_underinsured_motorist": null,
+        "comprehensive_deductible": null,
+        "collision_deductible": null,
+        "agreed_value_endorsement": true,
+        "spare_parts_coverage": null,
+        "roadside_transport_flatbed_only": null,
+        "umbrella_policy_requested": null,
+        "umbrella_limit": null
+      },
+      "prior_insurance": {
+        "current_carrier": null,
+        "years_with_current_carrier": null,
+        "current_policy_expiration": null,
+        "reason_for_shopping": null,
+        "any_nonrenewal_or_cancellation_history": null,
+        "cancellation_reason": null
+      },
+      "claims_history_5yr": []
+    },
+    {
+      "profile_label": "Data integrity issue - VIN/make-model mismatch",
+      "test_purpose": "The submitted VIN decodes to a different make/model/year than what the applicant entered in the form fields (simulating either a data-entry error or an attempt to insure a higher-value vehicle under a cheaper vehicle's description). Tests whether the pipeline runs VIN decoding validation before proceeding.",
+      "applicant": {
+        "applicant_id": "APP-0009",
+        "first_name": "Harold",
+        "last_name": "Vance",
+        "date_of_birth": "1975-02-17",
+        "ssn_last4": "0000",
+        "email": "h.vance@example.com",
+        "phone": "555-010-0009",
+        "mailing_address": {"street": "62 Sequoia Ct", "city": "Denver", "state": "CO", "zip": "80202"},
+        "occupation": "Software Engineer",
+        "years_licensed": 27,
+        "license_number_state": "CO",
+        "license_status": "valid",
+        "credit_based_insurance_score_band": "good"
+      },
+      "additional_drivers": [],
+      "vehicles": [
+        {
+          "vehicle_id": "VEH-0009",
+          "year": 2021,
+          "make": "Chevrolet",
+          "model": "Corvette",
+          "trim": "Stingray (as declared by applicant)",
+          "vin": "1G1YY0000M0000009",
+          "vin_decode_result": "VIN actually decodes to a 2021 Chevrolet Corvette Z06 — higher trim/value than declared",
+          "vehicle_category": "modified_performance",
+          "purchase_price": 62000,
+          "current_appraised_value": 58000,
+          "appraisal_date": "2026-03-11",
+          "appraisal_source": "Applicant-provided estimate",
+          "agreed_value_requested": false,
+          "annual_mileage": 8000,
+          "primary_use": "pleasure",
+          "garaging_address": {"street": "62 Sequoia Ct", "city": "Denver", "state": "CO", "zip": "80202"},
+          "garage_type": "attached_locked",
+          "security_features": ["alarm"],
+          "modifications": null,
+          "existing_liens": true,
+          "lienholder_name": "Rocky Mountain Credit Union"
+        }
+      ],
+      "coverage_requested": {
+        "liability_bodily_injury_limits": "250/500",
+        "liability_property_damage_limit": 250000,
+        "uninsured_underinsured_motorist": true,
+        "comprehensive_deductible": 1000,
+        "collision_deductible": 1000,
+        "agreed_value_endorsement": false,
+        "spare_parts_coverage": false,
+        "roadside_transport_flatbed_only": false,
+        "umbrella_policy_requested": false,
+        "umbrella_limit": null
+      },
+      "prior_insurance": {
+        "current_carrier": "Geico",
+        "years_with_current_carrier": 3,
+        "current_policy_expiration": "2026-08-25",
+        "reason_for_shopping": "Rate comparison",
+        "any_nonrenewal_or_cancellation_history": false,
+        "cancellation_reason": null
+      },
+      "claims_history_5yr": []
+    },
+    {
+      "profile_label": "Prior total loss / salvage title nondisclosure risk",
+      "test_purpose": "The vehicle has a salvage/rebuilt title history that is not mentioned anywhere in the applicant's form fields. Tests whether the pipeline cross-checks VIN against a title-history/vehicle-history data source rather than relying solely on self-reported condition.",
+      "applicant": {
+        "applicant_id": "APP-0010",
+        "first_name": "Sandra",
+        "last_name": "Whitcombe",
+        "date_of_birth": "1969-10-30",
+        "ssn_last4": "0000",
+        "email": "s.whitcombe@example.com",
+        "phone": "555-010-0010",
+        "mailing_address": {"street": "18 Harbor View Rd", "city": "Newport", "state": "RI", "zip": "02840"},
+        "occupation": "Investment Manager",
+        "years_licensed": 35,
+        "license_number_state": "RI",
+        "license_status": "valid",
+        "credit_based_insurance_score_band": "excellent"
+      },
+      "additional_drivers": [],
+      "vehicles": [
+        {
+          "vehicle_id": "VEH-0010",
+          "year": 2020,
+          "make": "McLaren",
+          "model": "720S",
+          "trim": "Performance",
+          "vin": "SBM14000000000010",
+          "title_history_check_result": "Salvage title, 2023 (previous owner) — not disclosed by applicant on this form",
+          "vehicle_category": "exotic",
+          "purchase_price": 175000,
+          "current_appraised_value": 190000,
+          "appraisal_date": "2026-05-20",
+          "appraisal_source": "Applicant-provided estimate; states vehicle is in 'excellent, accident-free condition'",
+          "agreed_value_requested": true,
+          "annual_mileage": 4500,
+          "primary_use": "pleasure",
+          "garaging_address": {"street": "18 Harbor View Rd", "city": "Newport", "state": "RI", "zip": "02840"},
+          "garage_type": "detached_locked",
+          "security_features": ["alarm", "GPS_tracker"],
+          "modifications": null,
+          "existing_liens": false,
+          "lienholder_name": null
+        }
+      ],
+      "coverage_requested": {
+        "liability_bodily_injury_limits": "500/500",
+        "liability_property_damage_limit": 500000,
+        "uninsured_underinsured_motorist": true,
+        "comprehensive_deductible": 2500,
+        "collision_deductible": 2500,
+        "agreed_value_endorsement": true,
+        "spare_parts_coverage": true,
+        "roadside_transport_flatbed_only": true,
+        "umbrella_policy_requested": true,
+        "umbrella_limit": 5000000
+      },
+      "prior_insurance": {
+        "current_carrier": "None - private sale purchase",
+        "years_with_current_carrier": 0,
+        "current_policy_expiration": null,
+        "reason_for_shopping": "New acquisition, needs coverage before delivery",
+        "any_nonrenewal_or_cancellation_history": false,
+        "cancellation_reason": null
+      },
+      "claims_history_5yr": []
+    },
+    {
+      "profile_label": "Business-use misrepresentation risk",
+      "test_purpose": "Applicant declares 'pleasure' use, but other fields (high annual mileage, occupation, and a vehicle-tracking/rideshare-adjacent detail) suggest probable undisclosed commercial or livery use, which is typically excluded under a personal auto policy and would require referral or a commercial rider.",
+      "applicant": {
+        "applicant_id": "APP-0011",
+        "first_name": "Anthony",
+        "last_name": "Reyes",
+        "date_of_birth": "1990-05-14",
+        "ssn_last4": "0000",
+        "email": "a.reyes@example.com",
+        "phone": "555-010-0011",
+        "mailing_address": {"street": "230 Sunset Terrace", "city": "Los Angeles", "state": "CA", "zip": "90046"},
+        "occupation": "Owner, luxury car chauffeur/event rental service",
+        "years_licensed": 14,
+        "license_number_state": "CA",
+        "license_status": "valid",
+        "credit_based_insurance_score_band": "good"
+      },
+      "additional_drivers": [
+        {
+          "name": "Multiple rotating employees (unnamed on application)",
+          "relationship_to_applicant": "Employee",
+          "date_of_birth": null,
+          "years_licensed": null,
+          "license_status": "unknown",
+          "violations_last_5yr": null,
+          "at_fault_accidents_last_5yr": null
+        }
+      ],
+      "vehicles": [
+        {
+          "vehicle_id": "VEH-0011",
+          "year": 2024,
+          "make": "Rolls-Royce",
+          "model": "Ghost",
+          "trim": "Extended",
+          "vin": "SCA00000000000011",
+          "vehicle_category": "production_luxury",
+          "purchase_price": 420000,
+          "current_appraised_value": 405000,
+          "appraisal_date": "2026-01-10",
+          "appraisal_source": "Dealer invoice",
+          "agreed_value_requested": true,
+          "annual_mileage": 42000,
+          "primary_use": "pleasure",
+          "garaging_address": {"street": "230 Sunset Terrace", "city": "Los Angeles", "state": "CA", "zip": "90046"},
+          "garage_type": "gated_community",
+          "security_features": ["alarm", "GPS_tracker"],
+          "modifications": "Partition glass installed between front and rear seating",
+          "existing_liens": true,
+          "lienholder_name": "Pacific Coast Auto Finance"
+        }
+      ],
+      "coverage_requested": {
+        "liability_bodily_injury_limits": "250/500",
+        "liability_property_damage_limit": 250000,
+        "uninsured_underinsured_motorist": true,
+        "comprehensive_deductible": 2500,
+        "collision_deductible": 2500,
+        "agreed_value_endorsement": true,
+        "spare_parts_coverage": false,
+        "roadside_transport_flatbed_only": true,
+        "umbrella_policy_requested": false,
+        "umbrella_limit": null
+      },
+      "prior_insurance": {
+        "current_carrier": "Progressive",
+        "years_with_current_carrier": 2,
+        "current_policy_expiration": "2026-09-05",
+        "reason_for_shopping": "Rate comparison",
+        "any_nonrenewal_or_cancellation_history": false,
+        "cancellation_reason": null
+      },
+      "claims_history_5yr": [
+        {
+          "date": "2025-11-20",
+          "type": "liability",
+          "at_fault": true,
+          "paid_amount": 32000,
+          "description": "Accident occurred while vehicle was transporting wedding party (evidence of commercial use in claim notes)"
+        }
+      ]
+    }
+  ]
+}

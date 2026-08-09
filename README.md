@@ -17,16 +17,22 @@ docs/                 Design notes, regulatory research, architecture decisions
 - `sample-data/state_rating_tables_sample.json` — illustrative/directional entries for CA, NY, CO, TX, FL, MA, HI, MI. **Not verified against actual SERFF filings — every field is flagged for re-verification before production use.** See the file's own `_disclaimer` field.
 - `referral-matrices/luxury_auto_referral_matrix.json` — routing rules (auto-proceed / information request / manual review / hard decline) across vehicle & valuation, driver & household, account & loss history, coverage & pricing, and process & conduct categories. Wired to the edge-case test applications described below.
 
-## Known gap — files from an earlier session not yet in this repo
+## Contents (full set, recovered from an earlier session)
 
-An earlier working session (before this repo existed) produced four artifacts that are **referenced throughout the schemas and referral matrix in this repo but are not currently tracked here**, because this environment's file storage resets between sessions and they were never copied into a persistent location:
+- `schemas/luxury_auto_application_schema.json` — core application intake schema (ACORD 90 + HNW carrier supplement fields). This is the field-naming reference every other file in this repo assumes.
+- `sample-data/luxury_auto_sample_applications.json` — four synthetic filled applications (clean/low-risk, moderate-risk modified vehicle, high-risk with suspended driver, exotic agreed-value edge case).
+- `sample-data/luxury_auto_edge_case_applications.json` — seven synthetic applications, each designed to exercise a specific referral matrix rule (garaging mismatch, undisclosed household driver, DUI, incomplete data, VIN mismatch, salvage title, business-use misrepresentation).
+- `docs/sample-renderings/luxury_auto_sample_application.pdf` — PDF rendering of one sample application (ReportLab).
 
-- `luxury_auto_application_schema.json` — the core application intake schema (ACORD 90 + HNW carrier supplement fields), which `state_rating_table_schema.json`'s `approved_rating_variables[].variable_name` and the referral matrix's `source_fields` both assume as their field-naming reference.
-- `luxury_auto_sample_applications.json` — four synthetic filled applications (clean/low-risk, moderate-risk modified vehicle, high-risk with suspended driver, exotic agreed-value edge case).
-- `luxury_auto_edge_case_applications.json` — seven synthetic applications, each designed to exercise a specific referral matrix rule (garaging mismatch, undisclosed household driver, DUI, incomplete data, VIN mismatch, salvage title, business-use misrepresentation).
-- A PDF rendering of one sample application (ReportLab).
+## Known gap — schema does not yet formally define enrichment fields
 
-**Action needed:** upload these four files (wherever they were saved after the original session) so they can be added to `schemas/` and `sample-data/` and the cross-references in this repo become resolvable rather than just descriptive.
+The referral matrix and the edge case files both use fields that represent **pipeline enrichment output** (VIN decode results, title history checks, structured violation history, household driver checks) added *after* intake, not applicant-submitted fields. Right now these only exist ad hoc, invented independently inside individual edge case files (`APP-0007.violation_history`, `APP-0009.vin_decode_result`, `APP-0010.title_history_check_result`, `APP-0006.external_data_flags`) — `luxury_auto_application_schema.json` has no formal section for them yet.
+
+**Action needed:** add a formal `enrichment_computed` section to the application schema (parallel to `underwriting_flags_computed`) so referral rules read from one consistent shape instead of four one-off conventions invented per edge case.
+
+## Design note — state-specific attributes
+
+Rather than one flat schema trying to hold every state's quirks as optional fields, the plan is a base application schema plus a per-state extension mechanism (state-specific supplemental fields, e.g. Michigan's no-fault/PIP selection tiers) — to be designed alongside the enrichment-fields fix above.
 
 ## Regulatory research notes
 

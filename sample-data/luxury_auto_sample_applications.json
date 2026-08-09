@@ -1,0 +1,308 @@
+{
+  "note": "All names, addresses, VINs, and identifiers below are entirely fictional and generated for pipeline testing purposes. Do not use real SSNs/VINs in production test data — these use obviously fake placeholders.",
+  "sample_applications": [
+    {
+      "profile_label": "Clean risk - established collector",
+      "applicant": {
+        "applicant_id": "APP-0001",
+        "first_name": "Miriam",
+        "last_name": "Ostrander",
+        "date_of_birth": "1971-03-14",
+        "ssn_last4": "0000",
+        "email": "m.ostrander@example.com",
+        "phone": "555-010-0001",
+        "mailing_address": {"street": "142 Ridgemont Dr", "city": "Greenwich", "state": "CT", "zip": "06831"},
+        "occupation": "Orthopedic Surgeon",
+        "years_licensed": 32,
+        "license_number_state": "CT",
+        "license_status": "valid",
+        "credit_based_insurance_score_band": "excellent"
+      },
+      "additional_drivers": [],
+      "vehicles": [
+        {
+          "vehicle_id": "VEH-0001",
+          "year": 2023,
+          "make": "Porsche",
+          "model": "911",
+          "trim": "Turbo S",
+          "vin": "WP0AA0000PS000001",
+          "vehicle_category": "production_luxury",
+          "purchase_price": 231000,
+          "current_appraised_value": 215000,
+          "appraisal_date": "2026-05-01",
+          "appraisal_source": "Manufacturer dealer invoice + independent appraiser",
+          "agreed_value_requested": true,
+          "annual_mileage": 3200,
+          "primary_use": "pleasure",
+          "garaging_address": {"street": "142 Ridgemont Dr", "city": "Greenwich", "state": "CT", "zip": "06831"},
+          "garage_type": "attached_locked",
+          "security_features": ["alarm", "GPS_tracker", "immobilizer"],
+          "modifications": null,
+          "existing_liens": false,
+          "lienholder_name": null
+        }
+      ],
+      "coverage_requested": {
+        "liability_bodily_injury_limits": "500/500",
+        "liability_property_damage_limit": 500000,
+        "uninsured_underinsured_motorist": true,
+        "comprehensive_deductible": 1000,
+        "collision_deductible": 1000,
+        "agreed_value_endorsement": true,
+        "spare_parts_coverage": false,
+        "roadside_transport_flatbed_only": true,
+        "umbrella_policy_requested": true,
+        "umbrella_limit": 5000000
+      },
+      "prior_insurance": {
+        "current_carrier": "Chubb",
+        "years_with_current_carrier": 9,
+        "current_policy_expiration": "2026-09-15",
+        "reason_for_shopping": "Comparing rates at renewal",
+        "any_nonrenewal_or_cancellation_history": false,
+        "cancellation_reason": null
+      },
+      "claims_history_5yr": []
+    },
+    {
+      "profile_label": "Moderate risk - young driver, high-performance modified vehicle",
+      "applicant": {
+        "applicant_id": "APP-0002",
+        "first_name": "Trevor",
+        "last_name": "Bianchi",
+        "date_of_birth": "2001-11-02",
+        "ssn_last4": "0000",
+        "email": "t.bianchi@example.com",
+        "phone": "555-010-0002",
+        "mailing_address": {"street": "88 Palmetto Way", "city": "Miami", "state": "FL", "zip": "33139"},
+        "occupation": "Real Estate Agent",
+        "years_licensed": 6,
+        "license_number_state": "FL",
+        "license_status": "valid",
+        "credit_based_insurance_score_band": "fair"
+      },
+      "additional_drivers": [],
+      "vehicles": [
+        {
+          "vehicle_id": "VEH-0002",
+          "year": 2022,
+          "make": "Nissan",
+          "model": "GT-R",
+          "trim": "Nismo",
+          "vin": "JN1AR000000000002",
+          "vehicle_category": "modified_performance",
+          "purchase_price": 145000,
+          "current_appraised_value": 132000,
+          "appraisal_date": "2026-04-10",
+          "appraisal_source": "Independent appraiser",
+          "agreed_value_requested": true,
+          "annual_mileage": 9500,
+          "primary_use": "pleasure",
+          "garaging_address": {"street": "88 Palmetto Way", "city": "Miami", "state": "FL", "zip": "33139"},
+          "garage_type": "gated_community",
+          "security_features": ["alarm", "GPS_tracker"],
+          "modifications": "Aftermarket turbo upgrade, ECU tune, exhaust system",
+          "existing_liens": true,
+          "lienholder_name": "Coastal Auto Finance"
+        }
+      ],
+      "coverage_requested": {
+        "liability_bodily_injury_limits": "250/500",
+        "liability_property_damage_limit": 250000,
+        "uninsured_underinsured_motorist": true,
+        "comprehensive_deductible": 2500,
+        "collision_deductible": 2500,
+        "agreed_value_endorsement": true,
+        "spare_parts_coverage": true,
+        "roadside_transport_flatbed_only": true,
+        "umbrella_policy_requested": false,
+        "umbrella_limit": null
+      },
+      "prior_insurance": {
+        "current_carrier": "Progressive",
+        "years_with_current_carrier": 1,
+        "current_policy_expiration": "2026-08-30",
+        "reason_for_shopping": "Non-renewed by prior carrier due to modifications",
+        "any_nonrenewal_or_cancellation_history": true,
+        "cancellation_reason": "Carrier does not cover aftermarket performance modifications"
+      },
+      "claims_history_5yr": [
+        {
+          "date": "2025-02-11",
+          "type": "collision",
+          "at_fault": true,
+          "paid_amount": 18400,
+          "description": "Single-vehicle accident, lost control on wet road"
+        },
+        {
+          "date": "2024-06-30",
+          "type": "liability",
+          "at_fault": true,
+          "paid_amount": 6200,
+          "description": "Rear-ended another vehicle at a stoplight"
+        }
+      ]
+    },
+    {
+      "profile_label": "High risk - poor claims history, unsecured garaging",
+      "applicant": {
+        "applicant_id": "APP-0003",
+        "first_name": "Dale",
+        "last_name": "Kirkwood",
+        "date_of_birth": "1988-07-19",
+        "ssn_last4": "0000",
+        "email": "d.kirkwood@example.com",
+        "phone": "555-010-0003",
+        "mailing_address": {"street": "5510 N. Ashcroft Ave", "city": "Phoenix", "state": "AZ", "zip": "85014"},
+        "occupation": "Contractor",
+        "years_licensed": 18,
+        "license_number_state": "AZ",
+        "license_status": "valid",
+        "credit_based_insurance_score_band": "poor"
+      },
+      "additional_drivers": [
+        {
+          "name": "Casey Kirkwood",
+          "relationship_to_applicant": "Spouse",
+          "date_of_birth": "1990-01-05",
+          "years_licensed": 15,
+          "license_status": "suspended",
+          "violations_last_5yr": 3,
+          "at_fault_accidents_last_5yr": 1
+        }
+      ],
+      "vehicles": [
+        {
+          "vehicle_id": "VEH-0003",
+          "year": 2021,
+          "make": "Mercedes-Benz",
+          "model": "AMG GT",
+          "trim": "63 S",
+          "vin": "WDD1J00000A000003",
+          "vehicle_category": "production_luxury",
+          "purchase_price": 168000,
+          "current_appraised_value": 121000,
+          "appraisal_date": "2026-03-22",
+          "appraisal_source": "Applicant-provided estimate (no independent appraisal on file)",
+          "agreed_value_requested": false,
+          "annual_mileage": 14200,
+          "primary_use": "commute",
+          "garaging_address": {"street": "5510 N. Ashcroft Ave", "city": "Phoenix", "state": "AZ", "zip": "85014"},
+          "garage_type": "unsecured_street",
+          "security_features": [],
+          "modifications": null,
+          "existing_liens": true,
+          "lienholder_name": "Desert Ridge Credit Union"
+        }
+      ],
+      "coverage_requested": {
+        "liability_bodily_injury_limits": "100/300",
+        "liability_property_damage_limit": 100000,
+        "uninsured_underinsured_motorist": false,
+        "comprehensive_deductible": 500,
+        "collision_deductible": 500,
+        "agreed_value_endorsement": false,
+        "spare_parts_coverage": false,
+        "roadside_transport_flatbed_only": false,
+        "umbrella_policy_requested": false,
+        "umbrella_limit": null
+      },
+      "prior_insurance": {
+        "current_carrier": "State-assigned risk pool",
+        "years_with_current_carrier": 1,
+        "current_policy_expiration": "2026-07-01",
+        "reason_for_shopping": "Seeking standard market coverage after high-risk pool placement",
+        "any_nonrenewal_or_cancellation_history": true,
+        "cancellation_reason": "Multiple at-fault claims; non-renewed by two prior carriers"
+      },
+      "claims_history_5yr": [
+        {
+          "date": "2025-09-02",
+          "type": "collision",
+          "at_fault": true,
+          "paid_amount": 24700,
+          "description": "Multi-vehicle collision at intersection"
+        },
+        {
+          "date": "2024-12-14",
+          "type": "theft",
+          "at_fault": false,
+          "paid_amount": 9800,
+          "description": "Catalytic converter theft while parked on street"
+        },
+        {
+          "date": "2023-05-08",
+          "type": "collision",
+          "at_fault": true,
+          "paid_amount": 15300,
+          "description": "Backed into parked vehicle in commercial lot"
+        }
+      ]
+    },
+    {
+      "profile_label": "Edge case - exotic classic, agreed value dispute risk",
+      "applicant": {
+        "applicant_id": "APP-0004",
+        "first_name": "Priya",
+        "last_name": "Nandakumar",
+        "date_of_birth": "1965-09-27",
+        "ssn_last4": "0000",
+        "email": "p.nandakumar@example.com",
+        "phone": "555-010-0004",
+        "mailing_address": {"street": "77 Vineyard Crest", "city": "Napa", "state": "CA", "zip": "94558"},
+        "occupation": "Retired Executive",
+        "years_licensed": 44,
+        "license_number_state": "CA",
+        "license_status": "valid",
+        "credit_based_insurance_score_band": "excellent"
+      },
+      "additional_drivers": [],
+      "vehicles": [
+        {
+          "vehicle_id": "VEH-0004",
+          "year": 1967,
+          "make": "Ferrari",
+          "model": "275 GTB/4",
+          "trim": "N/A",
+          "vin": "FER67500000000004",
+          "vehicle_category": "classic_collector",
+          "purchase_price": 3200000,
+          "current_appraised_value": 3850000,
+          "appraisal_date": "2026-01-15",
+          "appraisal_source": "Certified classic car appraiser (specialty firm)",
+          "agreed_value_requested": true,
+          "annual_mileage": 400,
+          "primary_use": "show_display",
+          "garaging_address": {"street": "77 Vineyard Crest", "city": "Napa", "state": "CA", "zip": "94558"},
+          "garage_type": "climate_controlled_storage",
+          "security_features": ["alarm", "GPS_tracker", "dash_cam"],
+          "modifications": null,
+          "existing_liens": false,
+          "lienholder_name": null
+        }
+      ],
+      "coverage_requested": {
+        "liability_bodily_injury_limits": "500/500",
+        "liability_property_damage_limit": 500000,
+        "uninsured_underinsured_motorist": true,
+        "comprehensive_deductible": 5000,
+        "collision_deductible": 5000,
+        "agreed_value_endorsement": true,
+        "spare_parts_coverage": true,
+        "roadside_transport_flatbed_only": true,
+        "umbrella_policy_requested": true,
+        "umbrella_limit": 10000000
+      },
+      "prior_insurance": {
+        "current_carrier": "Hagerty",
+        "years_with_current_carrier": 12,
+        "current_policy_expiration": "2026-10-01",
+        "reason_for_shopping": "Adding vehicle to broader HNW portfolio policy",
+        "any_nonrenewal_or_cancellation_history": false,
+        "cancellation_reason": null
+      },
+      "claims_history_5yr": []
+    }
+  ]
+}

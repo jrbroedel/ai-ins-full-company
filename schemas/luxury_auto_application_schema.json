@@ -1,0 +1,104 @@
+{
+  "schema_name": "Luxury/High-Value Auto Insurance Application",
+  "version": "1.0",
+  "based_on": "ACORD 90 (Personal Auto) core fields + high-net-worth/collector-vehicle supplement (patterned after carriers like Chubb Masterpiece, PURE, AIG Private Client)",
+  "sections": {
+    "applicant": {
+      "applicant_id": "string (UUID)",
+      "first_name": "string",
+      "last_name": "string",
+      "date_of_birth": "date",
+      "ssn_last4": "string (last 4 only recommended for storage minimization)",
+      "email": "string",
+      "phone": "string",
+      "mailing_address": {
+        "street": "string",
+        "city": "string",
+        "state": "string",
+        "zip": "string"
+      },
+      "occupation": "string",
+      "years_licensed": "integer",
+      "license_number_state": "string",
+      "license_status": "enum[valid, suspended, revoked, expired]",
+      "credit_based_insurance_score_band": "enum[excellent, good, fair, poor, not_available] (state regulations vary on use)"
+    },
+    "additional_drivers": [
+      {
+        "name": "string",
+        "relationship_to_applicant": "string",
+        "date_of_birth": "date",
+        "years_licensed": "integer",
+        "license_status": "enum[valid, suspended, revoked, expired]",
+        "violations_last_5yr": "integer",
+        "at_fault_accidents_last_5yr": "integer"
+      }
+    ],
+    "vehicles": [
+      {
+        "vehicle_id": "string (UUID)",
+        "year": "integer",
+        "make": "string",
+        "model": "string",
+        "trim": "string",
+        "vin": "string",
+        "vehicle_category": "enum[production_luxury, exotic, classic_collector, modified_performance]",
+        "purchase_price": "number",
+        "current_appraised_value": "number",
+        "appraisal_date": "date",
+        "appraisal_source": "string",
+        "agreed_value_requested": "boolean",
+        "annual_mileage": "integer",
+        "primary_use": "enum[pleasure, commute, business, show_display]",
+        "garaging_address": {
+          "street": "string",
+          "city": "string",
+          "state": "string",
+          "zip": "string"
+        },
+        "garage_type": "enum[attached_locked, detached_locked, gated_community, unsecured_street, climate_controlled_storage]",
+        "security_features": ["alarm", "GPS_tracker", "steering_lock", "dash_cam", "immobilizer"],
+        "modifications": "string or null",
+        "existing_liens": "boolean",
+        "lienholder_name": "string or null"
+      }
+    ],
+    "coverage_requested": {
+      "liability_bodily_injury_limits": "string (e.g., 250/500)",
+      "liability_property_damage_limit": "number",
+      "uninsured_underinsured_motorist": "boolean",
+      "comprehensive_deductible": "number",
+      "collision_deductible": "number",
+      "agreed_value_endorsement": "boolean",
+      "spare_parts_coverage": "boolean",
+      "roadside_transport_flatbed_only": "boolean",
+      "umbrella_policy_requested": "boolean",
+      "umbrella_limit": "number or null"
+    },
+    "prior_insurance": {
+      "current_carrier": "string",
+      "years_with_current_carrier": "integer",
+      "current_policy_expiration": "date",
+      "reason_for_shopping": "string",
+      "any_nonrenewal_or_cancellation_history": "boolean",
+      "cancellation_reason": "string or null"
+    },
+    "claims_history_5yr": [
+      {
+        "date": "date",
+        "type": "enum[collision, comprehensive, liability, glass, theft]",
+        "at_fault": "boolean",
+        "paid_amount": "number",
+        "description": "string"
+      }
+    ],
+    "underwriting_flags_computed": {
+      "note": "Populated by the AI pipeline post-intake, not by the applicant",
+      "risk_score": "number (model output)",
+      "vehicle_theft_risk_index": "number",
+      "driver_risk_index": "number",
+      "referral_required": "boolean",
+      "referral_reason": "string or null"
+    }
+  }
+}
