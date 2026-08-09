@@ -33,7 +33,7 @@ Odoo's own `ir_attachment.py` documents exactly the extension points OCA's modul
 
 ## What still needs verification (this is why status is "leaning," not "decided")
 
-- Confirm `fs_attachment`/`fs_storage` version compatibility with whatever specific Odoo version we deploy (need to pin an Odoo version first - not yet decided in any prior ADR).
+- Confirm `fs_attachment`/`fs_storage` version compatibility with whatever specific Odoo version we deploy - **resolved by ADR 0004: Odoo 19.0**, which has an active `fs_attachment`/`fs_storage` branch in OCA's storage project.
 - Actually stand up a `abfs`/`adlfs` connection against a real Azure Blob Storage account and confirm read/write/delete works end-to-end through Odoo, including for a custom model's attachment field (this project's real use case), not just chatter.
 - Confirm license compatibility - OCA modules are typically AGPL-3, which should be compatible with Odoo Community's own AGPL-3 license, but worth a direct check rather than an assumption given how central this module becomes to the data layer.
 - Decide whether the native Cloud Storage feature (option 1) is worth also enabling for chatter/email specifically, as a secondary, non-conflicting optimization - not required, purely optional.
