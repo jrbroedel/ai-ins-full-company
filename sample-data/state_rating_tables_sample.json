@@ -1,0 +1,450 @@
+{
+  "_disclaimer": "DIRECTIONAL/ILLUSTRATIVE ONLY. Built from public secondary sources (state DOI sites, legal trackers, NAIC materials) during a design session, not from the actual filed rate manuals. Every record below is a starting skeleton showing HOW the registry should differ state-to-state - not a production-ready compliance source. Before this feeds a live rating decision: (1) pull the actual current filed rate manual/rules for each state and program, (2) re-verify every prohibited/permitted variable against current statute text, (3) get sign-off from whoever holds compliance/regulatory responsibility for the business.",
+  "schema_version": "1.0",
+  "states": [
+    {
+      "record_id": "CA-2026-v1",
+      "state": "CA",
+      "regulator_name": "California Department of Insurance",
+      "filing_status": "prior_approval",
+      "line_of_business_code": "Private Passenger Auto",
+      "serff_filing_tracking_number": "TBD - pull from actual filing before use",
+      "rate_manual_reference": "TBD - link to filed CA rate manual",
+      "effective_date": "TBD",
+      "superseded_by": null,
+      "expiration_or_review_date": null,
+      "approved_rating_variables": [
+        {
+          "variable_name": "applicant.years_licensed",
+          "permitted": true,
+          "usage_context": ["new_business", "renewal", "tiering"],
+          "notes": "Under Prop 103, driving safety record, annual mileage, and years of driving experience must be the three PRIMARY rating factors, weighted more heavily than any other permitted factor. This is a structural constraint on the whole rating algorithm, not just a variable-level permission."
+        },
+        {
+          "variable_name": "vehicles[].annual_mileage",
+          "permitted": true,
+          "usage_context": ["new_business", "renewal"],
+          "notes": "Primary factor under Prop 103 - verify current mileage-band definitions."
+        },
+        {
+          "variable_name": "applicant.violation_history / claims_history_5yr",
+          "permitted": true,
+          "usage_context": ["new_business", "renewal", "tiering"],
+          "notes": "Driving safety record - primary factor."
+        },
+        {
+          "variable_name": "applicant.credit_based_insurance_score_band",
+          "permitted": false,
+          "usage_context": [],
+          "notes": "Banned outright in CA - see prohibited_variables."
+        }
+      ],
+      "prohibited_variables": [
+        {
+          "variable_name": "applicant.credit_based_insurance_score_band",
+          "citation": "Prop 103 framework / CA Insurance Code - CA is one of four states banning credit-based insurance scoring for auto entirely",
+          "notes": "Do not compute, store as a rating input, or expose this to the rating engine for CA-garaged vehicles."
+        },
+        {
+          "variable_name": "gender",
+          "citation": "CA regulation prohibiting gender as a rating factor in personal auto",
+          "notes": "Confirm current status directly - this has shifted historically and should be re-verified, not assumed stable."
+        }
+      ],
+      "credit_based_insurance_score": {
+        "permitted": false,
+        "usage_context": [],
+        "notes": "Full ban - California."
+      },
+      "gender_rating_permitted": false,
+      "territory_rating_basis": "TBD - CA has its own territory definition rules distinct from most other states; verify against current CDI class plan.",
+      "agreed_value_rules": {
+        "max_annual_mileage_for_agreed_value": null,
+        "pleasure_use_required": true,
+        "reappraisal_interval_years": 2,
+        "notes": "Program-level restriction, not a CA-specific statute found in this session - verify against actual HNW carrier program terms."
+      },
+      "referral_thresholds_state_specific": {
+        "dui_lookback_years": null,
+        "sr22_fr44_required": false,
+        "salvage_title_disclosure_rule": "TBD - verify CA salvage/rebuilt title disclosure statute",
+        "notes": "TBD"
+      },
+      "ai_governance": {
+        "naic_model_bulletin_adopted": false,
+        "naic_model_bulletin_adoption_date": null,
+        "state_specific_ai_law": "California has separate/emerging AI and algorithmic fairness activity outside the NAIC bulletin track - treat as its own research item before launch.",
+        "documentation_required": ["bias_testing_records", "explainability_for_adverse_outcomes"],
+        "citation": "TBD - verify current CA-specific guidance separately; do not assume NAIC bulletin adoption status without checking the current NAIC tracker."
+      },
+      "documentation": {
+        "source_urls": ["https://www.insurance.ca.gov/0250-insurers/0800-rate-filings"],
+        "last_verified_date": "2026-08-08",
+        "verified_by": "Design session research - NOT a compliance verification"
+      },
+      "version_history": [
+        {"changed_date": "2026-08-08", "changed_by": "Claude (design session)", "change_summary": "Initial skeleton created"}
+      ]
+    },
+    {
+      "record_id": "NY-2026-v1",
+      "state": "NY",
+      "regulator_name": "New York Department of Financial Services",
+      "filing_status": "prior_approval",
+      "line_of_business_code": "Private Passenger Auto",
+      "serff_filing_tracking_number": "TBD",
+      "rate_manual_reference": "TBD",
+      "effective_date": "TBD",
+      "superseded_by": null,
+      "expiration_or_review_date": null,
+      "approved_rating_variables": [],
+      "prohibited_variables": [],
+      "credit_based_insurance_score": {
+        "permitted": true,
+        "usage_context": ["new_business", "renewal", "tiering"],
+        "notes": "NY does not ban credit-based scoring outright, but any model using it falls under DFS AI/algorithmic oversight (see ai_governance) - verify current permitted-use scope."
+      },
+      "gender_rating_permitted": null,
+      "territory_rating_basis": "TBD",
+      "agreed_value_rules": {
+        "max_annual_mileage_for_agreed_value": null,
+        "pleasure_use_required": true,
+        "reappraisal_interval_years": 2,
+        "notes": "TBD"
+      },
+      "referral_thresholds_state_specific": {
+        "dui_lookback_years": null,
+        "sr22_fr44_required": false,
+        "salvage_title_disclosure_rule": "TBD",
+        "notes": "TBD"
+      },
+      "ai_governance": {
+        "naic_model_bulletin_adopted": true,
+        "naic_model_bulletin_adoption_date": "TBD - verify current NAIC tracker",
+        "state_specific_ai_law": "NY DFS Circular Letter 2024-7",
+        "documentation_required": ["bias_testing_records", "vendor_audit_rights", "internal_governance_log", "explainability_for_adverse_outcomes"],
+        "citation": "NY DFS Circular Letter 2024-7 requires insurers to demonstrate AI/external data systems do not proxy for protected classes, maintain explanatory documentation, allow DFS to review vendor tools, and require vendor audits. This is the strictest documentation bar of any state researched so far - build the decision-log/explainability feature to NY's standard by default so every other state is a subset, not a special case."
+      },
+      "documentation": {
+        "source_urls": ["https://www.dfs.ny.gov/apps_and_licensing/insurance_companies/rate_and_form_filing_requirements_and_checklists"],
+        "last_verified_date": "2026-08-08",
+        "verified_by": "Design session research - NOT a compliance verification"
+      },
+      "version_history": [
+        {"changed_date": "2026-08-08", "changed_by": "Claude (design session)", "change_summary": "Initial skeleton created"}
+      ]
+    },
+    {
+      "record_id": "CO-2026-v1",
+      "state": "CO",
+      "regulator_name": "Colorado Division of Insurance",
+      "filing_status": "TBD - verify (Colorado has used both prior-approval and file-and-use elements historically for different lines)",
+      "line_of_business_code": "Private Passenger Auto",
+      "serff_filing_tracking_number": "TBD",
+      "rate_manual_reference": "TBD",
+      "effective_date": "TBD",
+      "superseded_by": null,
+      "expiration_or_review_date": null,
+      "approved_rating_variables": [],
+      "prohibited_variables": [
+        {
+          "variable_name": "external_consumer_data / predictive_models (unfair discrimination risk)",
+          "citation": "C.R.S. 10-3-1104.9 and implementing regulation",
+          "notes": "Prohibits use of external consumer data sources and predictive models that result in unfair discrimination based on protected classes. This is broader than a single-variable ban - any third-party enrichment data source (e.g. a vendor risk score) feeding your underwriting_flags computation needs its own bias-testing evidence for CO specifically."
+        }
+      ],
+      "credit_based_insurance_score": {
+        "permitted": true,
+        "usage_context": ["new_business", "renewal", "tiering"],
+        "notes": "Not banned outright, but subject to the same unfair-discrimination testing requirement above - verify current CO DOI guidance on credit specifically."
+      },
+      "gender_rating_permitted": null,
+      "territory_rating_basis": "TBD",
+      "agreed_value_rules": {
+        "max_annual_mileage_for_agreed_value": null,
+        "pleasure_use_required": true,
+        "reappraisal_interval_years": 2,
+        "notes": "TBD"
+      },
+      "referral_thresholds_state_specific": {
+        "dui_lookback_years": null,
+        "sr22_fr44_required": false,
+        "salvage_title_disclosure_rule": "TBD",
+        "notes": "TBD"
+      },
+      "ai_governance": {
+        "naic_model_bulletin_adopted": true,
+        "naic_model_bulletin_adoption_date": "TBD",
+        "state_specific_ai_law": "Colorado C.R.S. 10-3-1104.9",
+        "documentation_required": ["bias_testing_records", "explainability_for_adverse_outcomes"],
+        "citation": "C.R.S. 10-3-1104.9"
+      },
+      "documentation": {
+        "source_urls": [],
+        "last_verified_date": "2026-08-08",
+        "verified_by": "Design session research - NOT a compliance verification"
+      },
+      "version_history": [
+        {"changed_date": "2026-08-08", "changed_by": "Claude (design session)", "change_summary": "Initial skeleton created"}
+      ]
+    },
+    {
+      "record_id": "TX-2026-v1",
+      "state": "TX",
+      "regulator_name": "Texas Department of Insurance",
+      "filing_status": "file_and_use",
+      "line_of_business_code": "Private Passenger Auto",
+      "serff_filing_tracking_number": "TBD",
+      "rate_manual_reference": "TBD",
+      "effective_date": "TBD",
+      "superseded_by": null,
+      "expiration_or_review_date": null,
+      "approved_rating_variables": [],
+      "prohibited_variables": [],
+      "credit_based_insurance_score": {
+        "permitted": true,
+        "usage_context": ["new_business", "renewal", "tiering"],
+        "notes": "TX permits credit-based scoring - no ban identified in this session's research. Verify current use-context restrictions (e.g. adverse action notice requirements under TX statute + federal FCRA)."
+      },
+      "gender_rating_permitted": true,
+      "territory_rating_basis": "TBD",
+      "agreed_value_rules": {
+        "max_annual_mileage_for_agreed_value": null,
+        "pleasure_use_required": true,
+        "reappraisal_interval_years": 2,
+        "notes": "TBD"
+      },
+      "referral_thresholds_state_specific": {
+        "dui_lookback_years": null,
+        "sr22_fr44_required": true,
+        "salvage_title_disclosure_rule": "TBD",
+        "notes": "File_and_use means TX rates can be used at the same time they're filed - faster to market than prior-approval states, but still subject to after-the-fact DOI review/disapproval."
+      },
+      "ai_governance": {
+        "naic_model_bulletin_adopted": null,
+        "naic_model_bulletin_adoption_date": null,
+        "state_specific_ai_law": null,
+        "documentation_required": [],
+        "citation": "TBD - verify current TX status against the NAIC adoption tracker before assuming no AI-specific overlay applies."
+      },
+      "documentation": {
+        "source_urls": [],
+        "last_verified_date": "2026-08-08",
+        "verified_by": "Design session research - NOT a compliance verification"
+      },
+      "version_history": [
+        {"changed_date": "2026-08-08", "changed_by": "Claude (design session)", "change_summary": "Initial skeleton created"}
+      ]
+    },
+    {
+      "record_id": "FL-2026-v1",
+      "state": "FL",
+      "regulator_name": "Florida Office of Insurance Regulation",
+      "filing_status": "TBD - verify (Florida auto uses a mix of file-and-use and flex-band elements depending on coverage/filing type)",
+      "line_of_business_code": "Private Passenger Auto",
+      "serff_filing_tracking_number": "TBD",
+      "rate_manual_reference": "TBD",
+      "effective_date": "TBD",
+      "superseded_by": null,
+      "expiration_or_review_date": null,
+      "approved_rating_variables": [],
+      "prohibited_variables": [],
+      "credit_based_insurance_score": {
+        "permitted": true,
+        "usage_context": ["new_business", "renewal", "tiering"],
+        "notes": "No ban identified - verify current status."
+      },
+      "gender_rating_permitted": true,
+      "territory_rating_basis": "TBD - FL territory/catastrophe (hurricane) load structure is materially different from most states; this matters for garaging-territory aggregate logic (Ch. 6 parallel in the Energy manual).",
+      "agreed_value_rules": {
+        "max_annual_mileage_for_agreed_value": null,
+        "pleasure_use_required": true,
+        "reappraisal_interval_years": 2,
+        "notes": "FL property damage liability minimum is lower than most states ($10,000) - relevant if you're validating minimum coverage_requested fields against state floors, not just carrier minimums."
+      },
+      "referral_thresholds_state_specific": {
+        "dui_lookback_years": null,
+        "sr22_fr44_required": false,
+        "salvage_title_disclosure_rule": "TBD",
+        "notes": "TBD - hurricane/named-storm exposure should feed the same aggregate-tracking logic the Energy manual describes for cat zones."
+      },
+      "ai_governance": {
+        "naic_model_bulletin_adopted": null,
+        "naic_model_bulletin_adoption_date": null,
+        "state_specific_ai_law": null,
+        "documentation_required": [],
+        "citation": "TBD - verify current FL status against the NAIC adoption tracker."
+      },
+      "documentation": {
+        "source_urls": [],
+        "last_verified_date": "2026-08-08",
+        "verified_by": "Design session research - NOT a compliance verification"
+      },
+      "version_history": [
+        {"changed_date": "2026-08-08", "changed_by": "Claude (design session)", "change_summary": "Initial skeleton created"}
+      ]
+    },
+    {
+      "record_id": "MA-2026-v1",
+      "state": "MA",
+      "regulator_name": "Massachusetts Division of Insurance",
+      "filing_status": "prior_approval",
+      "line_of_business_code": "Private Passenger Auto",
+      "serff_filing_tracking_number": "TBD",
+      "rate_manual_reference": "TBD",
+      "effective_date": "TBD",
+      "superseded_by": null,
+      "expiration_or_review_date": null,
+      "approved_rating_variables": [],
+      "prohibited_variables": [
+        {
+          "variable_name": "applicant.credit_based_insurance_score_band",
+          "citation": "MA statute prohibiting use of credit information/credit-based insurance scores in setting rates, underwriting, or renewal for auto insurance",
+          "notes": "Full ban - applies to underwriting AND renewal, not just initial rating."
+        }
+      ],
+      "credit_based_insurance_score": {
+        "permitted": false,
+        "usage_context": [],
+        "notes": "Full ban - Massachusetts."
+      },
+      "gender_rating_permitted": null,
+      "territory_rating_basis": "TBD",
+      "agreed_value_rules": {
+        "max_annual_mileage_for_agreed_value": null,
+        "pleasure_use_required": true,
+        "reappraisal_interval_years": 2,
+        "notes": "TBD"
+      },
+      "referral_thresholds_state_specific": {
+        "dui_lookback_years": null,
+        "sr22_fr44_required": false,
+        "salvage_title_disclosure_rule": "TBD",
+        "notes": "TBD"
+      },
+      "ai_governance": {
+        "naic_model_bulletin_adopted": true,
+        "naic_model_bulletin_adoption_date": "2024-12-09",
+        "state_specific_ai_law": null,
+        "documentation_required": ["bias_testing_records", "internal_governance_log"],
+        "citation": "MA Bulletin No. 2024-10"
+      },
+      "documentation": {
+        "source_urls": [],
+        "last_verified_date": "2026-08-08",
+        "verified_by": "Design session research - NOT a compliance verification"
+      },
+      "version_history": [
+        {"changed_date": "2026-08-08", "changed_by": "Claude (design session)", "change_summary": "Initial skeleton created"}
+      ]
+    },
+    {
+      "record_id": "HI-2026-v1",
+      "state": "HI",
+      "regulator_name": "Hawaii Insurance Division",
+      "filing_status": "TBD",
+      "line_of_business_code": "Private Passenger Auto",
+      "serff_filing_tracking_number": "TBD",
+      "rate_manual_reference": "TBD",
+      "effective_date": "TBD",
+      "superseded_by": null,
+      "expiration_or_review_date": null,
+      "approved_rating_variables": [],
+      "prohibited_variables": [
+        {
+          "variable_name": "applicant.credit_based_insurance_score_band",
+          "citation": "HI statute banning credit ratings in setting underwriting standards and rating plans for auto insurance",
+          "notes": "Full ban."
+        }
+      ],
+      "credit_based_insurance_score": {
+        "permitted": false,
+        "usage_context": [],
+        "notes": "Full ban - Hawaii."
+      },
+      "gender_rating_permitted": null,
+      "territory_rating_basis": "TBD",
+      "agreed_value_rules": {
+        "max_annual_mileage_for_agreed_value": null,
+        "pleasure_use_required": true,
+        "reappraisal_interval_years": 2,
+        "notes": "TBD"
+      },
+      "referral_thresholds_state_specific": {
+        "dui_lookback_years": null,
+        "sr22_fr44_required": false,
+        "salvage_title_disclosure_rule": "TBD",
+        "notes": "TBD"
+      },
+      "ai_governance": {
+        "naic_model_bulletin_adopted": true,
+        "naic_model_bulletin_adoption_date": "2025-12-10",
+        "state_specific_ai_law": null,
+        "documentation_required": ["bias_testing_records"],
+        "citation": "HI Insurance Commissioner Memorandum No. 2025-13A"
+      },
+      "documentation": {
+        "source_urls": [],
+        "last_verified_date": "2026-08-08",
+        "verified_by": "Design session research - NOT a compliance verification"
+      },
+      "version_history": [
+        {"changed_date": "2026-08-08", "changed_by": "Claude (design session)", "change_summary": "Initial skeleton created"}
+      ]
+    },
+    {
+      "record_id": "MI-2026-v1",
+      "state": "MI",
+      "regulator_name": "Michigan Department of Insurance and Financial Services",
+      "filing_status": "TBD",
+      "line_of_business_code": "Private Passenger Auto",
+      "serff_filing_tracking_number": "TBD",
+      "rate_manual_reference": "TBD",
+      "effective_date": "TBD",
+      "superseded_by": null,
+      "expiration_or_review_date": null,
+      "approved_rating_variables": [],
+      "prohibited_variables": [
+        {
+          "variable_name": "applicant.credit_based_insurance_score_band",
+          "citation": "MI no-fault reform (2020) eliminated credit scoring as an auto rating factor",
+          "notes": "Full ban, part of MI's broader 2020 no-fault insurance reform - Michigan also has unique no-fault/PIP structure that affects coverage_requested fields more broadly than just this ban."
+        }
+      ],
+      "credit_based_insurance_score": {
+        "permitted": false,
+        "usage_context": [],
+        "notes": "Full ban - Michigan."
+      },
+      "gender_rating_permitted": null,
+      "territory_rating_basis": "TBD",
+      "agreed_value_rules": {
+        "max_annual_mileage_for_agreed_value": null,
+        "pleasure_use_required": true,
+        "reappraisal_interval_years": 2,
+        "notes": "TBD"
+      },
+      "referral_thresholds_state_specific": {
+        "dui_lookback_years": null,
+        "sr22_fr44_required": false,
+        "salvage_title_disclosure_rule": "TBD",
+        "notes": "Michigan's no-fault PIP structure likely requires additional coverage_requested schema fields not yet in your current luxury_auto_application_schema.json (PIP selection tiers, Medicare coordination, etc.) - flag for schema review if MI is an active state."
+      },
+      "ai_governance": {
+        "naic_model_bulletin_adopted": null,
+        "naic_model_bulletin_adoption_date": null,
+        "state_specific_ai_law": null,
+        "documentation_required": [],
+        "citation": "TBD - verify current MI status against the NAIC adoption tracker."
+      },
+      "documentation": {
+        "source_urls": [],
+        "last_verified_date": "2026-08-08",
+        "verified_by": "Design session research - NOT a compliance verification"
+      },
+      "version_history": [
+        {"changed_date": "2026-08-08", "changed_by": "Claude (design session)", "change_summary": "Initial skeleton created"}
+      ]
+    }
+  ]
+}

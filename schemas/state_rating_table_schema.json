@@ -1,0 +1,79 @@
+{
+  "schema_name": "State Rating Table Registry - Luxury Auto",
+  "version": "1.0",
+  "purpose": "One record per state (per effective-date version) defining what the rating engine is legally permitted to do in that state. This is the compliance boundary the pipeline's underwriting_flags and rating computation must stay inside. It does not store proprietary base rates/rate manuals in full - it stores the compliance metadata plus a pointer to where the actual filed rate manual lives, so the engine can validate itself before it prices anything.",
+  "how_this_is_used": [
+    "1. Application arrives with a garaging state (or risk state, if different from mailing state).",
+    "2. Registry is queried for that state's ACTIVE record as of the application's rate-effective date (see effective_date/superseded_by).",
+    "3. Rating engine cross-checks every variable it intends to use against approved_rating_variables. Any variable not on the permitted list, or explicitly on prohibited_variables, is a hard stop - not a warning.",
+    "4. underwriting_flags computation reads agreed_value_rules and referral_thresholds_state_specific to set state-correct referral triggers (these can differ meaningfully from a national default matrix).",
+    "5. Quote/proposal generation attaches a decision log citing which permitted variables drove the price, satisfying the ai_governance documentation requirement for that state.",
+    "6. On rate change, a NEW record is created with a new serff_filing_tracking_number and effective_date; the prior record's superseded_by is set. In-flight quotes keep rating against the version that was active when the quote was generated, not whatever is newest."
+  ],
+  "record_schema": {
+    "record_id": "string (UUID)",
+    "state": "string (2-letter USPS code) - this should key off the vehicle's GARAGING state, not the applicant's mailing address, when they differ",
+    "regulator_name": "string (e.g. 'California Department of Insurance')",
+    "filing_status": "enum[prior_approval, file_and_use, use_and_file, flex_rating_band, competitive_no_file] - governs how long a rate change takes to become usable and whether it can be used before/after DOI sign-off",
+    "line_of_business_code": "string (state/SERFF Type of Insurance code for Private Passenger Auto, plus any HNW/agreed-value program code if filed separately)",
+    "serff_filing_tracking_number": "string - the actual SERFF (or state-specific, for non-SERFF states) filing number this record represents. NEVER leave this null in production - an unfileable/unsourced rating table is a compliance gap, not a placeholder.",
+    "rate_manual_reference": "string (internal doc/URI pointer to the full filed rate manual, base rates by territory, factor tables - kept outside this JSON because it's large and proprietary/actuarial)",
+    "effective_date": "date - when this version becomes usable for new business/renewals",
+    "superseded_by": "string or null (record_id of the version that replaces this one, once filed)",
+    "expiration_or_review_date": "date or null",
+    "approved_rating_variables": [
+      {
+        "variable_name": "string - should map to a field path in luxury_auto_application_schema.json where possible (e.g. 'applicant.credit_based_insurance_score_band', 'vehicles[].garaging_address', 'applicant.years_licensed')",
+        "permitted": "boolean",
+        "usage_context": "array, subset of [new_business, renewal, tiering, discount_only] - some states allow a variable for one context but not another",
+        "notes": "string - any band/weight restriction, e.g. CA Prop 103 requires driving safety record, annual mileage, and years of driving experience to be the three PRIMARY factors, weighted more heavily than any other permitted factor"
+      }
+    ],
+    "prohibited_variables": [
+      {
+        "variable_name": "string",
+        "citation": "string - statute/regulation reference",
+        "notes": "string"
+      }
+    ],
+    "credit_based_insurance_score": {
+      "permitted": "boolean",
+      "usage_context": "array, subset of [new_business, renewal, tiering, denial]",
+      "notes": "string - e.g. some states permit use for tiering/pricing but prohibit using it as sole basis for non-renewal or denial"
+    },
+    "gender_rating_permitted": "boolean",
+    "territory_rating_basis": "string - e.g. 'ZIP+4 mapped to filed territory codes' or 'county-level territory factor'",
+    "agreed_value_rules": {
+      "max_annual_mileage_for_agreed_value": "integer or null - state or program restriction, distinct from the carrier's own underwriting appetite",
+      "pleasure_use_required": "boolean",
+      "reappraisal_interval_years": "integer - recommended/required cadence for refreshing the agreed value basis",
+      "notes": "string"
+    },
+    "referral_thresholds_state_specific": {
+      "dui_lookback_years": "integer - varies by state's own look-back rules, distinct from the carrier's internal appetite look-back",
+      "sr22_fr44_required": "boolean",
+      "salvage_title_disclosure_rule": "string",
+      "notes": "string"
+    },
+    "ai_governance": {
+      "naic_model_bulletin_adopted": "boolean",
+      "naic_model_bulletin_adoption_date": "date or null",
+      "state_specific_ai_law": "string or null - e.g. 'NY DFS Circular Letter 2024-7', 'Colorado C.R.S. 10-3-1104.9'",
+      "documentation_required": "array, subset of [bias_testing_records, vendor_audit_rights, internal_governance_log, explainability_for_adverse_outcomes, consumer_notice]",
+      "citation": "string"
+    },
+    "documentation": {
+      "source_urls": "array of strings - where this record's claims were verified",
+      "last_verified_date": "date",
+      "verified_by": "string - person or process that confirmed this against the actual filing, not a secondary summary"
+    },
+    "version_history": [
+      {
+        "changed_date": "date",
+        "changed_by": "string",
+        "change_summary": "string"
+      }
+    ]
+  },
+  "build_note": "This registry should be seeded and maintained from actual SERFF filings and DOI bulletins, not from general research summaries - the sample_data file that accompanies this schema is illustrative/directional only (built from public secondary sources) and every field must be re-verified against the actual filed rate manual and current DOI bulletins before this feeds a live rating decision. Treat the sample file the way the Chapter 12 bordereaux build note in the Energy manual treats its own templates: every field should trace back to a real source document, or it's a data gap waiting to surface at the worst time."
+}

@@ -1,0 +1,23 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Python (if pipeline code lands here later)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node (if tooling lands here later)
+node_modules/
+
+# Local env/secrets - never commit these
+.env
+*.pem
+*api_key*
+*secret*

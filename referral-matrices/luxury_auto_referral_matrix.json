@@ -1,0 +1,226 @@
+{
+  "schema_name": "Luxury Auto Referral Matrix",
+  "version": "1.0",
+  "purpose": "Defines every condition that must route an application away from straight-through auto-quote, and what happens when it does. This is the pipeline's hard-stop layer - the place where 'the model isn't sure' or 'the model is sure but the answer requires a human/compliance check' gets encoded as executable logic rather than left to discretion under deadline pressure.",
+  "how_this_is_used": [
+    "1. Every rule below is evaluated against the incoming application (post data-enrichment: MVR, VIN decode, title history, prior-carrier loss run) BEFORE the rating engine runs, the same way the Energy manual gates pricing on aggregate/referral checks before the worksheet is touched.",
+    "2. A rule firing does not necessarily mean decline - see action_taxonomy. Most rules route to a human underwriter or an automated information request, not an auto-decline.",
+    "3. Rules with a state_override_hook must be checked against that state's active state_rating_table record (referral_thresholds_state_specific or prohibited_variables) - a state can tighten, loosen, or add disclosure requirements around a nationally-defined trigger.",
+    "4. Every rule that fires must write a reason_code to the application's decision log, unredacted, even if the ultimate outcome is 'proceed.' This is what makes an adverse-action explanation or a market conduct exam answerable later - see the NY DFS Circular Letter 2024-7 requirement in the state registry's ai_governance section, which this matrix is designed to satisfy by default.",
+    "5. Declinations require the reason_code to be captured at the point of decision, not reconstructed later - directly mirroring the Energy manual's Chapter 3 clearance discipline."
+  ],
+  "action_taxonomy": {
+    "AUTO_PROCEED": "No referral. Rating engine runs normally.",
+    "AUTO_PROCEED_WITH_FLAG": "Rating engine runs, but the flag and its basis are attached to the file for later review (e.g. periodic audit sampling) - not blocking.",
+    "INFORMATION_REQUEST": "Pipeline halts and generates a specific, itemized request back to the applicant/broker. Not a referral to a human underwriter yet - a data completeness gate.",
+    "MANUAL_REVIEW_REQUIRED": "Routed to a human underwriter before any quote is issued. The pipeline may still compute a provisional/indicative price for the underwriter's use, but it cannot be released to the applicant unsupervised.",
+    "MANUAL_REVIEW_SENIOR": "Same as above, but requires review by a senior underwriter or a second sign-off (peer review), reserved for the highest-severity triggers.",
+    "DECLINE_RECOMMENDED": "Pipeline recommends decline with the reason_code pre-filled, but a human confirms - full auto-decline is not used anywhere in this matrix. See design_note below.",
+    "HARD_DECLINE_COMPLIANCE": "Reserved for sanctions/legal hits only. No human discretion - if this fires, the application cannot proceed regardless of any other factor."
+  },
+  "design_note": "No category below auto-declines purely on a model decision except HARD_DECLINE_COMPLIANCE (sanctions). This is a deliberate choice, not an oversight: an AI-driven decline with no human in the loop is exactly the fact pattern that draws NAIC Model Bulletin and state DFS/DOI scrutiny (see prior registry's ai_governance notes). DECLINE_RECOMMENDED keeps a human as the accountable decision-maker while still giving them a fully-reasoned pipeline output to confirm or override.",
+  "categories": {
+    "vehicle_and_valuation": [
+      {
+        "rule_id": "VV-01",
+        "trigger": "VIN decode result does not match applicant-declared make/model/trim/year",
+        "illustrative_threshold": "Any mismatch in make, model, or model year; trim-level mismatches route lower-severity unless they change vehicle_category (e.g. base trim vs. high-performance variant)",
+        "source_fields": ["vehicles[].vin", "vehicles[].make", "vehicles[].model", "vehicles[].year", "vehicles[].vin_decode_result"],
+        "action": "MANUAL_REVIEW_REQUIRED",
+        "rationale": "Could be a data-entry error or an attempt to insure a higher-value vehicle under a cheaper vehicle's declared description. Pipeline cannot distinguish intent, so it cannot resolve this itself.",
+        "state_override_hook": null,
+        "test_case_reference": "Edge case: VIN-to-declared-vehicle mismatch (APP-0009, Corvette Stingray declared / Z06 decoded)",
+        "reason_code": "VV01_VIN_DECODE_MISMATCH"
+      },
+      {
+        "rule_id": "VV-02",
+        "trigger": "Title history check returns salvage, rebuilt, or flood designation not disclosed anywhere in the application",
+        "illustrative_threshold": "Any undisclosed adverse title brand",
+        "source_fields": ["vehicles[].vin", "external: title_history_lookup"],
+        "action": "MANUAL_REVIEW_SENIOR",
+        "rationale": "Undisclosed title issues on a high-value vehicle materially change both the correct agreed value and the accuracy of the risk being priced. Self-reported condition alone is not a sufficient control - this is exactly why the pipeline runs an independent title-history check rather than relying on the form.",
+        "state_override_hook": "referral_thresholds_state_specific.salvage_title_disclosure_rule",
+        "test_case_reference": "Edge case: undisclosed salvage title",
+        "reason_code": "VV02_UNDISCLOSED_TITLE_BRAND"
+      },
+      {
+        "rule_id": "VV-03",
+        "trigger": "Agreed value requested exceeds a multiple of the most recent independent appraisal, or appraisal is missing/stale",
+        "illustrative_threshold": "Agreed value > 115% of appraised value, or appraisal_date older than reappraisal_interval_years from the applicable state rating table",
+        "source_fields": ["vehicles[].agreed_value_requested", "vehicles[].current_appraised_value", "vehicles[].appraisal_date", "vehicles[].appraisal_source"],
+        "action": "INFORMATION_REQUEST",
+        "rationale": "Agreed value is only meaningful with a current, credible valuation basis. This is a completeness/currency gate, not a risk judgment - resolve it before it reaches an underwriter.",
+        "state_override_hook": "agreed_value_rules.reappraisal_interval_years",
+        "test_case_reference": null,
+        "reason_code": "VV03_STALE_OR_UNSUPPORTED_AGREED_VALUE"
+      },
+      {
+        "rule_id": "VV-04",
+        "trigger": "Vehicle has performance/security modifications materially affecting value or risk profile that are not reflected in the declared value or vehicle_category",
+        "illustrative_threshold": "Any modification field populated where vehicle_category is still 'production_luxury' rather than 'modified_performance'",
+        "source_fields": ["vehicles[].modifications", "vehicles[].vehicle_category", "vehicles[].current_appraised_value"],
+        "action": "MANUAL_REVIEW_REQUIRED",
+        "rationale": "Modifications change both theft/collision severity and the correct agreed value basis - mirrors the moderate-risk sample profile already in your test set.",
+        "state_override_hook": null,
+        "test_case_reference": "Sample application: moderate-risk young driver with modified performance vehicle",
+        "reason_code": "VV04_UNDECLARED_MODIFICATION_IMPACT"
+      }
+    ],
+    "driver_and_household": [
+      {
+        "rule_id": "DH-01",
+        "trigger": "DUI or reckless-driving conviction within the state's applicable look-back period",
+        "illustrative_threshold": "Any DUI conviction within dui_lookback_years for the garaging state (national default: 5 years if state value unset)",
+        "source_fields": ["applicant.violation_history", "additional_drivers[].violation_history"],
+        "action": "MANUAL_REVIEW_SENIOR",
+        "rationale": "DUI is treated as a hard referral in every HNW carrier program reviewed for this build, regardless of how clean the rest of the profile is (see the sample application where an otherwise strong applicant with a DUI required SR-22/FR-44 and non-standard routing).",
+        "state_override_hook": "referral_thresholds_state_specific.dui_lookback_years, referral_thresholds_state_specific.sr22_fr44_required",
+        "test_case_reference": "Edge case: DUI history requiring hard referral routing (APP-0007)",
+        "reason_code": "DH01_DUI_WITHIN_LOOKBACK"
+      },
+      {
+        "rule_id": "DH-02",
+        "trigger": "Household/garaging-address data (e.g. shared last name at same address, prior-carrier household driver list, credit household match) indicates a licensed driver at the address who is not declared on the application",
+        "illustrative_threshold": "Any positive match not reconciled by the applicant",
+        "source_fields": ["applicant.mailing_address", "additional_drivers", "external: household_driver_check"],
+        "action": "MANUAL_REVIEW_REQUIRED",
+        "rationale": "An undisclosed household driver is a coverage gap and a rating-accuracy problem at once - the risk being priced isn't the risk that actually exists at that address.",
+        "state_override_hook": null,
+        "test_case_reference": "Edge case: undisclosed household driver",
+        "reason_code": "DH02_UNDISCLOSED_HOUSEHOLD_DRIVER"
+      },
+      {
+        "rule_id": "DH-03",
+        "trigger": "Any listed driver (applicant or additional) has a suspended or revoked license status",
+        "illustrative_threshold": "license_status = suspended or revoked, for applicant or any additional_drivers entry",
+        "source_fields": ["applicant.license_status", "additional_drivers[].license_status"],
+        "action": "MANUAL_REVIEW_SENIOR",
+        "rationale": "Mirrors the high-risk sample profile in your existing test set (suspended additional driver + poor claims history) - this combination has historically been one of the clearest hard-stop patterns in HNW auto underwriting.",
+        "state_override_hook": null,
+        "test_case_reference": "Sample application: high-risk applicant with poor claims history and suspended additional driver",
+        "reason_code": "DH03_SUSPENDED_OR_REVOKED_LICENSE"
+      },
+      {
+        "rule_id": "DH-04",
+        "trigger": "Required applicant or driver fields are null/missing at a rate that prevents any risk computation",
+        "illustrative_threshold": "Any of: date_of_birth, license_status, years_licensed, garaging_address, or vin is null on a submitted (not draft) application",
+        "source_fields": ["applicant.*", "vehicles[].*"],
+        "action": "INFORMATION_REQUEST",
+        "rationale": "The pipeline must not default-fill or silently proceed on missing risk-critical fields - it must explicitly ask, not guess. This is the completeness gate your incomplete-application edge case was specifically built to exercise.",
+        "state_override_hook": null,
+        "test_case_reference": "Edge case: incomplete application with widespread null fields (APP-0008)",
+        "reason_code": "DH04_INSUFFICIENT_DATA_FOR_RISK_COMPUTATION"
+      }
+    ],
+    "account_and_loss_history": [
+      {
+        "rule_id": "AL-01",
+        "trigger": "5-year claims history shows a loss ratio or claim frequency above the carrier's referral trigger",
+        "illustrative_threshold": "2+ at-fault claims in 5 years, or any single claim exceeding a defined severity threshold",
+        "source_fields": ["claims_history_5yr"],
+        "action": "MANUAL_REVIEW_REQUIRED",
+        "rationale": "Direct analogue to the Energy manual's 'five-year loss ratio above binder trigger' referral - the threshold itself is a business decision to be set with underwriting leadership, not inferred by the pipeline.",
+        "state_override_hook": null,
+        "test_case_reference": "Sample application: high-risk applicant with poor claims history",
+        "reason_code": "AL01_ADVERSE_LOSS_HISTORY"
+      },
+      {
+        "rule_id": "AL-02",
+        "trigger": "Prior carrier non-renewal or cancellation history disclosed or discovered",
+        "illustrative_threshold": "any_nonrenewal_or_cancellation_history = true",
+        "source_fields": ["prior_insurance.any_nonrenewal_or_cancellation_history", "prior_insurance.cancellation_reason"],
+        "action": "MANUAL_REVIEW_REQUIRED",
+        "rationale": "Why a carrier chose not to renew is exactly the kind of context a model shouldn't resolve unilaterally - the reason matters more than the fact.",
+        "state_override_hook": null,
+        "test_case_reference": null,
+        "reason_code": "AL02_PRIOR_NONRENEWAL_OR_CANCELLATION"
+      }
+    ],
+    "coverage_and_pricing": [
+      {
+        "rule_id": "CP-01",
+        "trigger": "Vehicle's stated primary_use is pleasure/commute but usage pattern data (annual_mileage, occupation, garaging pattern) suggests undisclosed business use (ride-share, livery, business delivery)",
+        "illustrative_threshold": "annual_mileage inconsistent with declared use pattern, or occupation field suggests a business-use vehicle (e.g. real estate agent + primary_use = pleasure on the only vehicle on the policy)",
+        "source_fields": ["vehicles[].primary_use", "vehicles[].annual_mileage", "applicant.occupation"],
+        "action": "MANUAL_REVIEW_REQUIRED",
+        "rationale": "Business-use misrepresentation changes the entire coverage form that should apply, not just the price - a personal auto policy may not respond to a business-use loss at all.",
+        "state_override_hook": null,
+        "test_case_reference": "Edge case: business-use misrepresentation",
+        "reason_code": "CP01_SUSPECTED_UNDISCLOSED_BUSINESS_USE"
+      },
+      {
+        "rule_id": "CP-02",
+        "trigger": "Requested coverage exceeds delegated/program authority (line size, umbrella limit, or aggregate TIV across all vehicles on the application)",
+        "illustrative_threshold": "Combined agreed value across vehicles on one application above the program's per-risk authority cap",
+        "source_fields": ["vehicles[].agreed_value_requested (aggregated)", "coverage_requested.umbrella_limit"],
+        "action": "MANUAL_REVIEW_SENIOR",
+        "rationale": "Direct analogue to the Energy manual's capacity/aggregate referral category - anything above delegated authority goes up, full stop, regardless of how clean the rest of the risk looks.",
+        "state_override_hook": null,
+        "test_case_reference": "Sample application: exotic edge case with agreed-value complexity",
+        "reason_code": "CP02_AUTHORITY_LIMIT_EXCEEDED"
+      },
+      {
+        "rule_id": "CP-03",
+        "trigger": "A rating credit is being applied beyond the state's approved credit/debit band",
+        "illustrative_threshold": "Per the active state_rating_table record's approved_rating_variables band restrictions",
+        "source_fields": ["computed at rating time, not a form field"],
+        "action": "MANUAL_REVIEW_REQUIRED",
+        "rationale": "This is a compliance stop, not a risk stop - it should never fire if the rating engine is correctly bounded by the state registry, but it exists as a second independent check so a registry defect doesn't silently produce a non-compliant quote.",
+        "state_override_hook": "approved_rating_variables[].notes (band restrictions)",
+        "test_case_reference": null,
+        "reason_code": "CP03_RATING_BAND_EXCEEDED"
+      }
+    ],
+    "process_and_conduct": [
+      {
+        "rule_id": "PC-01",
+        "trigger": "Garaging address does not match the applicant's stated mailing/residential address, or shows a pattern consistent with rate evasion (e.g. garaging listed in a lower-rated territory than where the applicant plausibly lives/works)",
+        "illustrative_threshold": "Garaging state/territory differs from mailing state/territory without a documented reason (e.g. seasonal residence, storage facility)",
+        "source_fields": ["applicant.mailing_address", "vehicles[].garaging_address"],
+        "action": "MANUAL_REVIEW_REQUIRED",
+        "rationale": "Territory is one of the most heavily-weighted rating variables in every state reviewed - an unexplained mismatch is the single highest-value rate-evasion signal available before a human even looks at the file.",
+        "state_override_hook": "territory_rating_basis",
+        "test_case_reference": "Edge case: garaging address mismatch/rate evasion",
+        "reason_code": "PC01_GARAGING_ADDRESS_MISMATCH"
+      },
+      {
+        "rule_id": "PC-02",
+        "trigger": "Sanctions/OFAC screen returns a positive hit on the applicant or any named driver",
+        "illustrative_threshold": "Any positive match, unresolved",
+        "source_fields": ["applicant.*", "additional_drivers[].*", "external: sanctions_screen"],
+        "action": "HARD_DECLINE_COMPLIANCE",
+        "rationale": "The only fully automated stop in this matrix - no underwriting judgment applies to a sanctions hit.",
+        "state_override_hook": null,
+        "test_case_reference": null,
+        "reason_code": "PC02_SANCTIONS_HIT"
+      },
+      {
+        "rule_id": "PC-03",
+        "trigger": "Application is out-of-territory for the program (garaging state not currently licensed/active for this product)",
+        "illustrative_threshold": "Garaging state has no active state_rating_table record",
+        "source_fields": ["vehicles[].garaging_address.state"],
+        "action": "DECLINE_RECOMMENDED",
+        "rationale": "Not a risk judgment - a licensing fact. Kept as DECLINE_RECOMMENDED rather than HARD_DECLINE so a human can catch a registry gap (e.g. state is actually licensed but the registry record hasn't been created yet) before an applicant is turned away incorrectly.",
+        "state_override_hook": "existence of an active record for the state in question",
+        "test_case_reference": null,
+        "reason_code": "PC03_OUT_OF_LICENSED_TERRITORY"
+      },
+      {
+        "rule_id": "PC-04",
+        "trigger": "Broker/agent placing the business is not yet verified (licensing, appointment status) at time of submission",
+        "illustrative_threshold": "No verified producer record on file",
+        "source_fields": ["external: producer_verification"],
+        "action": "MANUAL_REVIEW_REQUIRED",
+        "rationale": "Direct analogue to the Energy manual's 'new producer pre-TOBA' referral trigger.",
+        "state_override_hook": null,
+        "test_case_reference": null,
+        "reason_code": "PC04_UNVERIFIED_PRODUCER"
+      }
+    ]
+  },
+  "open_items_for_underwriting_leadership": [
+    "Set actual numeric thresholds for AL-01 (loss ratio/claim frequency trigger) and CP-02 (aggregate TIV authority cap) - these were left illustrative because they're business risk-appetite decisions, not something derivable from regulation.",
+    "Confirm whether DH-01's national 5-year DUI look-back default is correct, or whether it should simply require a per-state value with no fallback (safer, but blocks quoting in any state not yet in the registry).",
+    "Decide whether PC-03 (out-of-territory) should hard-block or soft-warn during early build-out, when the state_rating_table registry will legitimately be incomplete for states you haven't launched yet - as written it currently assumes 'no record' always means 'not licensed,' which won't be true during rollout."
+  ]
+}
