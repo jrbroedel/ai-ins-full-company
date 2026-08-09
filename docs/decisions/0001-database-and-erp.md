@@ -5,7 +5,7 @@
 
 ## Decision
 
-- **Data layer:** PostgreSQL, with S3-compatible object storage (S3 or self-hosted MinIO) for documents (PDFs, appraisals, loss runs, engineering reports). Only pointers/metadata for documents live in Postgres, not the files themselves.
+- **Data layer:** PostgreSQL, with object storage for documents (PDFs, appraisals, loss runs, engineering reports) — only pointers/metadata for documents live in Postgres, not the files themselves. **Cloud provider and specific object storage service decided separately in ADR 0002** (Azure Database for PostgreSQL + Azure Blob Storage) — this ADR's PostgreSQL rationale below is unaffected by that choice.
 - **ERP / front-end:** Odoo Community Edition (AGPL, self-hosted, free).
 
 These two decisions were made together because they're coupled, not independently.

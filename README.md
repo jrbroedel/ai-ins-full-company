@@ -22,7 +22,7 @@ flowchart TD
         RT[Rating engine]
     end
 
-    subgraph DL["Data layer — PostgreSQL + object storage (decided)"]
+    subgraph DL["Data layer — Azure Postgres + Blob Storage (decided)"]
         direction LR
         PA[Policy and app data]
         DS[Document storage]
@@ -40,7 +40,7 @@ flowchart TD
 Purple = built so far. Teal = decided, not yet built.
 
 - **Workflow pipeline** — the AI underwriting logic itself: intake/enrichment, the referral engine, the rating engine. Everything currently in `schemas/`, `sample-data/`, and `referral-matrices/` belongs here. Deliberately built to stay database-agnostic and UI-agnostic — it's plain JSON with no assumptions baked in about storage or presentation, so the database/ERP decision below didn't require touching it.
-- **Data layer** — **PostgreSQL**, with S3-compatible object storage for documents (PDFs, appraisals, loss runs). Rationale in `docs/decisions/0001-database-and-erp.md`.
+- **Data layer** — **PostgreSQL** (Azure Database for PostgreSQL), with **Azure Blob Storage** for documents (PDFs, appraisals, loss runs). AWS and GCP are out of scope by standing preference, not evaluated on merits. Rationale in `docs/decisions/0001-database-and-erp.md` (database engine + ERP) and `docs/decisions/0002-cloud-provider-azure.md` (cloud provider — includes an important note that Azure Blob Storage is not S3-API-compatible, so this isn't a drop-in swap from earlier S3-generic language).
 - **ERP / front-end** — **Odoo Community Edition** (self-hosted, AGPL). Chosen together with the database, since Odoo requires Postgres. Rationale, alternatives considered (ERPNext, BindHQ/AIM/mPACS), and known open cost (custom quota-share module) in `docs/decisions/0001-database-and-erp.md`.
 
 ## Repo structure
@@ -86,4 +86,4 @@ Key findings from the regulatory research behind this build (August 2026) are ca
 
 ## Status
 
-Early design phase. No production data. No live regulatory sign-off on any state rating table entry. Database (PostgreSQL) and ERP/front-end (Odoo Community) are decided but not yet built — see `docs/decisions/0001-database-and-erp.md`.
+Early design phase. No production data. No live regulatory sign-off on any state rating table entry. Database (Azure Database for PostgreSQL) and ERP/front-end (Odoo Community) are decided but not yet built — see `docs/decisions/0001-database-and-erp.md` and `docs/decisions/0002-cloud-provider-azure.md`. Odoo's Azure Blob Storage integration approach (community module vs. custom) is unscoped.
