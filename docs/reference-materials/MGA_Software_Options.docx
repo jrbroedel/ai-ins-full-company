@@ -1,0 +1,123 @@
+**MGA Information Management System**
+
+*Options Research — Open Source vs. Commercial Software*
+
+# Overview
+
+This document summarizes research into information management systems for an MGA (Managing General Agency) that need to: store and organize files, ingest policy/insured/premium data from Excel uploads, generate invoices, and handle commission and quota share calculations. It covers open-source options, commercial (non-open-source) options with pricing, trial/licensing availability, and the feasibility of customizing an open-source platform for MGA-specific needs like quota share.
+
+# 1. The Core Challenge: Quota Share
+
+Quota share — splitting premium, risk, and commission across carriers and participants on a program — is a genuinely MGA-specific concept. No off-the-shelf software, open source or commercial, models it out of the box in a general-purpose way. Purpose-built MGA platforms (BindHQ, AIM, mPACS) support it as a core feature but come at enterprise pricing. Everything else requires custom development to add it.
+
+# 2. Open-Source Options
+
+There is no mature, purpose-built open-source MGA system. The realistic paths are building on an open-source ERP/document platform, or starting from an open-source insurance template.
+
+## Odoo Community Edition
+
+- Free, open-source ERP (AGPL license) with strong built-in document management, invoicing, and a large app marketplace.
+
+- Third-party insurance/commission apps exist on the Odoo app store (e.g. sh_insurance_management) as a starting point for agent/commission tracking.
+
+- Quota share is not supported natively — requires a custom module (Odoo uses Python/XML).
+
+## ERPNext
+
+- Free, open-source ERP built on the Frappe framework, with solid document, accounting, and invoicing modules.
+
+- Fewer insurance-specific tools than Odoo, but custom "Doctypes" (Policy, Insured, Premium, Commission) are fast to build.
+
+- Same gap: quota share must be custom-built.
+
+## Dolibarr ERP & CRM
+
+- Another free, open-source option flagged as a viable alternative for very small agencies.
+
+- Similar tradeoff to Odoo/ERPNext — general-purpose, needs customization for insurance-specific workflows.
+
+## Openkoda Insurance Template
+
+- Open-source low-code platform with a template aimed specifically at brokers/MGAs (policy management, document handling, natural-language reporting).
+
+- Closer to the use case out of the box than a generic ERP, but commission/quota-share logic still likely needs customization, either via their team or in-house.
+
+## Custom-Built, Lightweight System
+
+- A purpose-built app (e.g. Python/Django or Node + Postgres) could match the exact workflow more precisely than adapting a generic ERP.
+
+- Excel import via pandas/openpyxl; document storage via S3-compatible object storage (e.g. MinIO); invoices via a library like WeasyPrint.
+
+- Most control over quota-share modeling, at the cost of building everything from scratch.
+
+# 3. Commercial (Non-Open-Source) Options
+
+Two very different price tiers exist, split by whether quota share is actually supported.
+
+## MGA-Specific Platforms (support quota share)
+
+- BindHQ — $4,200–$6,900+/month, typically requires a 10+ user minimum. No free trial or free version; demo only.
+
+- AIM and mPACS — similarly enterprise-priced competitors to BindHQ; custom quotes only, no published small-business tier.
+
+- Vertafore AMS360 / Applied Epic — even higher cost ($15K–$50K/year).
+
+## Retail Agency Management Systems (cheap, but no quota share)
+
+- NowCerts — starting around $99/month. Some directories list a free trial as available, though this is unconfirmed directly with the vendor.
+
+- Jenesis — $60–$70/user/month plus a base fee per location. Free trial reported as available in some listings.
+
+- QQCatalyst — starting around $129/user/month. No free trial; demo-request only.
+
+*Important gap: none of these retail-tier systems model quota share. They**'**re built for a single agency writing business, not an MGA splitting premium/risk/commission across carriers on a program.*
+
+# 4. Side-by-Side Comparison
+
+|  | **BindHQ** | **NowCerts** | **Jenesis** | **Odoo/ERPNext (custom)** |
+| --- | --- | --- | --- | --- |
+| Built for | MGAs, MGUs, wholesale brokers | Retail/independent agencies | Small/regional retail agencies | Any business — you define it |
+| Price | $4,200–$6,900+/mo (10+ user min) | ~$99+/mo | $60–$70/user/mo | Free license; dev time/cost instead |
+| Quota share support | Yes — core feature | No | No | No — must be custom-built |
+| Commission tracking | Full accounting incl. payables | Standard producer commissions | Basic + carrier download | Must be custom-built |
+| Document management | Full, built-in | Yes, incl. ACORD forms | Yes | Built-in (Odoo Documents / ERPNext Files) |
+| Invoicing | Built-in, policy-level | Basic | Basic | Built-in engine; extend for policy/commission use |
+| Free trial | No | Reported available (unconfirmed) | Reported available (unconfirmed) | N/A — always free, self-hosted |
+
+# 5. Trials and Licensing
+
+- BindHQ, AIM, mPACS, QQCatalyst: no free trial or personal-use tier — demo request only, followed by a paid business contract.
+
+- NowCerts, Jenesis: free trials reported by some software directories, but terms aren't published directly by the vendors — worth confirming directly.
+
+- "Personal use" licensing doesn't really exist in this market — all commercial options are B2B SaaS priced per seat/user.
+
+- Open-source options (Odoo, ERPNext, Dolibarr) are free for personal or business use indefinitely, with no seat count or trial clock, since there's no commercial license restricting use.
+
+# 6. Can an Open-Source System Be Modified for MGA Use?
+
+Yes. Odoo, ERPNext, and Dolibarr are all built to be extended — they expose their data models and allow new modules/objects to be added without forking the core. This is the more realistic path for a small MGA compared to enterprise MGA software or accepting the retail-AMS feature gap.
+
+## What the Modification Work Involves
+
+- Model the core insurance entities: Policy, Insured, and Premium objects linked to the ERP's existing Contact/Invoice models.
+
+- Build the quota share data model: a table tying a Policy to multiple Participants (carriers, the MGA, sub-producers), each with share percentages of premium, risk, and commission, plus reconciliation rules for endorsements/cancellations. This is the piece no off-the-shelf module provides.
+
+- Wire up Excel import: map the Excel template to the new custom objects via script (Python is native to both Odoo and ERPNext).
+
+- Extend invoicing logic: generate invoices per policy and commission statements per quota-share participant from the same premium record.
+
+- Set up document storage structure: organize by policy ID with document-type tags using the ERP's native document module.
+
+- Decide on build vs. hire: Odoo customization is Python/XML; ERPNext is Python (Frappe). A large freelance/agency ecosystem exists for Odoo customization as a scoped project rather than an ongoing SaaS bill.
+
+## Effort Estimate
+
+The quota-share model and invoice/commission extension are the hard parts — realistically a few weeks of focused development for someone familiar with the ERP framework, not a weekend project, but far below the cost of an enterprise MGA software contract.
+
+# 7. Practical Next Step
+
+Since Odoo's Community license allows free self-hosting, a low-cost way to test the waters is to stand up a throwaway Odoo instance, install an existing insurance/commission app, and evaluate how close it gets before committing to custom quota-share development.
+
+*Prepared from research conducted August 2026. Pricing and feature availability should be reconfirmed directly with vendors before making a purchasing decision.*

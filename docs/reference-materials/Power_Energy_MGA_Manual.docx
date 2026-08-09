@@ -1,0 +1,529 @@
+**BUILDING A LLOYD****'****S-BACKED**
+
+**POWER ****&**** ENERGY MGA**
+
+*An Operational Manual*
+
+From Coverholder Approval to Bordereaux: Submission, Underwriting, Engineering, Filing, Reporting, and Claims
+
+PART I — FOUNDATIONS   ·   PART II — THE RISK LIFECYCLE   ·   PART III — PORTFOLIO OPERATIONS   ·   PART IV — GOVERNANCE
+
+*Prepared as an internal build reference. Not legal, actuarial, or regulatory advice.*
+
+# **Table of Contents**
+
+**PART I**
+
+**Foundations**
+
+**CHAPTER 1**
+
+# **Why This Manual Exists**
+
+*The lifecycle of a single risk, generalized into the operating manual for the whole firm.*
+
+This manual documents the operating model of a Managing General Agent (MGA) holding delegated underwriting capacity from Lloyd's syndicates, specialized in the power and energy class of business. It is written as a build reference: someone standing up this kind of operation, or training underwriters into it, should be able to follow it start to finish and understand not just what each function does, but why it exists and what it protects.
+
+The organizing idea is simple. Every process described here — how emails get filed, how a statement of values gets scrubbed, how a rating worksheet gets approved, how a bordereau gets assembled — exists because it is either required by the binding authority agreement or because it will be tested at audit. Nothing in this manual is administrative decoration. Build the firm around the discipline described here and the binder renews. Skip it and the binder does not.
+
+## **How to use this manual**
+
+Part I establishes the contractual foundation everything else operationalizes. Part II walks the lifecycle of a single risk in sequence, from the moment a broker's email lands to the moment a certificate is issued and serviced. Part III zooms out to the portfolio level — brokers, commissions, markets, and the monthly reporting cycle that keeps capacity informed. Part IV covers claims and the audit process that validates the whole system. An appendix collects the reference tables in one place.
+
+**CHAPTER 2**
+
+# **The Contractual Spine: The Binding Authority**
+
+*Every process in this manual is an operationalization of one document.*
+
+The binding authority agreement (“binder”) is the legal instrument that makes an MGA a Lloyd's coverholder. It is placed by a Lloyd's broker with one or more syndicates and written in Market Reform Contract format. Before building any process, read the binder schedule end to end — it is the specification document for the entire business.
+
+## **What the binder schedule defines**
+
+- Classes of business and territorial scope the coverholder may write
+
+- Maximum limits and line sizes, by class and in aggregate
+
+- The agreed rating basis or rating matrix, including permitted credit and debit bands
+
+- Catastrophe aggregate caps, typically by peril and zone
+
+- Referral criteria — what must be escalated to the syndicate before binding
+
+- Commission terms, including any profit commission formula
+
+- Claims handling authority and thresholds
+
+- Bordereaux format, frequency, and settlement terms
+
+- The named individuals authorized to exercise the binder
+
+## **Where the binder lives in the Lloyd****'****s system**
+
+The binder is registered on DCOM (Delegated Contract Management). The coverholder's compliance profile is maintained on ATLAS. Data reporting flows through DDM (Delegated Data Manager). Territorial licensing is checked against Crystal, Lloyd's own reference tool for where the coverholder may legally write business. A startup MGA's first operational task, before any underwriter touches a submission, is standing up disciplined access to and record-keeping against all four systems.
+
+| **Build note** Treat the binder schedule as the requirements document for every system you build — the DMS folder taxonomy, the rating tool's authority bands, the bordereaux template, and the claims escalation matrix should all be traceable line by line back to binder clauses. |
+| --- |
+
+**PART II**
+
+**The Risk Lifecycle**
+
+*From broker submission to issued certificate*
+
+**CHAPTER 3**
+
+# **Submission Intake and Clearance**
+
+*The first gate: is this ours to underwrite, and is it clean?*
+
+A retail or wholesale broker emails a submission to a monitored underwriting inbox, or places it through a broking platform. On a power and energy risk, a complete submission includes the broker's slip or coverage specification, the statement of values, five years of currently valued loss runs, a completed application, and any existing engineering or inspection reports.
+
+## **The clearance sequence**
+
+- Log the submission with a unique ID and initial status (received / quoted / bound / declined).
+
+- Run a clearance check to confirm no other broker has already submitted the same risk — placement is generally first-come-first-served, subject to broker-of-record letters.
+
+- Screen the insured and key related parties against sanctions lists.
+
+- Verify Lloyd's licensing for the risk's territory and class using Crystal.
+
+- Route to an underwriter with the appropriate line of authority.
+
+Declinations require a documented reason code at the point of decision — not reconstructed later. This single habit is one of the most commonly tested items in a coverholder audit, because it is the easiest thing to skip under time pressure and the easiest thing for an auditor to sample.
+
+| **Startup build task** Stand up a shared underwriting inbox with an intake log (a simple structured tracker is sufficient at small scale) before hiring underwriters. The log becomes your submission-to-bind pipeline report and your hit-ratio data from day one. |
+| --- |
+
+**CHAPTER 4**
+
+# **Email Organization and the Audit-Ready File**
+
+*One electronic file per policy year, built so an auditor never has to ask a question.*
+
+Every risk gets a single electronic file per policy year in a document management system (ImageRight is the common choice in this market). The test for whether the file is correctly organized is simple: could an auditor reconstruct the entire underwriting decision from the file alone, without interviewing anyone?
+
+## **Standard folder taxonomy**
+
+- Submission and clearance
+
+- Correspondence (all material email threads)
+
+- Underwriting analysis and rating
+
+- Quote and binding
+
+- Policy documents and endorsements
+
+- Engineering
+
+- Subjectivities
+
+- Accounting
+
+- Claims
+
+## **What must be filed, not left in an inbox**
+
+- The quote release and all negotiation threads
+
+- Referral requests and the syndicate's written approval
+
+- Subjectivity extensions or waivers
+
+- The firm order and the binding confirmation
+
+Use a consistent naming convention — policy year, submission number, insured name — so files are retrievable without a search. Retention should run seven to ten years or longer for occurrence-based business; confirm the specific period against your binder and applicable regulation before finalizing policy.
+
+| **Startup build task** Configure the DMS folder taxonomy and naming convention before the first submission arrives, not after the first audit. Retrofitting file discipline onto an existing book is far more expensive than building it in from underwriter day one. |
+| --- |
+
+**CHAPTER 5**
+
+# **Risk Data Capture: The Unit Schedule**
+
+*On a power book, the SOV is not a spreadsheet of buildings — it is a schedule of machines, and it drives rating, PML, and claims at once.*
+
+The broker's SOV almost never arrives in usable form. It must be scrubbed into a house template that captures both the generic property fields and the technology-specific fields that make power and energy underwriting distinct.
+
+## **Generic scrub — applies to any property/energy risk**
+
+- Address validation and geocoding to latitude/longitude
+
+- Construction and occupancy mapped to a standard coding scheme
+
+- Full COPE data plus secondary modifiers: roof age and type, sprinklers, flood zone, distance to coast
+
+- Values split between property damage, business interruption, and stock, with BI indemnity periods recorded
+
+## **Power-specific: the unit schedule**
+
+For each generating unit, capture:
+
+- Technology and configuration — 2x1 CCGT, simple cycle, reciprocating, steam
+
+- OEM and frame — e.g. GE 7F.04 / 7HA.02, Siemens SGT6-5000F / SGT-8000H, Mitsubishi M501GAC / JAC — and equivalent platform detail for wind turbines and inverters
+
+- MW capacity, commercial operation date, fuel type
+
+- Operating regime — baseload, cycling, or peaking — capacity factor, annual starts, equivalent operating hours
+
+### **Maintenance and condition block**
+
+- LTSA holder and scope, versus in-house or third-party maintenance
+
+- Hours and starts since last combustion inspection, hot gas path inspection, and major overhaul
+
+- Forward outage plan against OEM intervals
+
+- Compliance status against OEM technical bulletins (GE TILs and equivalents)
+
+- Condition-monitoring evidence: online vibration, borescope findings, generator test history
+
+- Transformer fleet detail: age, DGA trends, bushing models
+
+### **Business interruption block**
+
+- Revenue basis — PPA offtaker and term, price, versus merchant exposure and capacity payments
+
+- Declared annual values per unit, indemnity period, waiting period (machinery breakdown BI typically 45–60 days)
+
+- Interdependencies creating contingent exposure: gen-tie line, shared switchyard, single GSU, gas lateral
+
+### **Renewables extensions**
+
+- Wind: blade type, known serial-defect campaigns, gearbox model, CMS coverage
+
+- Solar: module glass thickness, tracker vs. fixed tilt, hail stow protocol (trigger, stow angle, time-to-stow)
+
+- BESS: chemistry (LFP vs. NMC), containerization, UL 9540A results, NFPA 855 spacing compliance
+
+The unit schedule does triple duty: it is the rating input, the catastrophe-model import file, and the structured source data that later populates the bordereaux. Data-quality validation — in-template rules at minimum, dedicated tooling as the book scales — catches missing construction codes and misplaced decimals before they propagate downstream.
+
+| **Startup build task** Build the unit schedule template before hiring the first engineer. It is the single artifact that pricing, cat modeling, engineering, and claims all read from — get its fields right once rather than patching it after the first serial-defect claim exposes a gap. |
+| --- |
+
+**CHAPTER 6**
+
+# **Natural Catastrophe Modeling and Aggregate Management**
+
+*Confirm the risk fits within remaining aggregate before pricing it — not after.*
+
+The cleaned unit schedule is run through RMS or Verisk Touchstone, or the broker-provided model output is ingested and sanity-checked in-house. The outputs that matter for pricing are the average annual loss (AAL) and the exceedance-probability curve at key return periods — typically the 100-year and 250-year PMLs — which drive the catastrophe load in the technical price.
+
+## **Aggregate control**
+
+In parallel with modeling any single risk, deterministic accumulation control tracks zonal aggregates — Florida Tier 1 wind, defined earthquake zones, and so on — against the binder's aggregate caps. Before binding any cat-exposed risk, confirm it fits within remaining aggregate. If a zone is full, the options are: decline, non-renew an existing risk in that zone, or seek a special acceptance from the syndicate.
+
+Aggregate positions are reported to capacity on the aggregate bordereau (see Chapter 12). Renewables add a chronic, non-catastrophic dimension to this exposure: hail on solar fleets is a recurring loss driver that must be tracked with the same rigor as named-storm and earthquake aggregate.
+
+**CHAPTER 7**
+
+# **Rating, Referrals, and Peer Review**
+
+*Price on the worksheet, refer what exceeds authority, and file the approval.*
+
+Pricing happens on a rating worksheet built to the binder's agreed matrix — base rates by occupancy and peril, with credits and debits permitted only within a defined band, subject to minimum premiums and minimum rates-on-line for cat layers. The worksheet records both the technical price and the achieved price; on renewals, it also records the rate change, since rate monitoring feeds the managing agent's own performance reporting to Lloyd's.
+
+## **Referral discipline**
+
+Anything outside delegated authority is referred by email to the lead syndicate underwriter, and the written approval is filed to the risk. Chapter 17 (Appendix) contains a full illustrative referral matrix for a power and energy binder; the categories are:
+
+- Capacity and aggregate — line size, TIV, and zonal aggregate thresholds
+
+- Technology — prototypical or early-serial units, novel storage chemistries, hydrogen co-firing, coal
+
+- Account and loss — adverse loss ratio, large single incurred, open serial-defect campaigns
+
+- Coverage and pricing — credits beyond the authority band, sub-minimum deductibles, extended indemnity periods
+
+- Process and conduct — new producers pre-TOBA, out-of-territory risk, sanctions hits
+
+Larger lines typically also require documented peer review — a second underwriter's sign-off on the rating sheet — independent of whether a syndicate referral is triggered.
+
+| **Startup build task** Encode the referral matrix as hard stops in the rating tool, not as a policy document underwriters are trusted to remember under deadline pressure. A referral that should have happened but didn't is the single most common adverse audit finding. |
+| --- |
+
+**CHAPTER 8**
+
+# **Quote, Terms and Conditions, Subjectivities**
+
+*Every subjectivity needs an owner and a diary date, or it becomes a gap at renewal.*
+
+The quote document sets out named insured, period, interest, limits and sublimits, deductibles (including percentage named-storm and earthquake deductibles, and the AOP deductible), premium, commission, and the full applicable forms list. At Lloyd's, this typically includes the LMA/NMA clause set — for example the LMA3100 sanctions clause, the war exclusion NMA464, the LMA5400-series cyber exclusions, and communicable disease exclusions — plus class-specific wordings.
+
+## **Subjectivities**
+
+The quote also states conditions precedent and subjectivities: for example, subject to satisfactory survey within 60 days, subject to signed application and SOV, subject to confirmation of no known or reported losses, subject to surplus lines compliance. Every subjectivity goes into a tracked register with a diary date.
+
+Closure of each subjectivity must be evidenced in the file. An unresolved subjectivity past its deadline triggers either a restricting endorsement or notice of cancellation — auditors specifically sample for subjectivity discipline, because an open subjectivity with no closure evidence means coverage may be bound on terms that were never actually satisfied.
+
+**CHAPTER 9**
+
+# **Binding and Issuance**
+
+*Confirm authority and outstanding subjectivities, then issue within SLA.*
+
+On firm order, the underwriter confirms authority and reviews outstanding subjectivities before issuing the binding confirmation. The policy or certificate is then issued under the binder within the agreed service level — 30 days is a common benchmark.
+
+## **US surplus lines considerations**
+
+For US power and energy business, Lloyd's paper is almost entirely written on a surplus lines basis. The surplus lines broker handles state filings, taxes, and stamping fees, but the MGA must independently verify and document the broker's surplus lines license before binding — this is not a step to delegate on trust.
+
+Mid-term changes follow the same discipline as new business: endorsements are issued, additional or return premiums are recorded, and every document is filed to the risk file under the taxonomy set out in Chapter 4.
+
+**PART III**
+
+**Portfolio Operations**
+
+*Brokers, commissions, markets, and the monthly reporting cycle*
+
+**CHAPTER 10**
+
+# **Broker Management and Commission Flow**
+
+*Every producing broker sits behind a terms-of-business agreement, verified and refreshed on a schedule.*
+
+Each producing broker operates under a terms-of-business agreement (TOBA). Before the relationship goes live, and periodically thereafter, verify and document the broker's licensing, errors-and-omissions coverage, and KYC status.
+
+## **The commission waterfall**
+
+On a bound risk, gross premium flows down through a fixed sequence before reaching the syndicate:
+
+- Gross premium
+
+- Less retail broker commission
+
+- Less wholesale broker commission, where applicable
+
+- Less the MGA's own commission (its fee under the binder, frequently including a profit commission calculated on the underwriting-year result after losses and expenses)
+
+- Equals net premium due to the syndicate
+
+The binder caps total acquisition cost, so this waterfall is not a matter of internal negotiation — it is bounded by contract. Terms of trade give the broker a settlement window, commonly 30 to 60 days from inception; credit control actively chases aged premium. Collected funds sit in a fiduciary trust account until settled to London net of commissions, and that settlement is reconciled line-by-line against the premium bordereau (Chapter 12).
+
+**CHAPTER 11**
+
+# **Markets and Capacity Management**
+
+*The premium breakdown by market is the core exhibit at binder renewal.*
+
+Most MGAs run a panel rather than a single market — for example, two syndicates at fixed participations on one binder, plus a separate company-market binder, or separate binders by class entirely. Each bound risk is allocated across the panel at the agreed percentages.
+
+The MGA tracks gross written premium by market, class, territory, and underwriting year against each binder's estimated premium income. This is not purely an accounting exercise: it is the core exhibit presented at binder renewal, alongside portfolio performance data — loss ratios by segment, achieved rate change, aggregate deployment, and hit ratios — used to retain and expand delegated capacity.
+
+| **Startup build task** From the very first bound risk, tag every record with market allocation, class, territory, and underwriting year. Retrofitting this segmentation onto historical data ahead of a renewal negotiation is a painful, error-prone exercise — build the data model to support it from day one. |
+| --- |
+
+**CHAPTER 12**
+
+# **Bordereaux and Regulatory Reporting**
+
+*Monthly, three bordereaux flow up to Lloyd**'**s — and the managing agent**'**s own regulatory returns are built on this feed.*
+
+Monthly, the MGA produces bordereaux to Lloyd's Coverholder Reporting Standards, submitted through DDM or the syndicate's agreed template.
+
+## **The premium bordereau**
+
+Lists each certificate with reference, insured, inception and expiry dates, Lloyd's risk code, gross premium, taxes, each commission tier, net premium, installment schedule, and endorsement additional/return premiums. On a power risk, premium is further split by PD, machinery breakdown, and BI/time element, because the syndicate's actuaries reserve those components on different development patterns.
+
+## **The claims bordereau**
+
+Shows movements and cumulative positions — paid, outstanding reserves, incurred — with catastrophe codes attached to event losses. Figures are presented both gross and net of recoveries, and at both 100% and each market's participation share.
+
+## **The aggregate bordereau**
+
+Reports catastrophe exposure by zone, reconciled against the accumulation control described in Chapter 6.
+
+All three are reconciled against cash settled and validated for data quality before submission, because the managing agent's own regulatory returns and the syndicate actuaries' reserving work are built directly on this feed. Internally, a monthly underwriting report tracks GWP versus plan, hit ratio, rate change, and loss ratio development by segment.
+
+| **Startup build task** Design the bordereaux templates before writing the first policy administration system query. Every field in a bordereau should map directly to a field captured at submission, quote, or bind — if a bordereau column can't be traced back to a source field in your system, you have a data gap that will surface at the worst possible time. |
+| --- |
+
+**CHAPTER 13**
+
+# **The Engineering Program**
+
+*Desktop review supports the quote; a site survey, imposed as a subjectivity, validates it.*
+
+Engineering runs at two depths. A desktop review — fleet loss data for the specific frame, OEM bulletin status, outage history against intervals — supports the quote on standard technology. A full site survey is imposed as a subjectivity, typically within 60 to 90 days of binding, triggered by TIV above threshold, first-time business, or advanced-class machines.
+
+## **Survey scope**
+
+- Management and operating organization; staffing depth and experience
+
+- Outage execution against OEM recommendations
+
+- HRSG condition, including the flow-accelerated corrosion program and cycling damage
+
+- Water and steam chemistry
+
+- Steam turbine NDE history; generator electrical testing
+
+- Transformer fleet condition; switchyard condition
+
+- Gap analysis against NFPA 850
+
+- Site-specific catastrophe defenses — flood elevation and barriers, wildfire vegetation management, hail stow drills
+
+- A single-point-of-failure map across the site
+
+## **Engineering output**
+
+The engineer's report includes loss scenarios that calibrate the PML — a GSU fire with collateral damage, steam turbine blade liberation, catastrophic failure of an advanced-class gas turbine, a BESS thermal-runaway propagation event — and graded recommendations (critical / important / advisory), each tracked to closure with a response deadline. Outstanding critical recommendations past deadline directly influence renewal terms.
+
+## **Renewables engineering toolkit**
+
+- Drone blade inspections
+
+- Gearbox oil analysis and endoscopy
+
+- Thermography on strings and terminations
+
+- Verification that hail stow protocols actually execute
+
+- BESS commissioning QA, including BMS and firmware review
+
+**PART IV**
+
+**Claims and Governance**
+
+*Where the discipline built in Parts I–III gets tested*
+
+**CHAPTER 14**
+
+# **Claims Management**
+
+*Low-frequency, high-severity, technical — and the root-cause report drives everything downstream.*
+
+Power and energy claims are low-frequency, high-severity, and technical in nature. The dominant severity drivers are rotating equipment and transformers — gas turbine rotor and hot-gas-path failures, generator stator winding faults, steam turbine blade liberation, GSU failures — plus hail on solar fleets and thermal events on battery storage.
+
+## **Claims workflow**
+
+- First notice of loss received; coverage verified against the issued certificate before any other action
+
+- A specialist energy adjuster is appointed from the approved panel
+
+- The OEM is frequently engaged alongside the adjuster for root-cause analysis
+
+- The root-cause report is filed — it determines whether the loss is fortuitous, a maintenance failure, or a serial defect with fleet-wide implications
+
+- Reserves are set, split between indemnity and fees, with the deductible applied per unit per occurrence
+
+- The business interruption adjustment reconstructs lost generation against PPA terms or merchant pricing during the outage window
+
+## **Subrogation, salvage, and escalation**
+
+Subrogation against the OEM is frequently constrained by liability caps and waivers written into the LTSA — which is exactly why LTSA terms were captured at underwriting in Chapter 5. Salvage on damaged rotors and windings is recorded so net incurred is accurate on the bordereau. Everything above the delegated claims authority, and any loss above the immediate-notification threshold, goes to the syndicate through the Lloyd's ECF process.
+
+Incurred development by technology segment loops directly back into renewal rating and the binder renewal pack — claims data is not a downstream artifact, it is a direct input to next year's underwriting.
+
+**CHAPTER 15**
+
+# **The Audit Cycle**
+
+*The file organization built in Chapter 4 is not administrative hygiene — it is what keeps the binder renewable.*
+
+Lloyd's requires periodic coverholder audits by approved audit firms, and individual syndicates layer their own due diligence on top. The audit scope samples underwriting and claims files against the disciplines documented throughout this manual:
+
+- Evidence of clearance and sanctions checks at submission
+
+- Rating sheets, and referrals approved in writing where authority was exceeded
+
+- Peer review documentation where required
+
+- Subjectivities closed on time, with evidence in the file
+
+- Broker licensing verified
+
+- Certificates issued within SLA
+
+- Complaints and conduct handling
+
+- Trust account reconciliations
+
+- Bordereaux data quality
+
+Findings are graded and tracked to remediation, and results are visible to every market on the panel. This is the reason the file organization described in Chapter 4, the referral discipline in Chapter 7, and the subjectivity tracking in Chapter 8 are treated as first-class build priorities in this manual rather than as later refinements — they are precisely what determines whether the binder renews.
+
+**CHAPTER 16**
+
+# **Build Sequence: A Startup Checklist**
+
+*The order in which to stand up each function, drawn from the build notes in Parts I–III.*
+
+| **Stage** | **Build priority** | **Chapter** |
+| --- | --- | --- |
+| 1. Contractual | Secure and fully digest the binder schedule before hiring underwriters | 2 |
+| 2. Intake | Shared underwriting inbox with a structured submission log | 3 |
+| 3. Filing | DMS folder taxonomy and naming convention | 4 |
+| 4. Data | Unit schedule template covering rating, cat modeling, and engineering fields | 5 |
+| 5. Aggregate | Zonal accumulation tracking against binder caps | 6 |
+| 6. Pricing | Rating tool with referral matrix encoded as hard stops | 7 |
+| 7. Subjectivities | Tracked register with diary dates and closure evidence | 8 |
+| 8. Segmentation | Data model tagging every record by market, class, territory, u/w year | 11 |
+| 9. Reporting | Bordereaux templates traced field-by-field to source data | 12 |
+| 10. Engineering | Desktop review process, survey panel, recommendation tracking | 13 |
+| 11. Claims | Adjuster panel, reserving discipline, ECF escalation thresholds | 14 |
+| 12. Audit readiness | Internal pre-audit self-test against the Chapter 15 checklist | 15 |
+
+**CHAPTER 17**
+
+# **Appendix — Illustrative Referral Threshold Matrix**
+
+*Thresholds shown are illustrative of market practice; the binder schedule always governs.*
+
+## **Capacity and aggregate**
+
+| **Trigger** | **Illustrative threshold** |
+| --- | --- |
+| Gross line size | Above delegated cap, e.g. USD 25M |
+| Site total insured value | Above USD 1B |
+| Zonal aggregate (wind/quake) | Risk would push zone past 90% of cap |
+| Reinstatement requests | Any |
+
+## **Technology**
+
+| **Trigger** | **Illustrative threshold** |
+| --- | --- |
+| Prototypical units | Under the classic 8-units-or-8,000-hours convention |
+| Advanced-class turbines | Early-serial H-class and J-class units |
+| Battery storage | Above site MWh threshold, or any NMC chemistry |
+| Offshore / floating generation | Any |
+| Hydrogen co-firing | Beyond OEM-validated blend ratio |
+| Unit age | Past design life without a life-extension study |
+| Thermal coal | Restricted or declined under most Lloyd's ESG policies |
+
+## **Account and loss experience**
+
+| **Trigger** | **Illustrative threshold** |
+| --- | --- |
+| Five-year loss ratio | Above the binder's trigger level |
+| Single incurred loss | Above a set figure defined in the binder |
+| Serial-defect campaign | Any open campaign affecting the fleet |
+| LTSA status | Lapsed on advanced-class machines |
+| Engineering survey grade | Adverse |
+
+## **Coverage and pricing**
+
+| **Trigger** | **Illustrative threshold** |
+| --- | --- |
+| Rate credit | Beyond authority band, commonly 10–15% off technical |
+| Machinery breakdown deductible | Below the rating matrix minimum |
+| BI waiting period | Under 45 days |
+| BI indemnity period | Beyond 24 months |
+| Clause dilution | Cyber, communicable disease, T&D, or serial-loss clauses |
+| Contingent BI | Beyond sublimit |
+
+## **Process and conduct**
+
+| **Trigger** | **Illustrative threshold** |
+| --- | --- |
+| New producer | Pre-TOBA execution |
+| Territory or occupancy | Outside the binder schedule |
+| Sanctions | Any positive hit |
+| Backdating | Any |
+| Payment terms | Beyond 60 days |
+
+**Note: **Every referral must be raised by email to the lead syndicate underwriter and the written response filed to the risk. This email trail is precisely what a coverholder audit samples — see Chapter 15.

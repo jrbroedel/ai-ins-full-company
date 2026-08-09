@@ -2,13 +2,55 @@
 
 Design and reference artifacts for an AI-driven underwriting pipeline. Luxury/high-net-worth auto is the first line of business; the platform is intended to be portable to other lines (homeowners next) via swappable schema/rating/referral "packages" rather than a rebuilt pipeline.
 
+## Architecture — three pieces
+
+The project splits into three peer components. Only the workflow pipeline has real design progress so far; the other two are open decisions.
+
+```mermaid
+flowchart TD
+    subgraph ERP["ERP / front-end — not yet chosen"]
+        direction LR
+        BP[Broker portal]
+        UW[Underwriter view]
+        AC[Admin console]
+    end
+
+    subgraph WF["Workflow pipeline — in progress"]
+        direction LR
+        IE[Intake / enrichment]
+        RE[Referral engine]
+        RT[Rating engine]
+    end
+
+    subgraph DL["Data layer — not yet chosen"]
+        direction LR
+        PA[Policy and app data]
+        DS[Document storage]
+        DA[Decision / audit log]
+    end
+
+    ERP -->|data + requests| WF
+    WF -->|reads + writes| DL
+
+    style ERP fill:#B4B2A9,stroke:#5F5E5A,color:#2C2C2A
+    style DL fill:#B4B2A9,stroke:#5F5E5A,color:#2C2C2A
+    style WF fill:#AFA9EC,stroke:#3C3489,color:#26215C
+```
+
+Purple = built so far. Gray = design not yet started.
+
+- **Workflow pipeline** — the AI underwriting logic itself: intake/enrichment, the referral engine, the rating engine. Everything currently in `schemas/`, `sample-data/`, and `referral-matrices/` belongs here. Deliberately built to stay database-agnostic and UI-agnostic — it's plain JSON with no assumptions baked in about storage or presentation, so swapping either of the other two pieces later shouldn't require touching this one.
+- **Data layer** — not yet chosen. Needs to hold transactional policy/application data, document storage (PDFs, appraisals, loss runs), and the decision/audit log the AI governance requirements (see below) depend on.
+- **ERP / front-end** — not yet chosen. See `docs/reference-materials/MGA_Software_Options.docx` for prior research comparing purpose-built MGA platforms (BindHQ, etc.) against general ERPs (Odoo/ERPNext) customized for insurance workflows.
+
 ## Repo structure
 
 ```
-schemas/             Data structure definitions (application intake, state rating table registry, etc.)
-sample-data/          Populated test/reference data (synthetic applications, state rating table entries)
-referral-matrices/    Hard-stop and manual-review routing logic
-docs/                 Design notes, regulatory research, architecture decisions
+schemas/                        Data structure definitions (application intake, state rating table registry, etc.)
+sample-data/                     Populated test/reference data (synthetic applications, state rating table entries)
+referral-matrices/               Hard-stop and manual-review routing logic
+docs/reference-materials/        Source research the build is based on (insurance industry primer, the Lloyd's/energy MGA manual used as a structural template, MGA software options research)
+docs/sample-renderings/          Rendered output examples (e.g. PDF application form)
 ```
 
 ## Current contents
