@@ -358,6 +358,74 @@ CREATE TRIGGER decision_log_no_delete
   FOR EACH ROW EXECUTE FUNCTION reject_decision_log_mutation();
 
 -- ============================================================================
+-- QUOTA SHARE / COMMISSION WATERFALL (ADR 0007)
+-- Direct analogue to the Energy manual's Ch.10 commission waterfall and
+-- Ch.11 market panel structure. In the admitted market this more often
+-- represents a reinsurance/participation arrangement behind a single
+-- fronting carrier than a Lloyd's-style multi-syndicate policy panel, but
+-- the accounting shape is identical either way - see ADR 0007 for the
+-- full scoping discussion.
+-- ============================================================================
+
+CREATE TYPE participant_type_t AS ENUM ('capacity_provider', 'reinsurer', 'mga_retention');
+
+CREATE TABLE insurance_programs (
+  program_id                        UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  program_name                      TEXT NOT NULL,
+  capacity_provider_name            TEXT NOT NULL,  -- the admitted fronting carrier
+  effective_range                   TSTZRANGE NOT NULL,
+  estimated_premium_income          NUMERIC(14,2),
+  created_at                        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE program_participants (
+  participant_id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  program_id                        UUID NOT NULL REFERENCES insurance_programs(program_id) ON DELETE CASCADE,
+  participant_type                  participant_type_t NOT NULL,
+  participant_name                  TEXT NOT NULL,
+  share_percentage                  NUMERIC(5,2) NOT NULL CHECK (share_percentage > 0 AND share_percentage <= 100),
+  commission_rate                   NUMERIC(5,2),  -- % of premium retained as commission, where applicable
+                                                       -- (e.g. the MGA's own fee under the program)
+  profit_commission_formula         TEXT,  -- free text pending underwriting/finance sign-off - see
+                                              -- ADR 0007's open items, not yet a computed formula
+  effective_range                   TSTZRANGE NOT NULL
+);
+
+CREATE INDEX idx_program_participants_program ON program_participants(program_id);
+
+-- Risk-bearing participant shares (capacity_provider + reinsurer) must sum to
+-- 100% per program. This is a simplified, non-temporal version of the check -
+-- it validates the CURRENT total for the affected program on every write,
+-- not a full time-range-overlap-aware version like the state rating table's
+-- exclusion constraint. Flagged explicitly as a simplification: a program
+-- whose participant panel changes over time needs a more rigorous version
+-- before this is production-safe. Documented here rather than silently
+-- claiming more rigor than what's actually implemented.
+CREATE OR REPLACE FUNCTION check_program_shares_sum_to_100()
+RETURNS TRIGGER AS $$
+DECLARE
+  affected_program UUID;
+  total_share NUMERIC(6,2);
+BEGIN
+  affected_program := COALESCE(NEW.program_id, OLD.program_id);
+  SELECT COALESCE(SUM(share_percentage), 0) INTO total_share
+  FROM program_participants
+  WHERE program_id = affected_program
+    AND participant_type IN ('capacity_provider', 'reinsurer');
+  IF total_share NOT BETWEEN 99.99 AND 100.01 AND total_share != 0 THEN
+    RAISE EXCEPTION 'program % risk-bearing participant shares sum to %%%, must equal 100%%',
+      affected_program, total_share;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE CONSTRAINT TRIGGER program_participants_sum_check
+  AFTER INSERT OR UPDATE OR DELETE ON program_participants
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION check_program_shares_sum_to_100();
+
+-- ============================================================================
 -- QUOTES
 -- Pins the exact state_rating_table_versions record used, so a later rate
 -- change never silently re-rates an already-issued quote (see that table's
@@ -368,6 +436,11 @@ CREATE TABLE quotes (
   quote_id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   application_id                    UUID NOT NULL REFERENCES applications(application_id) ON DELETE CASCADE,
   state_rating_table_record_id      UUID NOT NULL REFERENCES state_rating_table_versions(record_id),
+  program_id                        UUID REFERENCES insurance_programs(program_id),  -- which capacity/
+                                                                                        -- participant panel
+                                                                                        -- this was written
+                                                                                        -- under - see
+                                                                                        -- ADR 0007
   premium_amount                    NUMERIC(12,2) NOT NULL,
   rating_basis                      JSONB NOT NULL,  -- which permitted variables/values drove the
                                                          -- price - the per-quote decision-log
@@ -379,6 +452,7 @@ CREATE TABLE quotes (
 );
 
 CREATE INDEX idx_quotes_application ON quotes(application_id);
+CREATE INDEX idx_quotes_program ON quotes(program_id);
 
 -- ============================================================================
 -- DOCUMENTS (metadata only - files live in Azure Blob Storage per ADR 0002/0003)
