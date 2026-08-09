@@ -4,11 +4,11 @@ Design and reference artifacts for an AI-driven underwriting pipeline. Luxury/hi
 
 ## Architecture — three pieces
 
-The project splits into three peer components. Only the workflow pipeline has real design progress so far; the other two are open decisions.
+The project splits into three peer components. Database and ERP/front-end are now decided (see ADR below); build work on both hasn't started yet. The workflow pipeline has the most build progress so far.
 
 ```mermaid
 flowchart TD
-    subgraph ERP["ERP / front-end — not yet chosen"]
+    subgraph ERP["ERP / front-end — Odoo Community (decided)"]
         direction LR
         BP[Broker portal]
         UW[Underwriter view]
@@ -22,7 +22,7 @@ flowchart TD
         RT[Rating engine]
     end
 
-    subgraph DL["Data layer — not yet chosen"]
+    subgraph DL["Data layer — PostgreSQL + object storage (decided)"]
         direction LR
         PA[Policy and app data]
         DS[Document storage]
@@ -32,16 +32,16 @@ flowchart TD
     ERP -->|data + requests| WF
     WF -->|reads + writes| DL
 
-    style ERP fill:#B4B2A9,stroke:#5F5E5A,color:#2C2C2A
-    style DL fill:#B4B2A9,stroke:#5F5E5A,color:#2C2C2A
+    style ERP fill:#9FE1CB,stroke:#0F6E56,color:#04342C
+    style DL fill:#9FE1CB,stroke:#0F6E56,color:#04342C
     style WF fill:#AFA9EC,stroke:#3C3489,color:#26215C
 ```
 
-Purple = built so far. Gray = design not yet started.
+Purple = built so far. Teal = decided, not yet built.
 
-- **Workflow pipeline** — the AI underwriting logic itself: intake/enrichment, the referral engine, the rating engine. Everything currently in `schemas/`, `sample-data/`, and `referral-matrices/` belongs here. Deliberately built to stay database-agnostic and UI-agnostic — it's plain JSON with no assumptions baked in about storage or presentation, so swapping either of the other two pieces later shouldn't require touching this one.
-- **Data layer** — not yet chosen. Needs to hold transactional policy/application data, document storage (PDFs, appraisals, loss runs), and the decision/audit log the AI governance requirements (see below) depend on.
-- **ERP / front-end** — not yet chosen. See `docs/reference-materials/MGA_Software_Options.docx` for prior research comparing purpose-built MGA platforms (BindHQ, etc.) against general ERPs (Odoo/ERPNext) customized for insurance workflows.
+- **Workflow pipeline** — the AI underwriting logic itself: intake/enrichment, the referral engine, the rating engine. Everything currently in `schemas/`, `sample-data/`, and `referral-matrices/` belongs here. Deliberately built to stay database-agnostic and UI-agnostic — it's plain JSON with no assumptions baked in about storage or presentation, so the database/ERP decision below didn't require touching it.
+- **Data layer** — **PostgreSQL**, with S3-compatible object storage for documents (PDFs, appraisals, loss runs). Rationale in `docs/decisions/0001-database-and-erp.md`.
+- **ERP / front-end** — **Odoo Community Edition** (self-hosted, AGPL). Chosen together with the database, since Odoo requires Postgres. Rationale, alternatives considered (ERPNext, BindHQ/AIM/mPACS), and known open cost (custom quota-share module) in `docs/decisions/0001-database-and-erp.md`.
 
 ## Repo structure
 
@@ -50,6 +50,7 @@ schemas/                        Data structure definitions (application intake, 
 sample-data/                     Populated test/reference data (synthetic applications, state rating table entries)
 referral-matrices/               Hard-stop and manual-review routing logic
 docs/reference-materials/        Source research the build is based on (insurance industry primer, the Lloyd's/energy MGA manual used as a structural template, MGA software options research)
+docs/decisions/                  Architecture decision records — what was chosen, why, and what alternatives were rejected
 docs/sample-renderings/          Rendered output examples (e.g. PDF application form)
 ```
 
@@ -85,4 +86,4 @@ Key findings from the regulatory research behind this build (August 2026) are ca
 
 ## Status
 
-Early design phase. No production data. No live regulatory sign-off on any state rating table entry.
+Early design phase. No production data. No live regulatory sign-off on any state rating table entry. Database (PostgreSQL) and ERP/front-end (Odoo Community) are decided but not yet built — see `docs/decisions/0001-database-and-erp.md`.
