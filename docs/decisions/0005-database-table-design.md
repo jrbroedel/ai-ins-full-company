@@ -39,7 +39,7 @@ This DDL is written as plain, hand-designed PostgreSQL - deliberately not genera
 - **Option A - Odoo ORM models map directly onto these tables** (Python models with `_table = 'applications'` etc., pointing at the existing table rather than letting Odoo generate its own). Simplest to build, tightest coupling between the pipeline's schema and Odoo's specifics.
 - **Option B - Odoo talks to a service/API layer, not raw SQL.** The pipeline owns and writes these tables; a thin API sits between Odoo and the data. Loosest coupling, most consistent with the multi-industry portability goal, more work to build now.
 
-Not decided here on purpose - it's an Odoo-customization-scoping question, not a database design question, and deserves its own focused ADR when that work starts rather than a rushed call as a side effect of this one.
+Not decided here on purpose - it's an Odoo-customization-scoping question, not a database design question, and deserves its own focused ADR when that work starts rather than a rushed call as a side effect of this one. **Resolved in ADR 0006** - a confirmed technical fact (Odoo's ORM requires integer primary keys, no exceptions) ruled out Option A as originally framed and led to a refined design: read-only SQL views with a derived pseudo-integer id for Odoo's UI, and explicit controlled write paths rather than default ORM auto-save.
 
 ## Consequences
 
