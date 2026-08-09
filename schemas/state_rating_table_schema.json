@@ -1,6 +1,12 @@
 {
   "schema_name": "State Rating Table Registry - Luxury Auto",
-  "version": "1.0",
+  "version": "1.1",
+  "changelog": [
+    {
+      "version": "1.1",
+      "summary": "Added state_specific_application_fields to record_schema, linking this registry to schemas/luxury_auto_application_schema.json's state_specific_extensions namespace - a state declares what supplemental fields it needs here, and the application schema provides the namespace to hold them."
+    }
+  ],
   "purpose": "One record per state (per effective-date version) defining what the rating engine is legally permitted to do in that state. This is the compliance boundary the pipeline's underwriting_flags and rating computation must stay inside. It does not store proprietary base rates/rate manuals in full - it stores the compliance metadata plus a pointer to where the actual filed rate manual lives, so the engine can validate itself before it prices anything.",
   "how_this_is_used": [
     "1. Application arrives with a garaging state (or risk state, if different from mailing state).",
@@ -49,6 +55,13 @@
       "reappraisal_interval_years": "integer - recommended/required cadence for refreshing the agreed value basis",
       "notes": "string"
     },
+    "state_specific_application_fields": [
+      {
+        "field_name": "string - dot-path under the application schema's state_specific_extensions.<STATE> namespace, e.g. 'pip_medical_coverage_level'",
+        "required": "boolean",
+        "description": "string - why this state needs a field no other state requires"
+      }
+    ],
     "referral_thresholds_state_specific": {
       "dui_lookback_years": "integer - varies by state's own look-back rules, distinct from the carrier's internal appetite look-back",
       "sr22_fr44_required": "boolean",

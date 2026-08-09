@@ -404,6 +404,23 @@
       "superseded_by": null,
       "expiration_or_review_date": null,
       "approved_rating_variables": [],
+      "state_specific_application_fields": [
+        {
+          "field_name": "pip_medical_coverage_level",
+          "required": true,
+          "description": "MI no-fault reform (2020) requires drivers to select a PIP medical coverage level (unlimited, $500k, $250k, $50k, or opt-out with qualified health coverage) - this drives both the coverage form and the rating basis and has no analogue in any other state in this registry."
+        },
+        {
+          "field_name": "pip_medicare_coordination",
+          "required": true,
+          "description": "Required for MI PIP rating accuracy when the applicant has Medicare - affects the coordination-of-benefits rate factor."
+        },
+        {
+          "field_name": "pip_work_loss_benefits_selected",
+          "required": false,
+          "description": "Optional PIP add-on affecting premium; not required to submit but must be captured if selected."
+        }
+      ],
       "prohibited_variables": [
         {
           "variable_name": "applicant.credit_based_insurance_score_band",
@@ -428,7 +445,7 @@
         "dui_lookback_years": null,
         "sr22_fr44_required": false,
         "salvage_title_disclosure_rule": "TBD",
-        "notes": "Michigan's no-fault PIP structure likely requires additional coverage_requested schema fields not yet in your current luxury_auto_application_schema.json (PIP selection tiers, Medicare coordination, etc.) - flag for schema review if MI is an active state."
+        "notes": "Resolved in schema v1.1: see state_specific_application_fields above and application schema's state_specific_extensions.MI namespace."
       },
       "ai_governance": {
         "naic_model_bulletin_adopted": null,

@@ -1,7 +1,13 @@
 {
   "schema_name": "Luxury/High-Value Auto Insurance Application",
-  "version": "1.0",
+  "version": "1.1",
   "based_on": "ACORD 90 (Personal Auto) core fields + high-net-worth/collector-vehicle supplement (patterned after carriers like Chubb Masterpiece, PURE, AIG Private Client)",
+  "changelog": [
+    {
+      "version": "1.1",
+      "summary": "Added enrichment_computed (formalizes VIN decode, title history, violation history, household check, sanctions screen, producer verification - previously invented ad hoc per edge case) and state_specific_extensions (per-state supplemental fields, e.g. MI no-fault/PIP tiers). Added driver_id to additional_drivers so enrichment records can key back to a specific driver. See referral-matrices/luxury_auto_referral_matrix.json for the rules that consume these fields."
+    }
+  ],
   "sections": {
     "applicant": {
       "applicant_id": "string (UUID)",
@@ -25,6 +31,7 @@
     },
     "additional_drivers": [
       {
+        "driver_id": "string (UUID) - assigned at intake so enrichment_computed.additional_driver_enrichment can key back to this specific driver",
         "name": "string",
         "relationship_to_applicant": "string",
         "date_of_birth": "date",
@@ -92,13 +99,74 @@
         "description": "string"
       }
     ],
+    "enrichment_computed": {
+      "note": "Populated by the pipeline's data-enrichment step (MVR pull, VIN decode, title history check, household driver check, sanctions screen, producer verification) AFTER intake and BEFORE referral matrix evaluation. Not applicant-submitted - this is the pipeline checking the applicant's story against external data, the same role the Energy manual's clearance/sanctions/Crystal-licensing checks play before an underwriter ever sees the file. Every field here should be readable by referral-matrices/luxury_auto_referral_matrix.json - if a referral rule needs enrichment data that isn't represented here, add the field here first rather than inventing an ad hoc shape on a specific application (this section exists precisely because that happened once already - see schema changelog).",
+      "applicant_enrichment": {
+        "violation_history": [
+          {
+            "date": "date",
+            "violation_type": "enum[DUI, reckless_driving, speeding, other_moving_violation]",
+            "conviction": "boolean",
+            "bac_level": "number or null (DUI only)",
+            "source": "string - e.g. 'MVR pull - CT DMV'"
+          }
+        ],
+        "sanctions_screen_result": "enum[clear, positive_hit, pending]",
+        "household_driver_check": {
+          "unlisted_licensed_resident_found": "boolean",
+          "relationship_guess": "string or null - e.g. 'child, age ~19, 2 violations on record'",
+          "notes": "string or null"
+        }
+      },
+      "additional_driver_enrichment": [
+        {
+          "driver_id": "string (UUID) - matches additional_drivers[].driver_id",
+          "violation_history": "array, same shape as applicant_enrichment.violation_history",
+          "sanctions_screen_result": "enum[clear, positive_hit, pending]"
+        }
+      ],
+      "vehicle_enrichment": [
+        {
+          "vehicle_id": "string (UUID) - matches vehicles[].vehicle_id",
+          "vin_decode_result": {
+            "decoded_make": "string",
+            "decoded_model": "string",
+            "decoded_year": "integer",
+            "decoded_trim": "string or null",
+            "matches_declared": "boolean",
+            "discrepancy_notes": "string or null"
+          },
+          "title_history_check_result": {
+            "status": "enum[clean, salvage, rebuilt, flood, lemon_law_buyback]",
+            "disclosed_by_applicant": "boolean - did the applicant disclose this brand anywhere on the form? Drives VV-02 in the referral matrix.",
+            "source": "string - e.g. 'NMVTIS + Carfax'"
+          }
+        }
+      ],
+      "producer_verification": {
+        "verified": "boolean",
+        "license_status": "string or null",
+        "toba_executed": "boolean - terms-of-business agreement on file, mirrors the Energy manual's pre-TOBA referral trigger",
+        "notes": "string or null"
+      }
+    },
+    "state_specific_extensions": {
+      "note": "Optional supplemental fields required only by certain states, keyed by 2-letter state code. What belongs under a given state's key is driven by that state's active state_rating_table record (see state_specific_application_fields in schemas/state_rating_table_schema.json), not hardcoded in this schema - this section is a namespace, not a fixed field list. Only populate the key for the vehicle's garaging state if that state has declared required fields; omit entirely for states with no supplemental requirements.",
+      "example_MI": {
+        "_comment": "Illustrative only - Michigan's no-fault/PIP structure needs fields no other state in the registry currently requires.",
+        "pip_medical_coverage_level": "enum[unlimited, 500000, 250000, 50000, opt_out_qualified_health_coverage] or null",
+        "pip_medicare_coordination": "boolean or null",
+        "pip_work_loss_benefits_selected": "boolean or null"
+      }
+    },
     "underwriting_flags_computed": {
-      "note": "Populated by the AI pipeline post-intake, not by the applicant",
+      "note": "Populated by the AI pipeline post-intake, not by the applicant. Reads enrichment_computed + referral-matrices/luxury_auto_referral_matrix.json + the applicable state_rating_table record to produce this.",
       "risk_score": "number (model output)",
       "vehicle_theft_risk_index": "number",
       "driver_risk_index": "number",
       "referral_required": "boolean",
-      "referral_reason": "string or null"
+      "referral_reason": "string or null",
+      "referral_rule_ids_triggered": "array of strings - e.g. ['DH-01', 'VV-02'] - every referral matrix rule_id that fired, even if the ultimate action was AUTO_PROCEED_WITH_FLAG rather than a referral. This is the field the NY DFS / Colorado AI-governance decision log is built from."
     }
   }
 }

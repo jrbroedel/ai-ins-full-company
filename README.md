@@ -67,15 +67,15 @@ docs/sample-renderings/          Rendered output examples (e.g. PDF application 
 - `sample-data/luxury_auto_edge_case_applications.json` — seven synthetic applications, each designed to exercise a specific referral matrix rule (garaging mismatch, undisclosed household driver, DUI, incomplete data, VIN mismatch, salvage title, business-use misrepresentation).
 - `docs/sample-renderings/luxury_auto_sample_application.pdf` — PDF rendering of one sample application (ReportLab).
 
-## Known gap — schema does not yet formally define enrichment fields
+## Resolved — enrichment fields now formally defined (schema v1.1)
 
-The referral matrix and the edge case files both use fields that represent **pipeline enrichment output** (VIN decode results, title history checks, structured violation history, household driver checks) added *after* intake, not applicant-submitted fields. Right now these only exist ad hoc, invented independently inside individual edge case files (`APP-0007.violation_history`, `APP-0009.vin_decode_result`, `APP-0010.title_history_check_result`, `APP-0006.external_data_flags`) — `luxury_auto_application_schema.json` has no formal section for them yet.
+The four ad hoc enrichment shapes different edge case files had each invented independently (`APP-0007.violation_history`, `APP-0009.vin_decode_result`, `APP-0010.title_history_check_result`, `APP-0006.external_data_flags`) are now one formal `enrichment_computed` section in `schemas/luxury_auto_application_schema.json`, parallel to `underwriting_flags_computed`. It covers `applicant_enrichment`, `additional_driver_enrichment` (keyed by a new `driver_id` field on each additional driver), `vehicle_enrichment` (keyed by `vehicle_id`), and `producer_verification`. All seven edge case applications in `sample-data/luxury_auto_edge_case_applications.json` were migrated to the formal shape, and `referral-matrices/luxury_auto_referral_matrix.json`'s `source_fields` were updated to point at it (bumped to v1.1 on both files). `underwriting_flags_computed` also gained `referral_rule_ids_triggered` — the field the NY DFS / Colorado AI-governance decision log is meant to be built from.
 
-**Action needed:** add a formal `enrichment_computed` section to the application schema (parallel to `underwriting_flags_computed`) so referral rules read from one consistent shape instead of four one-off conventions invented per edge case.
+Also added: `enrichment_computed` for APP-0008 (the incomplete-application edge case) models what should happen when enrichment is attempted without enough identifying data to run it (MVR/sanctions come back `pending`, not a false `clear`) — worth pipeline logic specifically testing for, not just the completeness gate (DH-04) that should catch it first.
 
-## Design note — state-specific attributes
+## State-specific attributes (schema v1.1)
 
-Rather than one flat schema trying to hold every state's quirks as optional fields, the plan is a base application schema plus a per-state extension mechanism (state-specific supplemental fields, e.g. Michigan's no-fault/PIP selection tiers) — to be designed alongside the enrichment-fields fix above.
+Implemented as a base application schema plus a per-state extension namespace: `state_specific_extensions.<STATE>` in the application schema holds fields only that state needs (e.g. Michigan's no-fault/PIP selection tiers), and `state_specific_application_fields` in `schemas/state_rating_table_schema.json` lets each state's registry record declare which fields it requires there. Populated end-to-end for Michigan in `sample-data/state_rating_tables_sample.json` as the reference example — no other state in the registry currently needs anything beyond the base schema.
 
 ## Regulatory research notes
 

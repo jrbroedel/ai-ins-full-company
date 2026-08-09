@@ -44,6 +44,22 @@
           "lienholder_name": "Sunbelt Auto Capital"
         }
       ],
+      "enrichment_computed": {
+        "applicant_enrichment": {
+          "violation_history": [],
+          "sanctions_screen_result": "clear",
+          "household_driver_check": {"unlisted_licensed_resident_found": false, "relationship_guess": null, "notes": null}
+        },
+        "additional_driver_enrichment": [],
+        "vehicle_enrichment": [
+          {
+            "vehicle_id": "VEH-0005",
+            "vin_decode_result": {"decoded_make": "Lamborghini", "decoded_model": "Huracan", "decoded_year": 2024, "decoded_trim": "Tecnica", "matches_declared": true, "discrepancy_notes": null},
+            "title_history_check_result": {"status": "clean", "disclosed_by_applicant": true, "source": "NMVTIS + Carfax"}
+          }
+        ],
+        "producer_verification": {"verified": true, "license_status": "active", "toba_executed": true, "notes": null}
+      },
       "coverage_requested": {
         "liability_bodily_injury_limits": "250/500",
         "liability_property_damage_limit": 250000,
@@ -85,11 +101,6 @@
         "credit_based_insurance_score_band": "excellent"
       },
       "additional_drivers": [],
-      "external_data_flags": {
-        "note": "Populated by pipeline enrichment, not applicant-submitted",
-        "unlisted_household_resident_with_valid_license": true,
-        "unlisted_resident_relationship_guess": "child, age ~19, 2 violations on record"
-      },
       "vehicles": [
         {
           "vehicle_id": "VEH-0006",
@@ -114,6 +125,26 @@
           "lienholder_name": "Great Lakes Premier Bank"
         }
       ],
+      "enrichment_computed": {
+        "applicant_enrichment": {
+          "violation_history": [],
+          "sanctions_screen_result": "clear",
+          "household_driver_check": {
+            "unlisted_licensed_resident_found": true,
+            "relationship_guess": "child, age ~19, 2 violations on record",
+            "notes": "Household/DMV cross-reference found a licensed resident at the garaging address not listed as an additional driver on this application."
+          }
+        },
+        "additional_driver_enrichment": [],
+        "vehicle_enrichment": [
+          {
+            "vehicle_id": "VEH-0006",
+            "vin_decode_result": {"decoded_make": "Bentley", "decoded_model": "Continental GT", "decoded_year": 2025, "decoded_trim": "Speed", "matches_declared": true, "discrepancy_notes": null},
+            "title_history_check_result": {"status": "clean", "disclosed_by_applicant": true, "source": "NMVTIS + Carfax"}
+          }
+        ],
+        "producer_verification": {"verified": true, "license_status": "active", "toba_executed": true, "notes": null}
+      },
       "coverage_requested": {
         "liability_bodily_injury_limits": "500/500",
         "liability_property_damage_limit": 500000,
@@ -155,14 +186,6 @@
         "credit_based_insurance_score_band": "good"
       },
       "additional_drivers": [],
-      "violation_history": [
-        {
-          "date": "2025-01-19",
-          "type": "DUI",
-          "conviction": true,
-          "bac_level": 0.14
-        }
-      ],
       "vehicles": [
         {
           "vehicle_id": "VEH-0007",
@@ -187,6 +210,30 @@
           "lienholder_name": "Lone Star Auto Trust"
         }
       ],
+      "enrichment_computed": {
+        "applicant_enrichment": {
+          "violation_history": [
+            {
+              "date": "2025-01-19",
+              "violation_type": "DUI",
+              "conviction": true,
+              "bac_level": 0.14,
+              "source": "MVR pull - TX DPS"
+            }
+          ],
+          "sanctions_screen_result": "clear",
+          "household_driver_check": {"unlisted_licensed_resident_found": false, "relationship_guess": null, "notes": null}
+        },
+        "additional_driver_enrichment": [],
+        "vehicle_enrichment": [
+          {
+            "vehicle_id": "VEH-0007",
+            "vin_decode_result": {"decoded_make": "Land Rover", "decoded_model": "Range Rover", "decoded_year": 2023, "decoded_trim": "Autobiography P530", "matches_declared": true, "discrepancy_notes": null},
+            "title_history_check_result": {"status": "clean", "disclosed_by_applicant": true, "source": "NMVTIS + Carfax"}
+          }
+        ],
+        "producer_verification": {"verified": true, "license_status": "active", "toba_executed": true, "notes": null}
+      },
       "coverage_requested": {
         "liability_bodily_injury_limits": "100/300",
         "liability_property_damage_limit": 100000,
@@ -252,6 +299,17 @@
           "lienholder_name": null
         }
       ],
+      "enrichment_computed": {
+        "note_for_this_case": "Enrichment could not run for most checks - date_of_birth and ssn_last4 are null, so MVR pull and sanctions screening have no reliable identifying data to query against. VIN is also null, so vehicle enrichment cannot run at all. This is expected: DH-04 should fire and halt the pipeline at the completeness gate BEFORE enrichment is even attempted - this block exists to confirm the pipeline degrades safely (empty/pending, not a false 'clear') if enrichment were attempted anyway.",
+        "applicant_enrichment": {
+          "violation_history": [],
+          "sanctions_screen_result": "pending",
+          "household_driver_check": {"unlisted_licensed_resident_found": false, "relationship_guess": null, "notes": "Not run - insufficient identifying data"}
+        },
+        "additional_driver_enrichment": [],
+        "vehicle_enrichment": [],
+        "producer_verification": {"verified": true, "license_status": "active", "toba_executed": true, "notes": null}
+      },
       "coverage_requested": {
         "liability_bodily_injury_limits": null,
         "liability_property_damage_limit": null,
@@ -301,7 +359,6 @@
           "model": "Corvette",
           "trim": "Stingray (as declared by applicant)",
           "vin": "1G1YY0000M0000009",
-          "vin_decode_result": "VIN actually decodes to a 2021 Chevrolet Corvette Z06 — higher trim/value than declared",
           "vehicle_category": "modified_performance",
           "purchase_price": 62000,
           "current_appraised_value": 58000,
@@ -318,6 +375,29 @@
           "lienholder_name": "Rocky Mountain Credit Union"
         }
       ],
+      "enrichment_computed": {
+        "applicant_enrichment": {
+          "violation_history": [],
+          "sanctions_screen_result": "clear",
+          "household_driver_check": {"unlisted_licensed_resident_found": false, "relationship_guess": null, "notes": null}
+        },
+        "additional_driver_enrichment": [],
+        "vehicle_enrichment": [
+          {
+            "vehicle_id": "VEH-0009",
+            "vin_decode_result": {
+              "decoded_make": "Chevrolet",
+              "decoded_model": "Corvette",
+              "decoded_year": 2021,
+              "decoded_trim": "Z06",
+              "matches_declared": false,
+              "discrepancy_notes": "Applicant declared base Stingray trim; VIN decodes to Z06 - a higher-value, higher-performance trim than declared."
+            },
+            "title_history_check_result": {"status": "clean", "disclosed_by_applicant": true, "source": "NMVTIS + Carfax"}
+          }
+        ],
+        "producer_verification": {"verified": true, "license_status": "active", "toba_executed": true, "notes": null}
+      },
       "coverage_requested": {
         "liability_bodily_injury_limits": "250/500",
         "liability_property_damage_limit": 250000,
@@ -367,7 +447,6 @@
           "model": "720S",
           "trim": "Performance",
           "vin": "SBM14000000000010",
-          "title_history_check_result": "Salvage title, 2023 (previous owner) — not disclosed by applicant on this form",
           "vehicle_category": "exotic",
           "purchase_price": 175000,
           "current_appraised_value": 190000,
@@ -384,6 +463,26 @@
           "lienholder_name": null
         }
       ],
+      "enrichment_computed": {
+        "applicant_enrichment": {
+          "violation_history": [],
+          "sanctions_screen_result": "clear",
+          "household_driver_check": {"unlisted_licensed_resident_found": false, "relationship_guess": null, "notes": null}
+        },
+        "additional_driver_enrichment": [],
+        "vehicle_enrichment": [
+          {
+            "vehicle_id": "VEH-0010",
+            "vin_decode_result": {"decoded_make": "McLaren", "decoded_model": "720S", "decoded_year": 2020, "decoded_trim": "Performance", "matches_declared": true, "discrepancy_notes": null},
+            "title_history_check_result": {
+              "status": "salvage",
+              "disclosed_by_applicant": false,
+              "source": "NMVTIS + Carfax - salvage brand applied 2023 under previous owner; applicant's form states vehicle is in 'excellent, accident-free condition' with no title brand disclosed"
+            }
+          }
+        ],
+        "producer_verification": {"verified": true, "license_status": "active", "toba_executed": true, "notes": null}
+      },
       "coverage_requested": {
         "liability_bodily_injury_limits": "500/500",
         "liability_property_damage_limit": 500000,
@@ -426,6 +525,7 @@
       },
       "additional_drivers": [
         {
+          "driver_id": "DRV-0011-1",
           "name": "Multiple rotating employees (unnamed on application)",
           "relationship_to_applicant": "Employee",
           "date_of_birth": null,
@@ -459,6 +559,29 @@
           "lienholder_name": "Pacific Coast Auto Finance"
         }
       ],
+      "enrichment_computed": {
+        "applicant_enrichment": {
+          "violation_history": [],
+          "sanctions_screen_result": "clear",
+          "household_driver_check": {"unlisted_licensed_resident_found": false, "relationship_guess": null, "notes": null}
+        },
+        "additional_driver_enrichment": [
+          {
+            "driver_id": "DRV-0011-1",
+            "violation_history": [],
+            "sanctions_screen_result": "pending",
+            "_note": "Cannot MVR-pull or sanctions-screen an unnamed, rotating pool of drivers - this itself is a data-quality problem the pipeline should be surfacing (see PC-01/CP-01 style handling), not something enrichment can resolve."
+          }
+        ],
+        "vehicle_enrichment": [
+          {
+            "vehicle_id": "VEH-0011",
+            "vin_decode_result": {"decoded_make": "Rolls-Royce", "decoded_model": "Ghost", "decoded_year": 2024, "decoded_trim": "Extended", "matches_declared": true, "discrepancy_notes": null},
+            "title_history_check_result": {"status": "clean", "disclosed_by_applicant": true, "source": "NMVTIS + Carfax"}
+          }
+        ],
+        "producer_verification": {"verified": true, "license_status": "active", "toba_executed": true, "notes": null}
+      },
       "coverage_requested": {
         "liability_bodily_injury_limits": "250/500",
         "liability_property_damage_limit": 250000,

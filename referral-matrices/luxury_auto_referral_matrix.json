@@ -1,6 +1,12 @@
 {
   "schema_name": "Luxury Auto Referral Matrix",
-  "version": "1.0",
+  "version": "1.1",
+  "changelog": [
+    {
+      "version": "1.1",
+      "summary": "source_fields updated to point at the formal enrichment_computed section added to the application schema in v1.1, replacing the ad hoc 'external: ...' placeholders used in v1.0. No rule logic changed - only the field paths these rules read from."
+    }
+  ],
   "purpose": "Defines every condition that must route an application away from straight-through auto-quote, and what happens when it does. This is the pipeline's hard-stop layer - the place where 'the model isn't sure' or 'the model is sure but the answer requires a human/compliance check' gets encoded as executable logic rather than left to discretion under deadline pressure.",
   "how_this_is_used": [
     "1. Every rule below is evaluated against the incoming application (post data-enrichment: MVR, VIN decode, title history, prior-carrier loss run) BEFORE the rating engine runs, the same way the Energy manual gates pricing on aggregate/referral checks before the worksheet is touched.",
@@ -25,7 +31,7 @@
         "rule_id": "VV-01",
         "trigger": "VIN decode result does not match applicant-declared make/model/trim/year",
         "illustrative_threshold": "Any mismatch in make, model, or model year; trim-level mismatches route lower-severity unless they change vehicle_category (e.g. base trim vs. high-performance variant)",
-        "source_fields": ["vehicles[].vin", "vehicles[].make", "vehicles[].model", "vehicles[].year", "vehicles[].vin_decode_result"],
+        "source_fields": ["vehicles[].vin", "vehicles[].make", "vehicles[].model", "vehicles[].year", "enrichment_computed.vehicle_enrichment[].vin_decode_result"],
         "action": "MANUAL_REVIEW_REQUIRED",
         "rationale": "Could be a data-entry error or an attempt to insure a higher-value vehicle under a cheaper vehicle's declared description. Pipeline cannot distinguish intent, so it cannot resolve this itself.",
         "state_override_hook": null,
@@ -36,7 +42,7 @@
         "rule_id": "VV-02",
         "trigger": "Title history check returns salvage, rebuilt, or flood designation not disclosed anywhere in the application",
         "illustrative_threshold": "Any undisclosed adverse title brand",
-        "source_fields": ["vehicles[].vin", "external: title_history_lookup"],
+        "source_fields": ["vehicles[].vin", "enrichment_computed.vehicle_enrichment[].title_history_check_result"],
         "action": "MANUAL_REVIEW_SENIOR",
         "rationale": "Undisclosed title issues on a high-value vehicle materially change both the correct agreed value and the accuracy of the risk being priced. Self-reported condition alone is not a sufficient control - this is exactly why the pipeline runs an independent title-history check rather than relying on the form.",
         "state_override_hook": "referral_thresholds_state_specific.salvage_title_disclosure_rule",
@@ -71,7 +77,7 @@
         "rule_id": "DH-01",
         "trigger": "DUI or reckless-driving conviction within the state's applicable look-back period",
         "illustrative_threshold": "Any DUI conviction within dui_lookback_years for the garaging state (national default: 5 years if state value unset)",
-        "source_fields": ["applicant.violation_history", "additional_drivers[].violation_history"],
+        "source_fields": ["enrichment_computed.applicant_enrichment.violation_history", "enrichment_computed.additional_driver_enrichment[].violation_history"],
         "action": "MANUAL_REVIEW_SENIOR",
         "rationale": "DUI is treated as a hard referral in every HNW carrier program reviewed for this build, regardless of how clean the rest of the profile is (see the sample application where an otherwise strong applicant with a DUI required SR-22/FR-44 and non-standard routing).",
         "state_override_hook": "referral_thresholds_state_specific.dui_lookback_years, referral_thresholds_state_specific.sr22_fr44_required",
@@ -82,7 +88,7 @@
         "rule_id": "DH-02",
         "trigger": "Household/garaging-address data (e.g. shared last name at same address, prior-carrier household driver list, credit household match) indicates a licensed driver at the address who is not declared on the application",
         "illustrative_threshold": "Any positive match not reconciled by the applicant",
-        "source_fields": ["applicant.mailing_address", "additional_drivers", "external: household_driver_check"],
+        "source_fields": ["applicant.mailing_address", "additional_drivers", "enrichment_computed.applicant_enrichment.household_driver_check"],
         "action": "MANUAL_REVIEW_REQUIRED",
         "rationale": "An undisclosed household driver is a coverage gap and a rating-accuracy problem at once - the risk being priced isn't the risk that actually exists at that address.",
         "state_override_hook": null,
@@ -187,7 +193,7 @@
         "rule_id": "PC-02",
         "trigger": "Sanctions/OFAC screen returns a positive hit on the applicant or any named driver",
         "illustrative_threshold": "Any positive match, unresolved",
-        "source_fields": ["applicant.*", "additional_drivers[].*", "external: sanctions_screen"],
+        "source_fields": ["enrichment_computed.applicant_enrichment.sanctions_screen_result", "enrichment_computed.additional_driver_enrichment[].sanctions_screen_result"],
         "action": "HARD_DECLINE_COMPLIANCE",
         "rationale": "The only fully automated stop in this matrix - no underwriting judgment applies to a sanctions hit.",
         "state_override_hook": null,
@@ -209,7 +215,7 @@
         "rule_id": "PC-04",
         "trigger": "Broker/agent placing the business is not yet verified (licensing, appointment status) at time of submission",
         "illustrative_threshold": "No verified producer record on file",
-        "source_fields": ["external: producer_verification"],
+        "source_fields": ["enrichment_computed.producer_verification"],
         "action": "MANUAL_REVIEW_REQUIRED",
         "rationale": "Direct analogue to the Energy manual's 'new producer pre-TOBA' referral trigger.",
         "state_override_hook": null,
