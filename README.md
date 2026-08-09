@@ -40,13 +40,14 @@ flowchart TD
 Purple = built so far. Teal = decided, not yet built.
 
 - **Workflow pipeline** — the AI underwriting logic itself: intake/enrichment, the referral engine, the rating engine. Everything currently in `schemas/`, `sample-data/`, and `referral-matrices/` belongs here. Deliberately built to stay database-agnostic and UI-agnostic — it's plain JSON with no assumptions baked in about storage or presentation, so the database/ERP decision below didn't require touching it.
-- **Data layer** — **PostgreSQL** (Azure Database for PostgreSQL), with **Azure Blob Storage** for documents (PDFs, appraisals, loss runs). AWS and GCP are out of scope by standing preference, not evaluated on merits. Rationale in `docs/decisions/0001-database-and-erp.md` (database engine + ERP) and `docs/decisions/0002-cloud-provider-azure.md` (cloud provider — includes an important note that Azure Blob Storage is not S3-API-compatible, so this isn't a drop-in swap from earlier S3-generic language).
+- **Data layer** — **PostgreSQL** (Azure Database for PostgreSQL), with **Azure Blob Storage** for documents (PDFs, appraisals, loss runs). AWS and GCP are out of scope by standing preference, not evaluated on merits. Table design is done and verified — `schemas/db/postgresql_schema.sql` — see `docs/decisions/0001-database-and-erp.md` (engine + ERP), `docs/decisions/0002-cloud-provider-azure.md` (cloud provider), and `docs/decisions/0005-database-table-design.md` (the tables themselves, including how the schemas map to real constraints — tested against a live Postgres instance, not just described).
 - **ERP / front-end** — **Odoo Community Edition** (self-hosted, AGPL). Chosen together with the database, since Odoo requires Postgres. Rationale, alternatives considered (ERPNext, BindHQ/AIM/mPACS), and known open cost (custom quota-share module) in `docs/decisions/0001-database-and-erp.md`.
 
 ## Repo structure
 
 ```
 schemas/                        Data structure definitions (application intake, state rating table registry, etc.)
+schemas/db/                      PostgreSQL DDL implementing the JSON schemas as real tables/constraints
 sample-data/                     Populated test/reference data (synthetic applications, state rating table entries)
 referral-matrices/               Hard-stop and manual-review routing logic
 docs/reference-materials/        Source research the build is based on (insurance industry primer, the Lloyd's/energy MGA manual used as a structural template, MGA software options research)
@@ -86,4 +87,4 @@ Key findings from the regulatory research behind this build (August 2026) are ca
 
 ## Status
 
-Early design phase. No production data. No live regulatory sign-off on any state rating table entry. Database (Azure Database for PostgreSQL), ERP/front-end (Odoo Community 19.0), and the Azure Blob Storage integration approach (leaning OCA's `fs_storage`/`fs_attachment`) are decided but not yet built or hands-on verified — see `docs/decisions/` (0001 through 0004).
+Early design phase. No production data. No live regulatory sign-off on any state rating table entry. Database (Azure Database for PostgreSQL), ERP/front-end (Odoo Community 19.0), and the Azure Blob Storage integration approach (leaning OCA's `fs_storage`/`fs_attachment`) are decided but not yet deployed — see `docs/decisions/` (0001 through 0005). The database table design itself is further along than "decided": it's written as real DDL and its key constraints (state-rating-table version overlap prevention, append-only decision log) were tested against a live PostgreSQL instance in this session, not just described. No Azure resources exist yet, and how Odoo will talk to these tables (direct ORM mapping vs. a service layer) is still an open question — see `docs/decisions/0005-database-table-design.md`.
