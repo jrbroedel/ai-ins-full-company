@@ -16,10 +16,11 @@ Installed Odoo 19.0 Community on a dedicated Azure VM (`luxauto-odoo`, provision
 | Database connection | Dedicated `odoo` Postgres role (not the admin account — see Deviation 3), connecting to `luxauto-pg.postgres.database.azure.com` over the private VNet |
 | Application database | `luxauto`, with `base`, `server_environment`, `fs_storage`, `fs_attachment` installed |
 | Secrets | Fetched at configuration time via the VM's **system-assigned managed identity** against Key Vault — no credential passed through the operator or committed anywhere |
-| Reverse proxy | nginx on port 80, proxying to Odoo on `127.0.0.1:8069` (and `:8072` for longpolling/websocket) |
+| Reverse proxy | nginx, proxying to Odoo on `127.0.0.1:8069` (and `:8072` for longpolling/websocket) |
+| TLS | `https://mga.ironcliffvertex.com`, Let's Encrypt via certbot, auto-renewing; HTTP redirects to HTTPS |
 | Hardening | Database management UI blocked at the nginx layer (see Deviation 5) |
 
-**Not done yet:** TLS (no domain name pointed at the VM's public IP yet), and the actual `fs.storage` record wiring `fs_storage` to the `documents` Blob container — the module is installed but no storage backend has been configured. Both are open items, tracked below.
+**Not done yet:** the actual `fs.storage` record wiring `fs_storage` to the `documents` Blob container — the module is installed but no storage backend has been configured. Tracked below. (TLS, originally also listed here, was completed 2026-08-10 — see the TLS section below.)
 
 ## Deviation 1: Ubuntu 24.04, not 22.04
 
@@ -84,9 +85,22 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 ```
 No secret value ever passed through the operator or any chat/log channel during this process — the pattern established in ADR 0008 for jump-box work extends cleanly to standing compute.
 
+## TLS (added 2026-08-10)
+
+Domain: `mga.ironcliffvertex.com` — a subdomain of an existing, otherwise-unused domain (`ironcliffvertex.com`), chosen over registering a new dedicated domain since this instance isn't yet customer-facing. `mga` rather than something auto/underwriting-specific, since this Odoo instance is meant to grow beyond the first line of business (quota-share, commissions, eventually homeowners) and a narrower name would age poorly.
+
+DNS is managed in Cloudflare. The record was added as **DNS only** (proxy disabled — grey cloud, not orange) deliberately: routing Let's Encrypt's HTTP-01 challenge through Cloudflare's proxy adds complexity for no benefit at this stage. Whether to enable Cloudflare's proxy (CDN/WAF/DDoS protection) is a separate decision that can be revisited once the certificate itself is working, without needing to redo anything here.
+
+Certificate obtained via `certbot` with the `python3-certbot-nginx` plugin (Let's Encrypt, auto-renewing, ECDSA). One deviation from a clean run:
+
+**Deviation 6: certbot's nginx plugin can't match a wildcard `server_name`.** The nginx config from Deviation 5 (the database-manager block) used `server_name _;` — a catch-all, since at the time there was no real hostname to bind to. `certbot --nginx -d mga.ironcliffvertex.com` obtained the certificate successfully but failed to auto-install it: *"Could not automatically find a matching server block for mga.ironcliffvertex.com. Set the `server_name` directive to use the Nginx installer."* Fixed by setting `server_name mga.ironcliffvertex.com;` explicitly, then running `certbot install --cert-name mga.ironcliffvertex.com --nginx` as a separate step. Certbot then correctly added the `listen 443 ssl` block and an HTTP→HTTPS redirect server block, and — worth explicitly checking, not assuming — the `/web/database/manager` block from Deviation 5 survived the rewrite unchanged.
+
+**Action item for the Bicep/install-script path:** if provisioning this from scratch with a domain name already known upfront, set the real `server_name` in the nginx config from the start rather than `_;`, to skip this step entirely.
+
+Verified post-install: HTTPS login page returns 200, HTTP redirects to HTTPS (301), `/web/database/manager` still returns 403 over HTTPS, `certbot.timer` is enabled and scheduled (twice-daily check, only renews when within Let's Encrypt's renewal window — current certificate expires 2026-11-08).
+
 ## Consequences / not yet done
 
-- **TLS is not configured.** Everything is plaintext HTTP on port 80. Needs a domain name pointed at `20.110.2.164` before certbot can issue a certificate. Until then, credentials (including the eventual first-login admin password) travel in the clear — acceptable for continued build-out, not for anything resembling production use.
 - **`fs_storage` is installed but not wired to Blob Storage.** No `fs.storage` record exists yet pointing at `luxautosa91a2e1`/`documents`. This is the direct next step and is deliberately being done once, interactively, through the Odoo UI rather than scripted — worth a human confirming it actually works before trusting document attachments to it.
 - **No application-specific Odoo modules exist yet** — the Policy/Insured/Premium objects and quota-share module (ADR 0007's scope) haven't been started. This VM currently runs stock Odoo plus the storage integration modules only.
 - **Local Postgres on the VM is disabled but not removed.** No functional cost to leaving it uninstalled-but-present; flagged here only so a future audit doesn't wonder why `postgresql-16` packages are present but inactive.
