@@ -20,7 +20,7 @@ Installed Odoo 19.0 Community on a dedicated Azure VM (`luxauto-odoo`, provision
 | TLS | `https://mga.ironcliffvertex.com`, Let's Encrypt via certbot, auto-renewing; HTTP redirects to HTTPS |
 | Hardening | Database management UI blocked at the nginx layer (see Deviation 5) |
 
-**Not done yet:** the actual `fs.storage` record wiring `fs_storage` to the `documents` Blob container — the module is installed but no storage backend has been configured. Tracked below. (TLS, originally also listed here, was completed 2026-08-10 — see the TLS section below.)
+**Not done yet:** application-specific Odoo modules (Policy/Insured/Premium objects, quota-share) haven't been started — see the Consequences section below. TLS and the Blob Storage wiring, both originally listed here as open items, were completed 2026-08-10 — see the TLS section and the fs_storage section below.
 
 ## Deviation 1: Ubuntu 24.04, not 22.04
 
@@ -99,8 +99,27 @@ Certificate obtained via `certbot` with the `python3-certbot-nginx` plugin (Let'
 
 Verified post-install: HTTPS login page returns 200, HTTP redirects to HTTPS (301), `/web/database/manager` still returns 403 over HTTPS, `certbot.timer` is enabled and scheduled (twice-daily check, only renews when within Let's Encrypt's renewal window — current certificate expires 2026-11-08).
 
+## fs_storage wired to Blob Storage (added 2026-08-10)
+
+Created the `fs.storage` record (protocol `abfs` — `adlfs.AzureBlobFileSystem`, the correct fsspec protocol identifier for Azure Blob; confirmed by inspecting `fsspec`'s own `known_implementations` registry rather than assuming) pointing at the `documents` container, and set it as the default storage backend for all new attachments. Credentials fetched via the same managed-identity pattern as the rest of this ADR.
+
+Verified in three independent ways before considering this done: a raw `fsspec` write/read/delete directly against the configured filesystem handle; a real `ir.attachment` created through Odoo's normal ORM API, checked for a populated `fs_filename` (proof it left the database) and correct content on read-back; and that same attachment's content re-read via `fsspec` directly, bypassing Odoo's abstraction entirely, confirming the bytes actually live in Azure Blob and not just somewhere Odoo believes they do.
+
+**Deviation 7: `use_as_default_for_attachments` is a config-file-only field with no database column, and getting it to actually take a value required building a small config package from scratch.** The field is registered under `fs_storage`'s (`fs_attachment`-added) `_server_env_fields`, which is the OCA `server_environment` module's mechanism for keeping certain fields out of the database entirely and sourcing them from `.conf` files instead — by design, not a bug, so that environment-specific values (which storage is "the" default, credentials, etc.) don't need per-environment DB migrations and don't end up in backups/exports. Writing `True` via the ORM appeared to succeed (no error) but silently reverted to the field's Python-level default (`False`) on the next read, since there was no config file for it to read from — and the column genuinely doesn't exist in `fs_storage`'s Postgres table (confirmed directly: `column "use_as_default_for_attachments" does not exist`).
+
+Getting this working required:
+1. A plain Python package (not a full Odoo module — no `__manifest__.py` needed) named `server_environment_files`, placed *inside* an already-valid `addons_path` entry. It cannot be its own top-level `addons_path` entry: Odoo's path validator rejects any directory whose immediate children aren't themselves recognizable Odoo modules, and a bare config-file package doesn't qualify. (First attempt tried adding `/opt/odoo-custom-addons` itself to `addons_path` to expose the package — Odoo logged `invalid addons directory... skipped` and silently ignored the whole entry.)
+2. `running_env = production` set explicitly in `odoo.conf` (an intentionally-unvalidated key — Odoo logs `unknown option 'running_env'... stored as-is`, which is expected and harmless; `server_environment` reads it directly off the parsed config dict, not through Odoo's own option schema).
+3. A `.conf` file (not `.cfg` — confirmed by reading `server_env.py`'s `_listconf()` directly rather than guessing; it filters strictly on the `.conf` suffix) at `server_environment_files/production/fs_storage.conf`, containing:
+   ```ini
+   [fs_storage.azure_blob_documents]
+   use_as_default_for_attachments = true
+   ```
+   The section name format itself required reading source rather than guessing: `<model _name with dots replaced by underscores>.<value of the field named in _server_env_section_name_field>`. `fs_storage` overrides that field to `"code"` rather than the mixin's default `"name"`, so the section is `fs_storage.azure_blob_documents` (matching the record's `code`), not `fs_storage.Azure Blob - documents`.
+
+**Action item for the Bicep/install-script path:** build this `server_environment_files` package (with `running_env` set appropriately per deployment target) as a first-class part of provisioning, not a manual post-install fix — same category of note as Deviation 4's OCA dependency gap.
+
 ## Consequences / not yet done
 
-- **`fs_storage` is installed but not wired to Blob Storage.** No `fs.storage` record exists yet pointing at `luxautosa91a2e1`/`documents`. This is the direct next step and is deliberately being done once, interactively, through the Odoo UI rather than scripted — worth a human confirming it actually works before trusting document attachments to it.
-- **No application-specific Odoo modules exist yet** — the Policy/Insured/Premium objects and quota-share module (ADR 0007's scope) haven't been started. This VM currently runs stock Odoo plus the storage integration modules only.
+- **No application-specific Odoo modules exist yet** — the Policy/Insured/Premium objects and quota-share module (ADR 0007's scope) haven't been started. This VM currently runs stock Odoo plus the storage integration modules only, now genuinely wired to Blob Storage (see above).
 - **Local Postgres on the VM is disabled but not removed.** No functional cost to leaving it uninstalled-but-present; flagged here only so a future audit doesn't wonder why `postgresql-16` packages are present but inactive.
