@@ -8,7 +8,7 @@ The project splits into three peer components. Database and ERP/front-end are no
 
 ```mermaid
 flowchart TD
-    subgraph ERP["ERP / front-end — Odoo 19.0 Community (decided)"]
+    subgraph ERP["ERP / front-end — Odoo 19.0 Community (running, stock only)"]
         direction LR
         BP[Broker portal]
         UW[Underwriter view]
@@ -22,7 +22,7 @@ flowchart TD
         RT[Rating engine]
     end
 
-    subgraph DL["Data layer — Azure Postgres + Blob Storage (decided)"]
+    subgraph DL["Data layer — Azure Postgres + Blob Storage (provisioned)"]
         direction LR
         PA[Policy and app data]
         DS[Document storage]
@@ -32,16 +32,16 @@ flowchart TD
     ERP -->|data + requests| WF
     WF -->|reads + writes| DL
 
-    style ERP fill:#9FE1CB,stroke:#0F6E56,color:#04342C
+    style ERP fill:#F5D486,stroke:#8A5A00,color:#3D2900
     style DL fill:#9FE1CB,stroke:#0F6E56,color:#04342C
     style WF fill:#AFA9EC,stroke:#3C3489,color:#26215C
 ```
 
-Purple = built so far. Teal = decided, not yet built.
+Purple = built so far (design artifacts only). Teal = infrastructure provisioned and verified. Amber = software running, but only stock/off-the-shelf — the insurance-specific customization hasn't started.
 
 - **Workflow pipeline** — the AI underwriting logic itself: intake/enrichment, the referral engine, the rating engine. Everything currently in `schemas/`, `sample-data/`, and `referral-matrices/` belongs here. Deliberately built to stay database-agnostic and UI-agnostic — it's plain JSON with no assumptions baked in about storage or presentation, so the database/ERP decision below didn't require touching it.
-- **Data layer** — **PostgreSQL** (Azure Database for PostgreSQL), with **Azure Blob Storage** for documents (PDFs, appraisals, loss runs). AWS and GCP are out of scope by standing preference, not evaluated on merits. Table design is done and verified — `schemas/db/postgresql_schema.sql` — see `docs/decisions/0001-database-and-erp.md` (engine + ERP), `docs/decisions/0002-cloud-provider-azure.md` (cloud provider), and `docs/decisions/0005-database-table-design.md` (the tables themselves, including how the schemas map to real constraints — tested against a live Postgres instance, not just described).
-- **ERP / front-end** — **Odoo Community Edition** (self-hosted, AGPL). Chosen together with the database, since Odoo requires Postgres. Rationale, alternatives considered (ERPNext, BindHQ/AIM/mPACS), and known open cost (custom quota-share module) in `docs/decisions/0001-database-and-erp.md`.
+- **Data layer** — **PostgreSQL** (Azure Database for PostgreSQL), with **Azure Blob Storage** for documents (PDFs, appraisals, loss runs). AWS and GCP are out of scope by standing preference, not evaluated on merits. Table design is done and verified — `schemas/db/postgresql_schema.sql` — see `docs/decisions/0001-database-and-erp.md` (engine + ERP), `docs/decisions/0002-cloud-provider-azure.md` (cloud provider), and `docs/decisions/0005-database-table-design.md` (the tables themselves, including how the schemas map to real constraints — tested against a live Postgres instance, not just described). **Provisioned and live** in Azure (`luxauto-rg`) — see `docs/decisions/0008-azure-infra-provisioned.md` and `infra/bicep/`. The schema in `schemas/db/postgresql_schema.sql` is loaded and verified against the running server.
+- **ERP / front-end** — **Odoo Community Edition** (self-hosted, AGPL). Chosen together with the database, since Odoo requires Postgres. Rationale, alternatives considered (ERPNext, BindHQ/AIM/mPACS), and known open cost (custom quota-share module) in `docs/decisions/0001-database-and-erp.md`. **Running** on a dedicated Azure VM with the Azure Blob storage integration modules (`fs_storage`/`fs_attachment`) installed — see `docs/decisions/0009-odoo-installed-on-vm.md`. Not yet done: TLS, wiring `fs_storage` to the actual Blob container, and all insurance-specific customization (Policy/Insured/Premium objects, quota-share module).
 
 ## Repo structure
 
@@ -53,6 +53,7 @@ referral-matrices/               Hard-stop and manual-review routing logic
 docs/reference-materials/        Source research the build is based on (insurance industry primer, the Lloyd's/energy MGA manual used as a structural template, MGA software options research)
 docs/decisions/                  Architecture decision records — what was chosen, why, and what alternatives were rejected
 docs/sample-renderings/          Rendered output examples (e.g. PDF application form)
+infra/bicep/                     Bicep IaC reproducing the provisioned Azure infrastructure (see ADR 0008)
 ```
 
 ## Current contents
@@ -87,4 +88,15 @@ Key findings from the regulatory research behind this build (August 2026) are ca
 
 ## Status
 
-Early design phase. No production data. No live regulatory sign-off on any state rating table entry. Database (Azure Database for PostgreSQL), ERP/front-end (Odoo Community 19.0), Azure Blob Storage integration approach, and how Odoo reads/writes the database are all decided — see `docs/decisions/` (0001 through 0006). Database table design (including quota-share/commission-waterfall tables, ADR 0007) is written as real DDL with key constraints tested against a live PostgreSQL instance — not just described. The Odoo customization itself (quota-share module, insurance-specific models, Azure Blob integration) has not been started. No Azure resources exist yet.
+Early design phase for the insurance-specific logic; infrastructure and stock ERP are live. No production data. No live regulatory sign-off on any state rating table entry.
+
+**Decided (design):** database engine, ERP/front-end choice, Azure Blob integration approach, and how Odoo reads/writes the database — see `docs/decisions/` 0001–0006. Database table design, including quota-share/commission-waterfall tables (ADR 0007), is written as real DDL with key constraints tested against a live PostgreSQL instance.
+
+**Provisioned and running (infrastructure):**
+- Azure Database for PostgreSQL (`luxauto-pg`), private/VNet-only, schema loaded and verified — ADR 0008
+- Azure Blob Storage + `documents` container — ADR 0008
+- Azure Key Vault, RBAC-authorized, holding the credentials above — ADR 0008
+- Odoo 19.0, running on a dedicated Azure VM, connected to the live database, with the `fs_storage`/`fs_attachment` OCA modules installed — ADR 0009
+- `infra/bicep/main.bicep` reproduces the above from scratch, including three deviations discovered during manual provisioning (region restriction, Postgres extension allow-listing, `public` schema ownership)
+
+**Not started:** all insurance-specific Odoo customization — the quota-share module, the Policy/Insured/Premium objects, and the actual `fs_storage` backend record pointing at the live Blob container (the module is installed but not yet configured). Also not done: TLS on the Odoo VM (needs a domain name first) and the AI underwriting pipeline itself (intake/enrichment/referral/rating engine) has design artifacts only, no running code yet.
