@@ -40,6 +40,7 @@ CREATE TYPE document_type_t AS ENUM (
   'appraisal', 'loss_run', 'engineering_report', 'rendered_quote_pdf',
   'application_form', 'title_report', 'mvr_report', 'other'
 );
+CREATE TYPE policy_status_t AS ENUM ('active', 'cancelled', 'expired', 'nonrenewed');
 
 -- ============================================================================
 -- STATE RATING TABLE REGISTRY
@@ -425,6 +426,45 @@ CREATE CONSTRAINT TRIGGER program_participants_sum_check
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION check_program_shares_sum_to_100();
 
+-- Commission waterfall (ADR 0010): given a bound/issued quote, compute each
+-- program participant's share of gross premium and their net-due amount
+-- after their own commission_rate. Single source of truth for both the Odoo
+-- Premium/Waterfall view and any future bordereau-style settlement report -
+-- both read this function rather than each re-deriving the math (ADR 0010).
+-- Computes only what the schema currently models (a flat share_percentage
+-- and a single commission_rate per participant) - does not resolve the
+-- layered retail/wholesale broker commission tiers from the Energy manual's
+-- Ch.10 waterfall, or the still-free-text profit_commission_formula. See
+-- ADR 0007's open items and ADR 0010's note on this function's scope.
+CREATE OR REPLACE FUNCTION calculate_premium_waterfall(p_quote_id UUID)
+RETURNS TABLE (
+  participant_id      UUID,
+  participant_name    TEXT,
+  participant_type    participant_type_t,
+  share_percentage    NUMERIC(5,2),
+  commission_rate     NUMERIC(5,2),
+  gross_share          NUMERIC(14,2),
+  commission_amount    NUMERIC(14,2),
+  net_due               NUMERIC(14,2)
+) AS $$
+  SELECT
+    pp.participant_id,
+    pp.participant_name,
+    pp.participant_type,
+    pp.share_percentage,
+    pp.commission_rate,
+    ROUND(q.premium_amount * pp.share_percentage / 100, 2) AS gross_share,
+    ROUND(q.premium_amount * pp.share_percentage / 100
+          * COALESCE(pp.commission_rate, 0) / 100, 2) AS commission_amount,
+    ROUND(q.premium_amount * pp.share_percentage / 100
+          * (1 - COALESCE(pp.commission_rate, 0) / 100), 2) AS net_due
+  FROM quotes q
+  JOIN program_participants pp
+    ON pp.program_id = q.program_id
+   AND pp.effective_range @> q.quoted_at
+  WHERE q.quote_id = p_quote_id;
+$$ LANGUAGE sql STABLE;
+
 -- ============================================================================
 -- QUOTES
 -- Pins the exact state_rating_table_versions record used, so a later rate
@@ -453,6 +493,69 @@ CREATE TABLE quotes (
 
 CREATE INDEX idx_quotes_application ON quotes(application_id);
 CREATE INDEX idx_quotes_program ON quotes(program_id);
+
+-- ============================================================================
+-- POLICIES (ADR 0010)
+-- The result of binding a quote - one policy per bound quote, enforced by the
+-- UNIQUE constraint on quote_id below. quotes.status transitions to 'bound'
+-- in the same transaction that inserts this row (the bind server action -
+-- ADR 0010 section 4), so a policy's existence and its quote's 'bound' status
+-- are set together, not independently. Endorsements (mid-term changes to an
+-- already-bound policy) are explicitly out of scope for this table - see
+-- ADR 0010's own note and the follow-on ADR it calls for.
+-- ============================================================================
+
+CREATE TABLE policies (
+  policy_id                         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  quote_id                          UUID NOT NULL UNIQUE REFERENCES quotes(quote_id),
+  policy_number                     TEXT,
+  effective_range                   TSTZRANGE NOT NULL,
+  status                            policy_status_t NOT NULL DEFAULT 'active',
+  created_at                        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at                        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_policies_quote ON policies(quote_id);
+CREATE INDEX idx_policies_status ON policies(status);
+
+-- ============================================================================
+-- POLICY EVENTS (ADR 0010)
+-- Append-only audit trail for policy lifecycle actions (bind, cancel, and
+-- later renewal/endorsement events once those are designed). Kept separate
+-- from decision_log, which is shaped around referral-rule firings against an
+-- application (rule_id, action_taken against referral_action_t) and doesn't
+-- fit a policy lifecycle event without weakening that shape - see ADR 0010
+-- section 4 for the full "why a new table, not a widened decision_log"
+-- rationale. Same append-only discipline as decision_log: no UPDATE, no
+-- DELETE, ever - a mistaken entry gets corrected with a new row referencing
+-- the old one in notes, not by editing history.
+-- ============================================================================
+
+CREATE TABLE policy_events (
+  event_id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  policy_id                         UUID NOT NULL REFERENCES policies(policy_id) ON DELETE CASCADE,
+  event_type                        TEXT NOT NULL,             -- e.g. 'bound', 'cancelled'
+  performed_by                      TEXT NOT NULL,             -- 'system' or a specific user identifier
+  notes                             TEXT,
+  created_at                        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_policy_events_policy ON policy_events(policy_id);
+
+CREATE OR REPLACE FUNCTION reject_policy_events_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'policy_events is append-only: % is not permitted', TG_OP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER policy_events_no_update
+  BEFORE UPDATE ON policy_events
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_events_mutation();
+
+CREATE TRIGGER policy_events_no_delete
+  BEFORE DELETE ON policy_events
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_events_mutation();
 
 -- ============================================================================
 -- DOCUMENTS (metadata only - files live in Azure Blob Storage per ADR 0002/0003)
@@ -487,4 +590,6 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER applicants_updated_at BEFORE UPDATE ON applicants
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER applications_updated_at BEFORE UPDATE ON applications
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER policies_updated_at BEFORE UPDATE ON policies
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
