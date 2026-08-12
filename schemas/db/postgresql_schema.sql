@@ -436,6 +436,21 @@ CREATE CONSTRAINT TRIGGER program_participants_sum_check
 -- layered retail/wholesale broker commission tiers from the Energy manual's
 -- Ch.10 waterfall, or the still-free-text profit_commission_formula. See
 -- ADR 0007's open items and ADR 0010's note on this function's scope.
+--
+-- SECURITY DEFINER, not the default SECURITY INVOKER: unlike a plain view
+-- (which transparently runs with its owner's table privileges), a function
+-- called from within a view does NOT inherit the view owner's rights - it
+-- runs as whichever role actually queries it. luxauto_premium_waterfall_view
+-- calls this function, and the least-privilege `odoo` Postgres role (ADR
+-- 0009) has no direct grant on quotes/program_participants - only on the
+-- views. SECURITY DEFINER makes this function a controlled read gateway,
+-- the same role a view already plays, without widening `odoo`'s privileges
+-- to the base tables themselves. search_path is pinned to close the
+-- standard SECURITY DEFINER search-path-injection gotcha. Caught live
+-- while installing the Odoo module that reads this view (ADR 0010) - the
+-- function worked fine when called directly as the Postgres admin role
+-- during earlier testing, which never exercised the `odoo` role's actual,
+-- narrower privileges.
 CREATE OR REPLACE FUNCTION calculate_premium_waterfall(p_quote_id UUID)
 RETURNS TABLE (
   participant_id      UUID,
@@ -463,7 +478,7 @@ RETURNS TABLE (
     ON pp.program_id = q.program_id
    AND pp.effective_range @> q.quoted_at
   WHERE q.quote_id = p_quote_id;
-$$ LANGUAGE sql STABLE;
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ============================================================================
 -- QUOTES
@@ -637,6 +652,19 @@ SELECT
   w.net_due
 FROM quotes q
 CROSS JOIN LATERAL calculate_premium_waterfall(q.quote_id) w;
+
+-- These three views are owned by whichever role runs this script (the
+-- Postgres admin, in practice - see ADR 0011), not by the `odoo` role Odoo
+-- itself connects as (ADR 0009). A plain view runs with its owner's table
+-- privileges for any caller with SELECT on the view, so `odoo` needs that
+-- SELECT grant explicitly - it doesn't get it just by the view existing.
+-- Assumes the `odoo` role already exists (ADR 0009 creates it) when this
+-- file is applied to luxauto-pg's luxauto database, same assumption the
+-- rest of this file already makes about running against that database.
+GRANT SELECT ON luxauto_insured_view TO odoo;
+GRANT SELECT ON luxauto_policy_view TO odoo;
+GRANT SELECT ON luxauto_premium_waterfall_view TO odoo;
+GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID) TO odoo;
 
 -- ============================================================================
 -- DOCUMENTS (metadata only - files live in Azure Blob Storage per ADR 0002/0003)

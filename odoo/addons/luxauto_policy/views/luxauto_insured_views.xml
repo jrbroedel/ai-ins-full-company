@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_luxauto_insured_list" model="ir.ui.view">
+        <field name="name">luxauto.insured.list</field>
+        <field name="model">luxauto.insured</field>
+        <field name="arch" type="xml">
+            <list create="false" edit="false" delete="false" import="false">
+                <field name="first_name"/>
+                <field name="last_name"/>
+                <field name="email"/>
+                <field name="mailing_city"/>
+                <field name="mailing_state"/>
+                <field name="application_status"/>
+                <field name="garaging_state"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_luxauto_insured_form" model="ir.ui.view">
+        <field name="name">luxauto.insured.form</field>
+        <field name="model">luxauto.insured</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false" delete="false">
+                <sheet>
+                    <group>
+                        <group string="Applicant">
+                            <field name="first_name"/>
+                            <field name="last_name"/>
+                            <field name="date_of_birth"/>
+                            <field name="email"/>
+                            <field name="phone"/>
+                            <field name="mailing_city"/>
+                            <field name="mailing_state"/>
+                        </group>
+                        <group string="Application">
+                            <field name="application_id"/>
+                            <field name="application_status"/>
+                            <field name="garaging_state"/>
+                            <field name="submitted_at"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_luxauto_insured" model="ir.actions.act_window">
+        <field name="name">Insureds</field>
+        <field name="res_model">luxauto.insured</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

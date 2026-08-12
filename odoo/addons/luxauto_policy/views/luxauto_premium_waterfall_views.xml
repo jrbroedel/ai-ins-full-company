@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_luxauto_premium_waterfall_list" model="ir.ui.view">
+        <field name="name">luxauto.premium.waterfall.list</field>
+        <field name="model">luxauto.premium.waterfall</field>
+        <field name="arch" type="xml">
+            <list create="false" edit="false" delete="false" import="false">
+                <field name="quote_id"/>
+                <field name="participant_name"/>
+                <field name="participant_type"/>
+                <field name="share_percentage"/>
+                <field name="commission_rate"/>
+                <field name="gross_share"/>
+                <field name="commission_amount"/>
+                <field name="net_due"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_luxauto_premium_waterfall_form" model="ir.ui.view">
+        <field name="name">luxauto.premium.waterfall.form</field>
+        <field name="model">luxauto.premium.waterfall</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false" delete="false">
+                <sheet>
+                    <group>
+                        <group string="Quote">
+                            <field name="quote_id"/>
+                            <field name="premium_amount"/>
+                            <field name="quote_status"/>
+                        </group>
+                        <group string="Participant">
+                            <field name="participant_name"/>
+                            <field name="participant_type"/>
+                            <field name="share_percentage"/>
+                            <field name="commission_rate"/>
+                        </group>
+                    </group>
+                    <group string="Waterfall">
+                        <field name="gross_share"/>
+                        <field name="commission_amount"/>
+                        <field name="net_due"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_luxauto_premium_waterfall" model="ir.actions.act_window">
+        <field name="name">Premium Waterfall</field>
+        <field name="res_model">luxauto.premium.waterfall</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

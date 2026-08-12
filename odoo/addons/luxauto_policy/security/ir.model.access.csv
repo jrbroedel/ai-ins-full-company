@@ -1,0 +1,4 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_luxauto_insured,luxauto.insured,model_luxauto_insured,base.group_user,1,0,0,0
+access_luxauto_policy,luxauto.policy,model_luxauto_policy,base.group_user,1,0,0,0
+access_luxauto_premium_waterfall,luxauto.premium.waterfall,model_luxauto_premium_waterfall,base.group_user,1,0,0,0
