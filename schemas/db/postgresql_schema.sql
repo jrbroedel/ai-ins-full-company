@@ -41,6 +41,7 @@ CREATE TYPE document_type_t AS ENUM (
   'application_form', 'title_report', 'mvr_report', 'other'
 );
 CREATE TYPE policy_status_t AS ENUM ('active', 'cancelled', 'expired', 'nonrenewed');
+CREATE TYPE endorsement_type_t AS ENUM ('premium_adjustment', 'term_change');
 
 -- ============================================================================
 -- STATE RATING TABLE REGISTRY
@@ -426,32 +427,151 @@ CREATE CONSTRAINT TRIGGER program_participants_sum_check
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION check_program_shares_sum_to_100();
 
--- Commission waterfall (ADR 0010): given a bound/issued quote, compute each
--- program participant's share of gross premium and their net-due amount
--- after their own commission_rate. Single source of truth for both the Odoo
--- Premium/Waterfall view and any future bordereau-style settlement report -
--- both read this function rather than each re-deriving the math (ADR 0010).
--- Computes only what the schema currently models (a flat share_percentage
--- and a single commission_rate per participant) - does not resolve the
--- layered retail/wholesale broker commission tiers from the Energy manual's
--- Ch.10 waterfall, or the still-free-text profit_commission_formula. See
--- ADR 0007's open items and ADR 0010's note on this function's scope.
+-- ============================================================================
+-- QUOTES
+-- Pins the exact state_rating_table_versions record used, so a later rate
+-- change never silently re-rates an already-issued quote (see that table's
+-- own comment, and the registry schema's "how_this_is_used" item 6).
+-- ============================================================================
+
+CREATE TABLE quotes (
+  quote_id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  application_id                    UUID NOT NULL REFERENCES applications(application_id) ON DELETE CASCADE,
+  state_rating_table_record_id      UUID NOT NULL REFERENCES state_rating_table_versions(record_id),
+  program_id                        UUID REFERENCES insurance_programs(program_id),  -- which capacity/
+                                                                                        -- participant panel
+                                                                                        -- this was written
+                                                                                        -- under - see
+                                                                                        -- ADR 0007
+  premium_amount                    NUMERIC(12,2) NOT NULL,
+  rating_basis                      JSONB NOT NULL,  -- which permitted variables/values drove the
+                                                         -- price - the per-quote decision-log
+                                                         -- attachment referenced in the registry schema
+  status                            TEXT NOT NULL DEFAULT 'draft'
+                                       CHECK (status IN ('draft', 'issued', 'bound', 'expired', 'declined')),
+  quoted_at                         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at                        TIMESTAMPTZ
+);
+
+CREATE INDEX idx_quotes_application ON quotes(application_id);
+CREATE INDEX idx_quotes_program ON quotes(program_id);
+
+-- ============================================================================
+-- POLICIES (ADR 0010)
+-- The result of binding a quote - one policy per bound quote, enforced by the
+-- UNIQUE constraint on quote_id below. quotes.status transitions to 'bound'
+-- in the same transaction that inserts this row (the bind server action -
+-- ADR 0010 section 4), so a policy's existence and its quote's 'bound' status
+-- are set together, not independently. Endorsements (mid-term changes to an
+-- already-bound policy) are explicitly out of scope for this table - see
+-- ADR 0010's own note and the follow-on ADR it calls for.
+-- ============================================================================
+
+CREATE TABLE policies (
+  policy_id                         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  quote_id                          UUID NOT NULL UNIQUE REFERENCES quotes(quote_id),
+  policy_number                     TEXT,
+  effective_range                   TSTZRANGE NOT NULL,
+  status                            policy_status_t NOT NULL DEFAULT 'active',
+  created_at                        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at                        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_policies_quote ON policies(quote_id);
+CREATE INDEX idx_policies_status ON policies(status);
+
+-- ============================================================================
+-- POLICY EVENTS (ADR 0010)
+-- Append-only audit trail for policy lifecycle actions (bind, cancel, and
+-- later renewal/endorsement events once those are designed). Kept separate
+-- from decision_log, which is shaped around referral-rule firings against an
+-- application (rule_id, action_taken against referral_action_t) and doesn't
+-- fit a policy lifecycle event without weakening that shape - see ADR 0010
+-- section 4 for the full "why a new table, not a widened decision_log"
+-- rationale. Same append-only discipline as decision_log: no UPDATE, no
+-- DELETE, ever - a mistaken entry gets corrected with a new row referencing
+-- the old one in notes, not by editing history.
+-- ============================================================================
+
+CREATE TABLE policy_events (
+  event_id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  policy_id                         UUID NOT NULL REFERENCES policies(policy_id) ON DELETE CASCADE,
+  event_type                        TEXT NOT NULL,             -- e.g. 'bound', 'cancelled'
+  performed_by                      TEXT NOT NULL,             -- 'system' or a specific user identifier
+  notes                             TEXT,
+  created_at                        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_policy_events_policy ON policy_events(policy_id);
+
+CREATE OR REPLACE FUNCTION reject_policy_events_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'policy_events is append-only: % is not permitted', TG_OP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER policy_events_no_update
+  BEFORE UPDATE ON policy_events
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_events_mutation();
+
+CREATE TRIGGER policy_events_no_delete
+  BEFORE DELETE ON policy_events
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_events_mutation();
+
+-- ============================================================================
+-- WATERFALL AND POLICY-LIFECYCLE WRITE FUNCTIONS (ADR 0010, ADR 0014)
+-- Placed here, after quotes/policies/policy_events, rather than up near
+-- program_participants where they originally lived: LANGUAGE sql functions
+-- are parsed against the catalog at CREATE time (unlike plpgsql, which only
+-- checks syntax until first call), so a function referencing quotes/policies/
+-- policy_events genuinely cannot be created before those tables exist. That
+-- original placement worked in every session that tested it only because
+-- each one applied incremental changes to an already-populated database -
+-- never a true fresh apply. Caught here, while adding ADR 0014's new
+-- functions, by testing a fresh apply against an empty database
+-- (schemas/db/ has no automated fresh-apply check yet - this is exactly the
+-- kind of drift ADR 0011 flagged as a process gap). Fixed by moving these
+-- functions after their dependencies instead of leaving the bug in place and
+-- adding more functions with the same hazard on top of it.
+-- ============================================================================
+
+-- Commission waterfall (ADR 0010, refactored for ADR 0014): given a bound/
+-- issued quote, compute each program participant's share of gross premium
+-- and their net-due amount after their own commission_rate. Single source of
+-- truth for every consumer - the Odoo Premium/Waterfall view, the settlement
+-- report (ADR 0013), and now endorsements (ADR 0014) - all read this
+-- function rather than each re-deriving the math. Computes only what the
+-- schema currently models (a flat share_percentage and a single
+-- commission_rate per participant) - does not resolve the layered
+-- retail/wholesale broker commission tiers from the Energy manual's Ch.10
+-- waterfall, or the still-free-text profit_commission_formula. See ADR
+-- 0007's open items and ADR 0010's note on this function's scope.
 --
 -- SECURITY DEFINER, not the default SECURITY INVOKER: unlike a plain view
 -- (which transparently runs with its owner's table privileges), a function
 -- called from within a view does NOT inherit the view owner's rights - it
--- runs as whichever role actually queries it. luxauto_premium_waterfall_view
--- calls this function, and the least-privilege `odoo` Postgres role (ADR
--- 0009) has no direct grant on quotes/program_participants - only on the
--- views. SECURITY DEFINER makes this function a controlled read gateway,
--- the same role a view already plays, without widening `odoo`'s privileges
--- to the base tables themselves. search_path is pinned to close the
--- standard SECURITY DEFINER search-path-injection gotcha. Caught live
--- while installing the Odoo module that reads this view (ADR 0010) - the
--- function worked fine when called directly as the Postgres admin role
--- during earlier testing, which never exercised the `odoo` role's actual,
--- narrower privileges.
-CREATE OR REPLACE FUNCTION calculate_premium_waterfall(p_quote_id UUID)
+-- runs as whichever role actually queries it. The least-privilege `odoo`
+-- Postgres role (ADR 0009) has no direct grant on quotes/program_participants
+-- - only on the views. SECURITY DEFINER makes this function a controlled
+-- read gateway, the same role a view already plays, without widening
+-- `odoo`'s privileges to the base tables themselves. search_path is pinned
+-- to close the standard SECURITY DEFINER search-path-injection gotcha.
+--
+-- ADR 0014 split the original single-argument function into this raw
+-- (program_id, amount, as_of) overload - the actual arithmetic - plus two
+-- thin entrypoints below that each resolve a different kind of row into
+-- these three inputs and delegate to it: the original quote-based form, and
+-- calculate_endorsement_waterfall() for an endorsement's premium_delta. The
+-- math is written exactly once; a sibling function that recomputed it
+-- independently would be the "two copies of the truth" problem this
+-- function exists to avoid, just avoided for two callers and reintroduced
+-- for a third.
+CREATE OR REPLACE FUNCTION calculate_premium_waterfall(
+  p_program_id UUID,
+  p_amount NUMERIC,
+  p_as_of TIMESTAMPTZ
+)
 RETURNS TABLE (
   participant_id      UUID,
   participant_name    TEXT,
@@ -468,15 +588,33 @@ RETURNS TABLE (
     pp.participant_type,
     pp.share_percentage,
     pp.commission_rate,
-    ROUND(q.premium_amount * pp.share_percentage / 100, 2) AS gross_share,
-    ROUND(q.premium_amount * pp.share_percentage / 100
+    ROUND(p_amount * pp.share_percentage / 100, 2) AS gross_share,
+    ROUND(p_amount * pp.share_percentage / 100
           * COALESCE(pp.commission_rate, 0) / 100, 2) AS commission_amount,
-    ROUND(q.premium_amount * pp.share_percentage / 100
+    ROUND(p_amount * pp.share_percentage / 100
           * (1 - COALESCE(pp.commission_rate, 0) / 100), 2) AS net_due
+  FROM program_participants pp
+  WHERE pp.program_id = p_program_id
+    AND pp.effective_range @> p_as_of;
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Original entrypoint: now a thin wrapper over the overload above. Same
+-- signature, same behavior - luxauto_premium_waterfall_view and
+-- luxauto_settlement_view keep working unchanged.
+CREATE OR REPLACE FUNCTION calculate_premium_waterfall(p_quote_id UUID)
+RETURNS TABLE (
+  participant_id      UUID,
+  participant_name    TEXT,
+  participant_type    participant_type_t,
+  share_percentage    NUMERIC(5,2),
+  commission_rate     NUMERIC(5,2),
+  gross_share          NUMERIC(14,2),
+  commission_amount    NUMERIC(14,2),
+  net_due               NUMERIC(14,2)
+) AS $$
+  SELECT w.*
   FROM quotes q
-  JOIN program_participants pp
-    ON pp.program_id = q.program_id
-   AND pp.effective_range @> q.quoted_at
+  CROSS JOIN LATERAL calculate_premium_waterfall(q.program_id, q.premium_amount, q.quoted_at) w
   WHERE q.quote_id = p_quote_id;
 $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
 
@@ -586,96 +724,167 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ============================================================================
--- QUOTES
--- Pins the exact state_rating_table_versions record used, so a later rate
--- change never silently re-rates an already-issued quote (see that table's
--- own comment, and the registry schema's "how_this_is_used" item 6).
+-- POLICY ENDORSEMENTS (ADR 0014)
+-- v1 scope: premium_adjustment and term_change only. Structural endorsements
+-- (vehicle/coverage changes) are explicitly deferred - vehicles and
+-- coverage_requested are currently scoped to applications, not policies, and
+-- that's a real schema-design decision this table doesn't attempt to make.
+-- Versioned rows, not mutation of the policies row - same discipline as
+-- state_rating_table_versions and program_participants.
 -- ============================================================================
 
-CREATE TABLE quotes (
-  quote_id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  application_id                    UUID NOT NULL REFERENCES applications(application_id) ON DELETE CASCADE,
-  state_rating_table_record_id      UUID NOT NULL REFERENCES state_rating_table_versions(record_id),
-  program_id                        UUID REFERENCES insurance_programs(program_id),  -- which capacity/
-                                                                                        -- participant panel
-                                                                                        -- this was written
-                                                                                        -- under - see
-                                                                                        -- ADR 0007
-  premium_amount                    NUMERIC(12,2) NOT NULL,
-  rating_basis                      JSONB NOT NULL,  -- which permitted variables/values drove the
-                                                         -- price - the per-quote decision-log
-                                                         -- attachment referenced in the registry schema
-  status                            TEXT NOT NULL DEFAULT 'draft'
-                                       CHECK (status IN ('draft', 'issued', 'bound', 'expired', 'declined')),
-  quoted_at                         TIMESTAMPTZ NOT NULL DEFAULT now(),
-  expires_at                        TIMESTAMPTZ
+CREATE TABLE policy_endorsements (
+  endorsement_id      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  policy_id           UUID NOT NULL REFERENCES policies(policy_id),
+  effective_range     TSTZRANGE NOT NULL,
+  endorsement_type    endorsement_type_t NOT NULL,
+  premium_delta       NUMERIC(12,2),  -- nullable: a pure term_change may have no premium impact
+  reason              TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- Closes ADR 0007's temporal-overlap gap now instead of repeating it: two
+  -- endorsements on the same policy can never have overlapping
+  -- effective_range - enforced at the database level, same btree_gist
+  -- pattern as state_rating_table_versions' own exclusion constraint.
+  CONSTRAINT no_overlapping_policy_endorsements
+    EXCLUDE USING gist (policy_id WITH =, effective_range WITH &&)
 );
 
-CREATE INDEX idx_quotes_application ON quotes(application_id);
-CREATE INDEX idx_quotes_program ON quotes(program_id);
+CREATE INDEX idx_policy_endorsements_policy ON policy_endorsements(policy_id);
 
--- ============================================================================
--- POLICIES (ADR 0010)
--- The result of binding a quote - one policy per bound quote, enforced by the
--- UNIQUE constraint on quote_id below. quotes.status transitions to 'bound'
--- in the same transaction that inserts this row (the bind server action -
--- ADR 0010 section 4), so a policy's existence and its quote's 'bound' status
--- are set together, not independently. Endorsements (mid-term changes to an
--- already-bound policy) are explicitly out of scope for this table - see
--- ADR 0010's own note and the follow-on ADR it calls for.
--- ============================================================================
-
-CREATE TABLE policies (
-  policy_id                         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  quote_id                          UUID NOT NULL UNIQUE REFERENCES quotes(quote_id),
-  policy_number                     TEXT,
-  effective_range                   TSTZRANGE NOT NULL,
-  status                            policy_status_t NOT NULL DEFAULT 'active',
-  created_at                        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at                        TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_policies_quote ON policies(quote_id);
-CREATE INDEX idx_policies_status ON policies(status);
-
--- ============================================================================
--- POLICY EVENTS (ADR 0010)
--- Append-only audit trail for policy lifecycle actions (bind, cancel, and
--- later renewal/endorsement events once those are designed). Kept separate
--- from decision_log, which is shaped around referral-rule firings against an
--- application (rule_id, action_taken against referral_action_t) and doesn't
--- fit a policy lifecycle event without weakening that shape - see ADR 0010
--- section 4 for the full "why a new table, not a widened decision_log"
--- rationale. Same append-only discipline as decision_log: no UPDATE, no
--- DELETE, ever - a mistaken entry gets corrected with a new row referencing
--- the old one in notes, not by editing history.
--- ============================================================================
-
-CREATE TABLE policy_events (
-  event_id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  policy_id                         UUID NOT NULL REFERENCES policies(policy_id) ON DELETE CASCADE,
-  event_type                        TEXT NOT NULL,             -- e.g. 'bound', 'cancelled'
-  performed_by                      TEXT NOT NULL,             -- 'system' or a specific user identifier
-  notes                             TEXT,
-  created_at                        TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_policy_events_policy ON policy_events(policy_id);
-
-CREATE OR REPLACE FUNCTION reject_policy_events_mutation()
+-- Append-only, same reasoning as decision_log/policy_events: the exclusion
+-- constraint above only stops a *conflicting* write. It does nothing to stop
+-- a silent UPDATE that changes an otherwise-valid row's reason or
+-- premium_delta in place, with no overlap and therefore nothing for the
+-- constraint to catch. correct_policy_endorsement() below is the one
+-- legitimate way to correct a mistaken row.
+CREATE OR REPLACE FUNCTION reject_policy_endorsements_mutation()
 RETURNS TRIGGER AS $$
 BEGIN
-  RAISE EXCEPTION 'policy_events is append-only: % is not permitted', TG_OP;
+  RAISE EXCEPTION 'policy_endorsements is append-only: % is not permitted', TG_OP;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER policy_events_no_update
-  BEFORE UPDATE ON policy_events
-  FOR EACH ROW EXECUTE FUNCTION reject_policy_events_mutation();
+CREATE TRIGGER policy_endorsements_no_update
+  BEFORE UPDATE ON policy_endorsements
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_endorsements_mutation();
 
-CREATE TRIGGER policy_events_no_delete
-  BEFORE DELETE ON policy_events
-  FOR EACH ROW EXECUTE FUNCTION reject_policy_events_mutation();
+CREATE TRIGGER policy_endorsements_no_delete
+  BEFORE DELETE ON policy_endorsements
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_endorsements_mutation();
+
+-- Endorsement waterfall (ADR 0014): resolves an endorsement into the same
+-- three raw inputs calculate_premium_waterfall(program_id, amount, as_of)
+-- already accepts, and delegates to it - no reimplemented arithmetic. The
+-- as_of date is the endorsement's OWN effective_range lower bound, not the
+-- original quote's quoted_at: program_participants can change between when a
+-- policy was quoted and when a later endorsement takes effect, and an
+-- endorsement's premium delta should split among whoever's on the program at
+-- endorsement time. A negative premium_delta (return premium) needs no
+-- special-casing - the formula is linear, so it flows through as
+-- proportionally negative shares automatically. Only meaningful when
+-- premium_delta IS NOT NULL; a pure term_change endorsement has nothing for
+-- this to compute, so it returns zero rows rather than erroring.
+CREATE OR REPLACE FUNCTION calculate_endorsement_waterfall(p_endorsement_id UUID)
+RETURNS TABLE (
+  participant_id      UUID,
+  participant_name    TEXT,
+  participant_type    participant_type_t,
+  share_percentage    NUMERIC(5,2),
+  commission_rate     NUMERIC(5,2),
+  gross_share          NUMERIC(14,2),
+  commission_amount    NUMERIC(14,2),
+  net_due               NUMERIC(14,2)
+) AS $$
+  SELECT w.*
+  FROM policy_endorsements pe
+  JOIN policies p ON p.policy_id = pe.policy_id
+  JOIN quotes q ON q.quote_id = p.quote_id
+  CROSS JOIN LATERAL calculate_premium_waterfall(q.program_id, pe.premium_delta, lower(pe.effective_range)) w
+  WHERE pe.endorsement_id = p_endorsement_id
+    AND pe.premium_delta IS NOT NULL;
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Writes a policy_endorsements row and a policy_events row ('endorsed')
+-- atomically - same discipline as bind_policy/cancel_policy, same reason:
+-- odoo has no direct grant on policy_endorsements or policy_events, only on
+-- the read-side views, and this is the controlled gateway.
+CREATE OR REPLACE FUNCTION endorse_policy(
+  p_policy_id UUID,
+  p_effective_range TSTZRANGE,
+  p_endorsement_type endorsement_type_t,
+  p_premium_delta NUMERIC,
+  p_reason TEXT,
+  p_performed_by TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_endorsement_id UUID;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM policies WHERE policy_id = p_policy_id) THEN
+    RAISE EXCEPTION 'endorse_policy: policy % does not exist', p_policy_id;
+  END IF;
+
+  INSERT INTO policy_endorsements (endorsement_id, policy_id, effective_range, endorsement_type, premium_delta, reason)
+  VALUES (uuid_generate_v4(), p_policy_id, p_effective_range, p_endorsement_type, p_premium_delta, p_reason)
+  RETURNING endorsement_id INTO v_endorsement_id;
+
+  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+  VALUES (p_policy_id, 'endorsed', p_performed_by, p_reason);
+
+  RETURN v_endorsement_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Corrects a mistaken endorsement (ADR 0014 section 3): a named, controlled
+-- path rather than freeform SQL left for each caller to invent. Single
+-- transaction: temporarily disables policy_endorsements' append-only UPDATE
+-- trigger to shrink the original row's effective_range upper bound (the
+-- same disable/act/re-enable pattern already used, ad hoc, when cleaning up
+-- policy_events test data during this project's own testing sessions - now
+-- promoted to a real, reusable function), re-enables the trigger immediately
+-- after, inserts the corrected row, and logs a policy_events row
+-- ('endorsement_corrected') referencing both endorsement_ids so the audit
+-- trail shows a correction happened rather than an unexplained new
+-- endorsement appearing.
+CREATE OR REPLACE FUNCTION correct_policy_endorsement(
+  p_endorsement_id UUID,
+  p_new_effective_range TSTZRANGE,
+  p_new_endorsement_type endorsement_type_t,
+  p_new_premium_delta NUMERIC,
+  p_new_reason TEXT,
+  p_performed_by TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_policy_id UUID;
+  v_old_range TSTZRANGE;
+  v_new_endorsement_id UUID;
+BEGIN
+  SELECT policy_id, effective_range INTO v_policy_id, v_old_range
+  FROM policy_endorsements
+  WHERE endorsement_id = p_endorsement_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'correct_policy_endorsement: endorsement % does not exist', p_endorsement_id;
+  END IF;
+
+  ALTER TABLE policy_endorsements DISABLE TRIGGER policy_endorsements_no_update;
+  UPDATE policy_endorsements
+  SET effective_range = tstzrange(lower(v_old_range), lower(p_new_effective_range))
+  WHERE endorsement_id = p_endorsement_id;
+  ALTER TABLE policy_endorsements ENABLE TRIGGER policy_endorsements_no_update;
+
+  INSERT INTO policy_endorsements (endorsement_id, policy_id, effective_range, endorsement_type, premium_delta, reason)
+  VALUES (uuid_generate_v4(), v_policy_id, p_new_effective_range, p_new_endorsement_type, p_new_premium_delta, p_new_reason)
+  RETURNING endorsement_id INTO v_new_endorsement_id;
+
+  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+  VALUES (v_policy_id, 'endorsement_corrected', p_performed_by,
+          format('Corrected endorsement %s with new endorsement %s', p_endorsement_id, v_new_endorsement_id));
+
+  RETURN v_new_endorsement_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ============================================================================
 -- ODOO READ-SIDE VIEWS (ADR 0006 pattern, ADR 0010 scope)
@@ -806,8 +1015,12 @@ GRANT SELECT ON luxauto_policy_view TO odoo;
 GRANT SELECT ON luxauto_premium_waterfall_view TO odoo;
 GRANT SELECT ON luxauto_settlement_view TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID) TO odoo;
+GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID, NUMERIC, TIMESTAMPTZ) TO odoo;
+GRANT EXECUTE ON FUNCTION calculate_endorsement_waterfall(UUID) TO odoo;
 GRANT EXECUTE ON FUNCTION bind_policy(UUID, TEXT, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION cancel_policy(UUID, TEXT, TEXT) TO odoo;
+GRANT EXECUTE ON FUNCTION endorse_policy(UUID, TSTZRANGE, endorsement_type_t, NUMERIC, TEXT, TEXT) TO odoo;
+GRANT EXECUTE ON FUNCTION correct_policy_endorsement(UUID, TSTZRANGE, endorsement_type_t, NUMERIC, TEXT, TEXT) TO odoo;
 
 -- ============================================================================
 -- DOCUMENTS (metadata only - files live in Azure Blob Storage per ADR 0002/0003)
