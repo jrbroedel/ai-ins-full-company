@@ -3,6 +3,12 @@
 
     <menuitem id="menu_luxauto_root" name="Luxury Auto" sequence="50"/>
 
+    <menuitem id="menu_luxauto_bind_wizard"
+              name="Bind a Quote"
+              parent="menu_luxauto_root"
+              action="action_luxauto_bind_wizard"
+              sequence="5"/>
+
     <menuitem id="menu_luxauto_insured"
               name="Insureds"
               parent="menu_luxauto_root"

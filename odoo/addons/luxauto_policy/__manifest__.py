@@ -13,8 +13,10 @@ scope). The pipeline's UUID-keyed tables remain the system of record; these
 models never write to them.
 
 Writes (binding a quote into a policy, cancelling a policy) go through
-explicit server actions, not this module - see ADR 0010 section 4. Not built
-here yet.
+explicit server actions, not the read-only models above - see ADR 0010
+section 4. Each calls a SECURITY DEFINER Postgres function
+(bind_policy/cancel_policy in schemas/db/postgresql_schema.sql) via a small
+wizard, rather than writing to the pipeline tables directly.
 """,
     'category': 'Industries',
     'author': 'Luxury Auto MGA',
@@ -25,6 +27,7 @@ here yet.
         'views/luxauto_insured_views.xml',
         'views/luxauto_policy_views.xml',
         'views/luxauto_premium_waterfall_views.xml',
+        'views/luxauto_bind_wizard_views.xml',
         'views/luxauto_menus.xml',
     ],
     'installable': True,

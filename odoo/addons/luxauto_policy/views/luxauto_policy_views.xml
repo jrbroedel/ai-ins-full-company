@@ -21,6 +21,10 @@
         <field name="model">luxauto.policy</field>
         <field name="arch" type="xml">
             <form create="false" edit="false" delete="false">
+                <header>
+                    <button string="Cancel Policy" type="object" name="action_open_cancel_wizard"
+                            class="btn-danger" invisible="policy_status != 'active'"/>
+                </header>
                 <sheet>
                     <group>
                         <group string="Policy">

@@ -480,6 +480,111 @@ RETURNS TABLE (
   WHERE q.quote_id = p_quote_id;
 $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
 
+-- Bind and cancel (ADR 0010 section 4): the two policy-lifecycle actions that
+-- must be atomic across policies/quotes/policy_events, and therefore can't be
+-- Odoo's default ORM save. Implemented here rather than as raw multi-statement
+-- SQL in an Odoo server action, for the same reason the waterfall math lives
+-- here and not in Odoo Python (ADR 0010): one definition, callable from
+-- anywhere that needs it, not re-derived per caller. SECURITY DEFINER with a
+-- pinned search_path, same pattern as calculate_premium_waterfall (ADR 0012)
+-- and for the same reason: `odoo` has no direct grant on policies, quotes, or
+-- policy_events - only on the read-side views - and these functions are the
+-- controlled gateway that lets `odoo` write to those tables without widening
+-- that grant.
+--
+-- Both use SELECT ... FOR UPDATE on the row being checked, closing the gap
+-- between "check the current state" and "act on it": without the row lock,
+-- two concurrent calls could both pass the precondition check before either
+-- commits. The UNIQUE constraint on policies.quote_id is the last line of
+-- defense against a double-bind either way, but the explicit check here is
+-- what turns that into a clear application-level error instead of a raw
+-- constraint-violation message reaching the caller.
+CREATE OR REPLACE FUNCTION bind_policy(
+  p_quote_id UUID,
+  p_policy_number TEXT,
+  p_performed_by TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_quote_status TEXT;
+  v_policy_id UUID;
+BEGIN
+  SELECT status INTO v_quote_status
+  FROM quotes
+  WHERE quote_id = p_quote_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'bind_policy: quote % does not exist', p_quote_id;
+  END IF;
+
+  IF v_quote_status <> 'issued' THEN
+    RAISE EXCEPTION 'bind_policy: quote % is not in issued status (current status: %)',
+      p_quote_id, v_quote_status;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM policies WHERE quote_id = p_quote_id) THEN
+    RAISE EXCEPTION 'bind_policy: quote % already has a policy', p_quote_id;
+  END IF;
+
+  -- effective_range: neither ADR 0010 nor this task specified where a
+  -- proposed policy term comes from (quotes don't carry one). Defaults to a
+  -- standard one-year term starting at bind time - a reasonable placeholder,
+  -- not a considered decision; a real term-selection mechanism is an open
+  -- item for whoever builds the actual bind UI/flow.
+  INSERT INTO policies (policy_id, quote_id, policy_number, effective_range, status)
+  VALUES (
+    uuid_generate_v4(), p_quote_id, p_policy_number,
+    tstzrange(now(), now() + interval '1 year'), 'active'
+  )
+  RETURNING policy_id INTO v_policy_id;
+
+  UPDATE quotes SET status = 'bound' WHERE quote_id = p_quote_id;
+
+  INSERT INTO policy_events (policy_id, event_type, performed_by)
+  VALUES (v_policy_id, 'bound', p_performed_by);
+
+  RETURN v_policy_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+CREATE OR REPLACE FUNCTION cancel_policy(
+  p_policy_id UUID,
+  p_performed_by TEXT,
+  p_notes TEXT
+) RETURNS VOID AS $$
+DECLARE
+  v_status policy_status_t;
+  v_range TSTZRANGE;
+BEGIN
+  SELECT status, effective_range INTO v_status, v_range
+  FROM policies
+  WHERE policy_id = p_policy_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'cancel_policy: policy % does not exist', p_policy_id;
+  END IF;
+
+  -- Not explicitly asked for, but the same discipline as bind_policy's
+  -- precondition checks: cancelling a non-active policy either duplicates an
+  -- audit event that already happened or silently reinterprets an expired/
+  -- nonrenewed policy as newly cancelled - both worth rejecting explicitly
+  -- rather than allowing a confusing, misleading write.
+  IF v_status <> 'active' THEN
+    RAISE EXCEPTION 'cancel_policy: policy % is not active (current status: %)',
+      p_policy_id, v_status;
+  END IF;
+
+  UPDATE policies
+  SET status = 'cancelled',
+      effective_range = tstzrange(lower(v_range), now())
+  WHERE policy_id = p_policy_id;
+
+  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+  VALUES (p_policy_id, 'cancelled', p_performed_by, p_notes);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
 -- ============================================================================
 -- QUOTES
 -- Pins the exact state_rating_table_versions record used, so a later rate
@@ -665,6 +770,8 @@ GRANT SELECT ON luxauto_insured_view TO odoo;
 GRANT SELECT ON luxauto_policy_view TO odoo;
 GRANT SELECT ON luxauto_premium_waterfall_view TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID) TO odoo;
+GRANT EXECUTE ON FUNCTION bind_policy(UUID, TEXT, TEXT) TO odoo;
+GRANT EXECUTE ON FUNCTION cancel_policy(UUID, TEXT, TEXT) TO odoo;
 
 -- ============================================================================
 -- DOCUMENTS (metadata only - files live in Azure Blob Storage per ADR 0002/0003)

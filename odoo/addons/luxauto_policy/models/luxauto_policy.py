@@ -31,3 +31,16 @@ class LuxautoPolicy(models.Model):
                 "luxauto_policy_view does not exist - apply "
                 "schemas/db/postgresql_schema.sql before installing luxauto_policy."
             )
+
+    def action_open_cancel_wizard(self):
+        # luxauto.policy stays read-only (ADR 0006/0010) - this button doesn't write
+        # to the view-backed model itself, it only opens a wizard that calls
+        # cancel_policy() (a controlled, SECURITY DEFINER Postgres function).
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'res_model': 'luxauto.cancel.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {'default_policy_id': self.policy_id},
+        }
