@@ -4,3 +4,4 @@ access_luxauto_policy,luxauto.policy,model_luxauto_policy,base.group_user,1,0,0,
 access_luxauto_premium_waterfall,luxauto.premium.waterfall,model_luxauto_premium_waterfall,base.group_user,1,0,0,0
 access_luxauto_bind_wizard,luxauto.bind.wizard,model_luxauto_bind_wizard,base.group_user,1,1,1,1
 access_luxauto_cancel_wizard,luxauto.cancel.wizard,model_luxauto_cancel_wizard,base.group_user,1,1,1,1
+access_luxauto_settlement,luxauto.settlement,model_luxauto_settlement,luxauto_policy.group_settlement_viewer,1,0,0,0

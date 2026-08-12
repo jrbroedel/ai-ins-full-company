@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="group_settlement_viewer" model="res.groups">
+        <field name="name">Settlement Report Viewer</field>
+        <field name="comment">Read access to the capacity-provider settlement report (luxauto.settlement, ADR 0013). Exposes commission rates and participant splits, which is more sensitive than the other Luxury Auto models, so this is deliberately not part of base.group_user. No user is added to this group by default - who gets access is a business decision made elsewhere, not assumed here.</field>
+    </record>
+
+</odoo>

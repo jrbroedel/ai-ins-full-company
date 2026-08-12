@@ -27,4 +27,14 @@
               action="action_luxauto_premium_waterfall"
               sequence="30"/>
 
+    <!-- groups= hides the menu item itself for non-members, on top of the
+         model-level access rights (ir.model.access.csv) that are the real
+         enforcement boundary - belt and suspenders, not a substitute. -->
+    <menuitem id="menu_luxauto_settlement"
+              name="Settlement Report"
+              parent="menu_luxauto_root"
+              action="action_luxauto_settlement"
+              groups="luxauto_policy.group_settlement_viewer"
+              sequence="40"/>
+
 </odoo>

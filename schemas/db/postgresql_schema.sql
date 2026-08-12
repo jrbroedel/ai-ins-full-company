@@ -758,7 +758,42 @@ SELECT
 FROM quotes q
 CROSS JOIN LATERAL calculate_premium_waterfall(q.quote_id) w;
 
--- These three views are owned by whichever role runs this script (the
+-- Settlement report (ADR 0013): every bound policy's per-participant
+-- waterfall, joined through its bind event in policy_events rather than
+-- filtered by effective_range - a settlement report reflects when premium
+-- was written, not when coverage is active (ADR 0013 section 1). No period
+-- filter here: this view returns every bound policy across all time: the
+-- period filter is an Odoo-side search view concern (ADR 0013 section 3),
+-- not baked into the SQL. policy_status is included and never filtered out,
+-- so a since-cancelled policy stays visible here rather than silently
+-- disappearing (ADR 0013 section 2) - return-premium/cancellation
+-- adjustment is a deferred follow-on decision, not handled by this view.
+-- Same CROSS JOIN LATERAL / calculate_premium_waterfall() reuse as
+-- luxauto_premium_waterfall_view above, and the same reason: one waterfall
+-- calculation, never reimplemented. id is composite-hashed from
+-- policy_id + participant_id, since this view also fans out to one row per
+-- participant per policy.
+CREATE OR REPLACE VIEW luxauto_settlement_view AS
+SELECT
+  ('x' || substr(md5(p.policy_id::text || w.participant_id::text), 1, 8))::bit(32)::int AS id,
+  p.policy_id,
+  p.policy_number,
+  p.status AS policy_status,
+  be.created_at AS bind_date,
+  p.quote_id,
+  w.participant_id,
+  w.participant_name,
+  w.participant_type,
+  w.share_percentage,
+  w.commission_rate,
+  w.gross_share,
+  w.commission_amount,
+  w.net_due
+FROM policies p
+JOIN policy_events be ON be.policy_id = p.policy_id AND be.event_type = 'bound'
+CROSS JOIN LATERAL calculate_premium_waterfall(p.quote_id) w;
+
+-- These views are owned by whichever role runs this script (the
 -- Postgres admin, in practice - see ADR 0011), not by the `odoo` role Odoo
 -- itself connects as (ADR 0009). A plain view runs with its owner's table
 -- privileges for any caller with SELECT on the view, so `odoo` needs that
@@ -769,6 +804,7 @@ CROSS JOIN LATERAL calculate_premium_waterfall(q.quote_id) w;
 GRANT SELECT ON luxauto_insured_view TO odoo;
 GRANT SELECT ON luxauto_policy_view TO odoo;
 GRANT SELECT ON luxauto_premium_waterfall_view TO odoo;
+GRANT SELECT ON luxauto_settlement_view TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID) TO odoo;
 GRANT EXECUTE ON FUNCTION bind_policy(UUID, TEXT, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION cancel_policy(UUID, TEXT, TEXT) TO odoo;
