@@ -558,6 +558,87 @@ CREATE TRIGGER policy_events_no_delete
   FOR EACH ROW EXECUTE FUNCTION reject_policy_events_mutation();
 
 -- ============================================================================
+-- ODOO READ-SIDE VIEWS (ADR 0006 pattern, ADR 0010 scope)
+-- These three views exist purely for Odoo to read: each derives a hashed,
+-- display-only pseudo-integer `id` from its underlying UUID key(s), the
+-- documented workaround ADR 0006 established for Odoo's _auto=False model
+-- pattern (Odoo's ORM requires an integer `id`; the pipeline's real identity
+-- stays the UUID column(s)). The pipeline itself never queries these views -
+-- it reads/writes the UUID-keyed tables directly. Not writable through Odoo's
+-- default form save; see ADR 0010's server-actions section for the paths
+-- that write.
+-- ============================================================================
+
+-- Insured view: applicants + applications. One row per (applicant,
+-- application) pair, so the id is hashed from a composite of applicant_id
+-- and application_id - matches the view's actual grain and keeps the
+-- applicant visibly encoded in the hash, same reasoning as the composite id
+-- on luxauto_premium_waterfall_view below.
+CREATE OR REPLACE VIEW luxauto_insured_view AS
+SELECT
+  ('x' || substr(md5(a.applicant_id::text || ap.application_id::text), 1, 8))::bit(32)::int AS id,
+  a.applicant_id,
+  a.first_name,
+  a.last_name,
+  a.date_of_birth,
+  a.email,
+  a.phone,
+  a.mailing_city,
+  a.mailing_state,
+  ap.application_id,
+  ap.status AS application_status,
+  ap.garaging_state,
+  ap.submitted_at
+FROM applicants a
+JOIN applications ap ON ap.applicant_id = a.applicant_id;
+
+-- Policy view: policies + quotes + applications - deliberately not also
+-- joining applicants (ADR 0010's reasoning: a user reaches the insured's
+-- name via the application, not a duplicated join path here).
+CREATE OR REPLACE VIEW luxauto_policy_view AS
+SELECT
+  ('x' || substr(md5(p.policy_id::text), 1, 8))::bit(32)::int AS id,
+  p.policy_id,
+  p.policy_number,
+  p.effective_range,
+  p.status AS policy_status,
+  q.quote_id,
+  q.premium_amount,
+  q.status AS quote_status,
+  ap.application_id,
+  ap.garaging_state,
+  ap.status AS application_status
+FROM policies p
+JOIN quotes q ON q.quote_id = p.quote_id
+JOIN applications ap ON ap.application_id = q.application_id;
+
+-- Premium/Waterfall view: quotes + program_participants, one row per
+-- participant per quote - the id is hashed from a composite of quote_id and
+-- participant_id, since a single quote fans out to multiple rows here. The
+-- per-participant net-due figures come from calculate_premium_waterfall()
+-- (defined above, in the quota-share section) rather than being
+-- reimplemented in the view - see ADR 0010's "where the waterfall math
+-- lives" decision. A future bordereau-style report reads the same function.
+CREATE OR REPLACE VIEW luxauto_premium_waterfall_view AS
+SELECT
+  ('x' || substr(md5(q.quote_id::text || w.participant_id::text), 1, 8))::bit(32)::int AS id,
+  q.quote_id,
+  q.application_id,
+  q.program_id,
+  q.premium_amount,
+  q.status AS quote_status,
+  w.participant_id,
+  w.participant_name,
+  w.participant_type,
+  w.share_percentage,
+  w.commission_rate,
+  w.gross_share,
+  w.commission_amount,
+  w.net_due
+FROM quotes q
+CROSS JOIN LATERAL calculate_premium_waterfall(q.quote_id) w;
+
+-- ============================================================================
 -- DOCUMENTS (metadata only - files live in Azure Blob Storage per ADR 0002/0003)
 -- ============================================================================
 
