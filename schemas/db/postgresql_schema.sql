@@ -1165,9 +1165,35 @@ CREATE INDEX IF NOT EXISTS idx_policy_endorsements_policy ON policy_endorsements
 -- premium_delta in place, with no overlap and therefore nothing for the
 -- constraint to catch. correct_policy_endorsement() below is the one
 -- legitimate way to correct a mistaken row.
+-- The escape hatch below (ADR 0014 addendum) replaces the ALTER TABLE ...
+-- DISABLE TRIGGER that correct_policy_endorsement() used to reach for. That
+-- call fails outright - "cannot ALTER TABLE because it is being used by
+-- active queries in this session" - whenever the caller's own statement is
+-- scanning this table, which is what
+--   SELECT correct_policy_endorsement((SELECT endorsement_id FROM
+--          policy_endorsements WHERE ...), ...)
+-- does. Reproduced on all three policy-side correction functions before this
+-- change; see ADR 0017 section 4, where the same trap was first found.
+--
+-- The replacement is narrower than what it replaces: DISABLE TRIGGER turns
+-- append-only off for the whole table and everyone in it, while this permits
+-- exactly one mutation - closing a row's upper bound, with the lower bound
+-- and every other column byte-identical - and only while the correction
+-- function's transaction-local flag is set. The row comparison is
+-- to_jsonb(NEW) minus effective_range rather than a column list, so a column
+-- added to this table later is covered without anyone remembering to add it
+-- here. DELETE is never permitted, flag or no flag.
 CREATE OR REPLACE FUNCTION reject_policy_endorsements_mutation()
 RETURNS TRIGGER AS $$
 BEGIN
+  IF TG_OP = 'UPDATE'
+     AND current_setting('luxauto.superseding_policy_endorsement', true) = 'on'
+     AND lower(NEW.effective_range) IS NOT DISTINCT FROM lower(OLD.effective_range)
+     AND to_jsonb(NEW) - 'effective_range' = to_jsonb(OLD) - 'effective_range'
+  THEN
+    RETURN NEW;  -- correct_policy_endorsement() closing this row's upper bound
+  END IF;
+
   RAISE EXCEPTION 'policy_endorsements is append-only: % is not permitted', TG_OP;
 END;
 $$ LANGUAGE plpgsql;
@@ -1275,11 +1301,11 @@ BEGIN
     RAISE EXCEPTION 'correct_policy_endorsement: endorsement % does not exist', p_endorsement_id;
   END IF;
 
-  ALTER TABLE policy_endorsements DISABLE TRIGGER policy_endorsements_no_update;
+  PERFORM set_config('luxauto.superseding_policy_endorsement', 'on', true);
   UPDATE policy_endorsements
   SET effective_range = tstzrange(lower(v_old_range), lower(p_new_effective_range))
   WHERE endorsement_id = p_endorsement_id;
-  ALTER TABLE policy_endorsements ENABLE TRIGGER policy_endorsements_no_update;
+  PERFORM set_config('luxauto.superseding_policy_endorsement', 'off', true);
 
   INSERT INTO policy_endorsements (endorsement_id, policy_id, effective_range, endorsement_type, premium_delta, reason)
   VALUES (uuid_generate_v4(), v_policy_id, p_new_effective_range, p_new_endorsement_type, p_new_premium_delta, p_new_reason)
@@ -1351,9 +1377,22 @@ CREATE TABLE IF NOT EXISTS policy_vehicles (
 
 CREATE INDEX IF NOT EXISTS idx_policy_vehicles_policy ON policy_vehicles(policy_id);
 
+-- Escape hatch per the ADR 0016 addendum on correction-function mechanics -
+-- see reject_policy_endorsements_mutation() above for the full reasoning and
+-- the trap it fixes. Same shape here: only the closing of a row's upper
+-- bound, only while correct_policy_vehicle()'s transaction-local flag is set,
+-- never a DELETE.
 CREATE OR REPLACE FUNCTION reject_policy_vehicles_mutation()
 RETURNS TRIGGER AS $$
 BEGIN
+  IF TG_OP = 'UPDATE'
+     AND current_setting('luxauto.superseding_policy_vehicle', true) = 'on'
+     AND lower(NEW.effective_range) IS NOT DISTINCT FROM lower(OLD.effective_range)
+     AND to_jsonb(NEW) - 'effective_range' = to_jsonb(OLD) - 'effective_range'
+  THEN
+    RETURN NEW;  -- correct_policy_vehicle() closing this row's upper bound
+  END IF;
+
   RAISE EXCEPTION 'policy_vehicles is append-only: % is not permitted', TG_OP;
 END;
 $$ LANGUAGE plpgsql;
@@ -1394,9 +1433,19 @@ CREATE TABLE IF NOT EXISTS policy_drivers (
 
 CREATE INDEX IF NOT EXISTS idx_policy_drivers_policy ON policy_drivers(policy_id);
 
+-- Escape hatch per the ADR 0016 addendum on correction-function mechanics -
+-- see reject_policy_endorsements_mutation() for the reasoning.
 CREATE OR REPLACE FUNCTION reject_policy_drivers_mutation()
 RETURNS TRIGGER AS $$
 BEGIN
+  IF TG_OP = 'UPDATE'
+     AND current_setting('luxauto.superseding_policy_driver', true) = 'on'
+     AND lower(NEW.effective_range) IS NOT DISTINCT FROM lower(OLD.effective_range)
+     AND to_jsonb(NEW) - 'effective_range' = to_jsonb(OLD) - 'effective_range'
+  THEN
+    RETURN NEW;  -- correct_policy_driver() closing this row's upper bound
+  END IF;
+
   RAISE EXCEPTION 'policy_drivers is append-only: % is not permitted', TG_OP;
 END;
 $$ LANGUAGE plpgsql;
@@ -1498,11 +1547,11 @@ BEGIN
       USING HINT = 'A corrected snapshot row still has to be identifiable - the exclusion constraint keys on (policy_id, vin). Supply the real VIN.';
   END IF;
 
-  ALTER TABLE policy_vehicles DISABLE TRIGGER policy_vehicles_no_update;
+  PERFORM set_config('luxauto.superseding_policy_vehicle', 'on', true);
   UPDATE policy_vehicles
   SET effective_range = tstzrange(lower(v_old_range), lower(p_new_effective_range))
   WHERE policy_vehicle_id = p_policy_vehicle_id;
-  ALTER TABLE policy_vehicles ENABLE TRIGGER policy_vehicles_no_update;
+  PERFORM set_config('luxauto.superseding_policy_vehicle', 'off', true);
 
   INSERT INTO policy_vehicles (
     policy_vehicle_id, policy_id, source_vehicle_id, effective_range,
@@ -1567,11 +1616,11 @@ BEGIN
       USING HINT = 'A corrected snapshot row still has to be identifiable - the exclusion constraint keys on (policy_id, name, date_of_birth). Supply both.';
   END IF;
 
-  ALTER TABLE policy_drivers DISABLE TRIGGER policy_drivers_no_update;
+  PERFORM set_config('luxauto.superseding_policy_driver', 'on', true);
   UPDATE policy_drivers
   SET effective_range = tstzrange(lower(v_old_range), lower(p_new_effective_range))
   WHERE policy_driver_id = p_policy_driver_id;
-  ALTER TABLE policy_drivers ENABLE TRIGGER policy_drivers_no_update;
+  PERFORM set_config('luxauto.superseding_policy_driver', 'off', true);
 
   INSERT INTO policy_drivers (
     policy_driver_id, policy_id, source_driver_id, effective_range,

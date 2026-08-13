@@ -84,3 +84,19 @@ Implementing `calculate_endorsement_waterfall()` surfaced a real, pre-existing b
 This is the same category of risk ADR 0011 named - schema state that's silently assumed rather than verified - just surfacing on the "does this file even apply cleanly from scratch" axis instead of ADR 0011's "does the live database actually match what the file claims" axis. It doesn't introduce a new argument; it reinforces the one ADR 0011 already made for a repeatable, idempotent apply-and-verify script, which that ADR named as a known gap and explicitly left unbuilt.
 
 Fixed by reordering: the waterfall/bind/cancel functions, and this ADR's own new functions, now live after `policy_events` instead of before `quotes`. Confirmed by actually doing what no prior session had done - applying the full schema file to a freshly created, genuinely empty database - and getting a clean apply, not by reasoning about it.
+
+---
+
+# Addendum: `correct_policy_endorsement()` no longer uses `DISABLE TRIGGER` (2026-08-13)
+
+**Status:** Decided; implemented
+**Amends:** the mechanics of `correct_policy_endorsement()` only. This ADR's decisions - endorsements as their own rows, the exclusion constraint, the shared waterfall calculation, the `as_of` choice - are untouched.
+**Full reasoning:** ADR 0016 addendum 2, which makes the same change to `correct_policy_vehicle()`/`correct_policy_driver()` and records the investigation; the trap itself was found in ADR 0017 section 4.
+
+This function established the close-the-old-row-then-insert pattern that ADR 0016 later copied, including its use of `ALTER TABLE ... DISABLE TRIGGER` around the closing `UPDATE`. That call fails - `cannot ALTER TABLE "policy_endorsements" because it is being used by active queries in this session` - whenever the caller's own statement is scanning the table, e.g. resolving the endorsement id with a subquery instead of passing a literal UUID. Reproduced here before changing anything.
+
+The closing `UPDATE` is now permitted by a transaction-local flag (`luxauto.superseding_policy_endorsement`) that `policy_endorsements`' append-only trigger recognises for exactly one shape of mutation: closing a row's upper bound with the lower bound and every other column unchanged. Everything else - a changed `premium_delta` or `reason`, a moved lower bound, any `DELETE` - is still rejected, flag or no flag, which is strictly tighter than the table-wide `DISABLE TRIGGER` it replaces.
+
+The related ADR 0017 trap (`ALTER TABLE` refusing while a table has pending `DEFERRABLE` constraint-trigger events) was checked against this table and does not apply: `policy_endorsements` has no deferrable constraint trigger, and the old mechanism was verified still working under that condition before being replaced for the other reason.
+
+This ADR's own correction test - close an endorsement, insert its replacement, log `endorsement_corrected` to `policy_events`, and reject a plain `UPDATE`/`DELETE` - was re-run after the change and passes unchanged.

@@ -36,6 +36,8 @@ Both tables mirror their source table's columns (minus `application_id`, which b
 
 **Decision: both functions follow `correct_policy_endorsement()`'s pattern precisely - close the mistaken row's `effective_range` upper bound (disabling the table's append-only `UPDATE` trigger for that one statement, then re-enabling it immediately), insert a corrected row, log a `policy_events` row referencing both IDs. Never mutate a row in place.**
 
+*The parenthetical is superseded by addendum 2 below: the disable/re-enable step turned out to fail whenever the caller's own statement scans the table, and is now a narrow transaction-local flag instead. Everything else in this decision stands.*
+
 Both take every snapshot column as an explicit parameter (not a partial-update or JSONB-merge shape) - the same choice `correct_policy_endorsement()` made, for the same reason: a correction function that could only fix some fields would leave the others silently uncorrectable, and there's no principled subset to pick without guessing which fields will turn out to be the ones that were wrong.
 
 ## 5. Odoo: read-side views, not yet a correction UI
@@ -94,3 +96,39 @@ The two correction functions get the same named check for the same reason - they
 - `bind_policy()`'s signature is still unchanged - three ADRs running.
 - DH-04 now has enforcement at two layers with no coordination between them: the pipeline routes incomplete applications to `INFORMATION_REQUEST`, and the database refuses the bind regardless of whether that routing happened. That redundancy is the point.
 - ~~The `program_participants` overlap gap that section 3 name-checked as the same category of problem is **still open** - this addendum closes one instance, not the class.~~ Closed by **ADR 0017** (2026-08-13), which found the same bug shape there (two active identity rows, no constraint keyed on that identity) plus a non-temporal share check that was actively rejecting correct data.
+
+---
+
+# Addendum 2: how the correction functions reach past the append-only trigger (2026-08-13)
+
+**Status:** Decided; implemented
+**Amends:** the mechanics of `correct_policy_vehicle()` and `correct_policy_driver()` from section 4. No decision in this ADR or its first addendum changes - the tables, constraints, snapshot behaviour and null-identity rules are all untouched.
+**Companion:** ADR 0014 gets the same change for `correct_policy_endorsement()`, which was the original source of this pattern. ADR 0017 section 4 is where the underlying trap was first found.
+
+## What was wrong
+
+Both correction functions closed the superseded row's `effective_range` by wrapping the `UPDATE` in `ALTER TABLE ... DISABLE TRIGGER` / `ENABLE TRIGGER`. That call fails outright when the caller's own statement is scanning the same table:
+
+```
+SELECT correct_policy_vehicle((SELECT policy_vehicle_id FROM policy_vehicles WHERE ...), ...);
+-- ERROR: cannot ALTER TABLE "policy_vehicles" because it is being used by active queries in this session
+```
+
+Which is the obvious way to call it - you have a VIN or a name, not a UUID. The functions worked in every test they had ever been given only because those tests passed literal UUIDs resolved in an earlier statement. Reproduced on `correct_policy_vehicle()`, `correct_policy_driver()` and `correct_policy_endorsement()` before changing anything; all three failed identically.
+
+**The other trap from ADR 0017 does not apply here, and this was checked rather than assumed.** That one - `ALTER TABLE` refusing while a table has pending events from a `DEFERRABLE` constraint trigger - needs a deferrable constraint trigger on the table. `pg_trigger`/`pg_constraint` say `policy_vehicles`, `policy_drivers` and `policy_endorsements` have exactly two non-deferrable `BEFORE` row triggers each and no constraint triggers at all; `program_participants` is the only table in the schema with one. Attempted anyway on all three functions, inside a transaction with a prior write to the same table and `SET CONSTRAINTS ALL DEFERRED`: all three succeeded. The ADR 0017 mechanism was necessary there and is merely better here.
+
+## The fix
+
+**Decision: the same transaction-local flag mechanism ADR 0017 introduced, in place of `DISABLE TRIGGER`.** The append-only trigger permits exactly one mutation - closing a row's upper bound, with the range's lower bound and every other column unchanged - and only while the correction function's flag (`luxauto.superseding_policy_vehicle` / `_policy_driver` / `_policy_endorsement`) is set, which it sets transaction-locally and clears immediately after its `UPDATE`.
+
+This is **narrower than what it replaces**, which is the point beyond just working: `DISABLE TRIGGER` switched append-only off for the entire table, for everyone, for the rest of the transaction, and took an `ACCESS EXCLUSIVE` lock to do it. Tested: with the flag set, changing a `make`, a driver `name`, a `premium_delta`, or the range's *lower* bound is still rejected, and `DELETE` is still rejected unconditionally.
+
+One deliberate difference from ADR 0017's version: the row comparison here is `to_jsonb(NEW) - 'effective_range' = to_jsonb(OLD) - 'effective_range'` rather than an explicit column list. `policy_vehicles` has 25 columns and a list would be one more place to forget when a column is added; the jsonb form covers new columns automatically. ADR 0017's explicit list is left as it is - it is correct and tested, and rewriting a table this addendum is scoped away from would be the wrong trade.
+
+## Consequences
+
+- All four correction functions in the schema now use one mechanism, and no `ALTER TABLE ... DISABLE TRIGGER` remains anywhere in `postgresql_schema.sql`.
+- Callers may now resolve the target row inline (`correct_policy_driver((SELECT policy_driver_id FROM ... WHERE name = ...), ...)`), which is what a wizard or a hand-written correction would naturally do.
+- The flag is not a privilege boundary and isn't presented as one: `odoo` has no `UPDATE` grant on these tables, and anyone who could set the flag and hand-craft the matching `UPDATE` could equally drop the trigger. It guards against the escape hatch being reachable by accident from an ordinary write.
+- No table, constraint, view or trigger definition changed - only three trigger functions and three correction function bodies. ADR 0015's verifier baseline is unmoved.
