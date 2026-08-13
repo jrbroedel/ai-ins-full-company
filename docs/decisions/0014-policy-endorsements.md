@@ -100,3 +100,16 @@ The closing `UPDATE` is now permitted by a transaction-local flag (`luxauto.supe
 The related ADR 0017 trap (`ALTER TABLE` refusing while a table has pending `DEFERRABLE` constraint-trigger events) was checked against this table and does not apply: `policy_endorsements` has no deferrable constraint trigger, and the old mechanism was verified still working under that condition before being replaced for the other reason.
 
 This ADR's own correction test - close an endorsement, insert its replacement, log `endorsement_corrected` to `policy_events`, and reject a plain `UPDATE`/`DELETE` - was re-run after the change and passes unchanged.
+
+---
+
+# Addendum 2: `correct_policy_endorsement()` and earlier-start corrections (2026-08-13)
+
+**Status:** Decided; implemented
+**Full reasoning:** ADR 0016 addendum 3, which makes the identical fix to `correct_policy_vehicle()`/`correct_policy_driver()` and records the investigation. ADR 0017's `correct_program_participant()` gets the same change.
+
+`correct_policy_endorsement()` established the close-the-old-row-then-insert pattern the later correction functions copied - including its one flaw. Superseding with `tstzrange(lower(old), lower(new))` produces `upper < lower` when the corrected endorsement starts *earlier* than the one it replaces, which Postgres rejects outright (`range lower bound must be less than or equal to range upper bound`), and correcting to exactly the same start produced a misleading `append-only` error from the trigger instead. Both reproduced here before being changed.
+
+The old row is now emptied rather than given an impossible range, and this table's append-only trigger permits that second shape alongside the existing upper-bound close. `policy_endorsements`' per-policy exclusion constraint is unaffected: an empty range overlaps nothing. An earlier-start correction that would reach back into a still-live earlier endorsement is refused by that constraint, naming both ranges - correct, since moving a changeover earlier is a two-row change.
+
+This ADR's own correction test - close an endorsement, insert its replacement, log `endorsement_corrected` - was re-run, along with the waterfall arithmetic on the corrected row, and passes unchanged.

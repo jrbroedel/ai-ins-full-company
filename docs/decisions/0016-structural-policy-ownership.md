@@ -132,3 +132,53 @@ One deliberate difference from ADR 0017's version: the row comparison here is `t
 - Callers may now resolve the target row inline (`correct_policy_driver((SELECT policy_driver_id FROM ... WHERE name = ...), ...)`), which is what a wizard or a hand-written correction would naturally do.
 - The flag is not a privilege boundary and isn't presented as one: `odoo` has no `UPDATE` grant on these tables, and anyone who could set the flag and hand-craft the matching `UPDATE` could equally drop the trigger. It guards against the escape hatch being reachable by accident from an ordinary write.
 - No table, constraint, view or trigger definition changed - only three trigger functions and three correction function bodies. ADR 0015's verifier baseline is unmoved.
+
+---
+
+# Addendum 3: correcting a row to an earlier start (2026-08-13)
+
+**Status:** Decided; implemented
+**Amends:** the mechanics of `correct_policy_vehicle()`/`correct_policy_driver()` and their append-only triggers. Owns the full writeup for the identical fix to `correct_policy_endorsement()` (ADR 0014) and `correct_program_participant()` (ADR 0017), which point here.
+**Found by:** ADR 0018, which hit the same bug in its own correction function during development, solved it there, and named this instance as confirmed-but-unfixed.
+
+## The bug, and what actually caused it
+
+All four correction functions superseded a row with the same statement:
+
+```sql
+SET effective_range = tstzrange(lower(v_old_range), lower(p_new_effective_range))
+```
+
+That reads "the old row now ends where the new one begins," which is right when the corrected row starts *later*. When it starts earlier, the constructed range has `upper < lower` and Postgres rejects it before any constraint is consulted:
+
+```
+ERROR:  range lower bound must be less than or equal to range upper bound
+```
+
+Reproduced on all four before changing anything. **The failure is uniform** - same statement, same error, same line - and it does *not* vary with the exclusion-constraint scoping. That was worth checking rather than assuming: `policy_endorsements` is scoped per policy, `policy_vehicles` per `(policy, vin)`, `policy_drivers` per `(policy, name, dob)`, `program_participants` per `(program, name, role)`, and none of it matters, because range construction fails before any constraint is evaluated. Scoping decides what happens *after* the range is valid, which is where the per-table analysis below earns its keep.
+
+**A second, hidden manifestation:** correcting a row to *exactly* its own start was broken too, and differently. `tstzrange(x, x)` is a legal empty range, so the function succeeded - and then the append-only trigger rejected it with `policy_vehicles is append-only: UPDATE is not permitted`, because Postgres normalises an empty range to `empty` and its `lower()` is `NULL`, so the trigger's "lower bound unchanged" test could not hold. Confirmed by restoring the pre-fix trigger body in a rolled-back transaction and watching the same call fail, then succeed against the fixed one. This is why the fix is two-part per table: fixing the function alone leaves the trigger rejecting the result.
+
+## The fix
+
+**Decision: supersede by emptying when the corrected row starts at or before the row it replaces - `tstzrange(lower(v_old_range), GREATEST(lower(v_old_range), lower(p_new_effective_range)))` - and widen each append-only trigger to permit exactly two shapes: closing the upper bound (lower unchanged), or emptying a non-empty row.**
+
+This is the same shape ADR 0018 arrived at, but **not for the same reason**, and that was checked per table rather than inherited. ADR 0018 empties because a cancellation is a point event whose range describes one refund's window, so any nonempty remnant would assert a number nobody computed. These four tables hold genuine period facts, and emptying is right for a different reason: when the replacement starts at or before the original's start, the original has no remaining period during which it was ever correct. Same code, different argument.
+
+Emptying is compatible with all four constraint shapes, checked individually:
+
+- **Per-entity scopes** (`policy_vehicles`, `policy_drivers`) and **per-policy** (`policy_endorsements`): an empty range overlaps nothing, so the superseded row leaves the exclusion constraint entirely and the corrected row is judged on its own.
+- **`program_participants`** additionally carries ADR 0017's temporal 100% rule. Empty ranges contain no instant, so they contribute nothing to the panel sum, and `empty <@ term` is true, so containment passes. The panel timeline is computed from the surviving rows, which is correct.
+
+## What the fix deliberately does not do
+
+Moving a row's start earlier can push the corrected row back into a period a **live predecessor version** still occupies. The exclusion constraint then rejects it, naming both ranges. That is the right outcome, not a remaining gap: "the changeover happened earlier than recorded" is a statement about two rows - this one *and* its predecessor's end - and a single-row correction function that silently shortened a neighbour would be making a decision nobody asked it to make. Before this fix that case produced a raw range error; now it produces a constraint violation that says exactly which two rows disagree.
+
+For `program_participants` this is the common case rather than the exception, since a risk-bearing participant's row can only be preceded by another version of itself or by a panel gap the 100% rule already forbids. The reachable earlier-date corrections there are ones with no live predecessor - a first version, or a non-risk-bearing `mga_retention` row entered with the wrong start - and those now work.
+
+## Consequences
+
+- Four functions and four trigger functions changed; no table, constraint, view or trigger *definition* moved, and the ADR 0015 verifier baseline is unmoved.
+- ADR 0017's participant trigger had an explicit column list where the other three use `to_jsonb(NEW) - 'effective_range'`. Folded into the same comparison while adding the empty branch: identical in effect, minus the one column the list silently omitted (`created_at`), and future columns are covered without anyone remembering.
+- Neither ADR 0016 addendum 2 trap is reintroduced: no `ALTER TABLE ... DISABLE TRIGGER` anywhere, and every test called the corrections with the target id resolved by a subquery scanning the same table.
+- The escape hatch is still narrow, and now explicitly so on the new branch: with the flag set, emptying a row *while* changing another column is rejected, as is moving the lower bound, re-emptying an already-empty row, using another table's flag, and any `DELETE`.

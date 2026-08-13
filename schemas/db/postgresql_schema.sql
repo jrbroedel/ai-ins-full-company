@@ -498,18 +498,20 @@ CREATE INDEX IF NOT EXISTS idx_program_participants_program ON program_participa
 CREATE OR REPLACE FUNCTION reject_program_participants_mutation()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Same two permitted shapes as the policy-side tables (ADR 0016 addendum 3):
+  -- close the upper bound, or empty the row when the corrected one starts at
+  -- or before it. ADR 0017's explicit column list is folded into the same
+  -- to_jsonb comparison the other three use - identical in effect, minus the
+  -- one column it silently omitted (created_at), and a column added to this
+  -- table later is covered without anyone remembering.
   IF TG_OP = 'UPDATE'
      AND current_setting('luxauto.superseding_participant', true) = 'on'
-     AND NEW.participant_id   =  OLD.participant_id
-     AND NEW.program_id       =  OLD.program_id
-     AND NEW.participant_name =  OLD.participant_name
-     AND NEW.participant_type =  OLD.participant_type
-     AND NEW.share_percentage =  OLD.share_percentage
-     AND NEW.commission_rate IS NOT DISTINCT FROM OLD.commission_rate
-     AND NEW.profit_commission_formula IS NOT DISTINCT FROM OLD.profit_commission_formula
-     AND lower(NEW.effective_range) IS NOT DISTINCT FROM lower(OLD.effective_range)
+     AND NOT isempty(OLD.effective_range)
+     AND (isempty(NEW.effective_range)
+          OR lower(NEW.effective_range) IS NOT DISTINCT FROM lower(OLD.effective_range))
+     AND to_jsonb(NEW) - 'effective_range' = to_jsonb(OLD) - 'effective_range'
   THEN
-    RETURN NEW;  -- correct_program_participant() closing this row's upper bound
+    RETURN NEW;  -- correct_program_participant() closing or emptying this row
   END IF;
 
   RAISE EXCEPTION 'program_participants is append-only: % is not permitted', TG_OP;
@@ -736,7 +738,11 @@ BEGIN
 
   PERFORM set_config('luxauto.superseding_participant', 'on', true);
   UPDATE program_participants
-  SET effective_range = tstzrange(lower(v_old_range), lower(p_new_effective_range))
+  -- GREATEST, not the bare new lower bound: correcting a row to a start at or
+  -- before its own leaves it no period during which it was ever right, so it
+  -- is emptied rather than given an impossible range (ADR 0016 addendum 3).
+  SET effective_range = tstzrange(lower(v_old_range),
+                                  GREATEST(lower(v_old_range), lower(p_new_effective_range)))
   WHERE participant_id = p_participant_id;
   PERFORM set_config('luxauto.superseding_participant', 'off', true);
 
@@ -1171,12 +1177,20 @@ CREATE INDEX IF NOT EXISTS idx_policy_endorsements_policy ON policy_endorsements
 CREATE OR REPLACE FUNCTION reject_policy_endorsements_mutation()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Two permitted supersession shapes, and only these (ADR 0016 addendum 3):
+  -- closing the row's upper bound, or emptying it outright when the corrected
+  -- row starts at or before this one did. An empty range normalises to
+  -- 'empty', so lower(NEW) is NULL and the "lower bound unchanged" test
+  -- cannot carry that case - which is why it needs naming separately rather
+  -- than falling out of the same condition.
   IF TG_OP = 'UPDATE'
      AND current_setting('luxauto.superseding_policy_endorsement', true) = 'on'
-     AND lower(NEW.effective_range) IS NOT DISTINCT FROM lower(OLD.effective_range)
+     AND NOT isempty(OLD.effective_range)
+     AND (isempty(NEW.effective_range)
+          OR lower(NEW.effective_range) IS NOT DISTINCT FROM lower(OLD.effective_range))
      AND to_jsonb(NEW) - 'effective_range' = to_jsonb(OLD) - 'effective_range'
   THEN
-    RETURN NEW;  -- correct_policy_endorsement() closing this row's upper bound
+    RETURN NEW;  -- correct_policy_endorsement() closing or emptying this row
   END IF;
 
   RAISE EXCEPTION 'policy_endorsements is append-only: % is not permitted', TG_OP;
@@ -1288,7 +1302,11 @@ BEGIN
 
   PERFORM set_config('luxauto.superseding_policy_endorsement', 'on', true);
   UPDATE policy_endorsements
-  SET effective_range = tstzrange(lower(v_old_range), lower(p_new_effective_range))
+  -- GREATEST, not the bare new lower bound: correcting a row to a start at or
+  -- before its own leaves it no period during which it was ever right, so it
+  -- is emptied rather than given an impossible range (ADR 0016 addendum 3).
+  SET effective_range = tstzrange(lower(v_old_range),
+                                  GREATEST(lower(v_old_range), lower(p_new_effective_range)))
   WHERE endorsement_id = p_endorsement_id;
   PERFORM set_config('luxauto.superseding_policy_endorsement', 'off', true);
 
@@ -1370,12 +1388,20 @@ CREATE INDEX IF NOT EXISTS idx_policy_vehicles_policy ON policy_vehicles(policy_
 CREATE OR REPLACE FUNCTION reject_policy_vehicles_mutation()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Two permitted supersession shapes, and only these (ADR 0016 addendum 3):
+  -- closing the row's upper bound, or emptying it outright when the corrected
+  -- row starts at or before this one did. An empty range normalises to
+  -- 'empty', so lower(NEW) is NULL and the "lower bound unchanged" test
+  -- cannot carry that case - which is why it needs naming separately rather
+  -- than falling out of the same condition.
   IF TG_OP = 'UPDATE'
      AND current_setting('luxauto.superseding_policy_vehicle', true) = 'on'
-     AND lower(NEW.effective_range) IS NOT DISTINCT FROM lower(OLD.effective_range)
+     AND NOT isempty(OLD.effective_range)
+     AND (isempty(NEW.effective_range)
+          OR lower(NEW.effective_range) IS NOT DISTINCT FROM lower(OLD.effective_range))
      AND to_jsonb(NEW) - 'effective_range' = to_jsonb(OLD) - 'effective_range'
   THEN
-    RETURN NEW;  -- correct_policy_vehicle() closing this row's upper bound
+    RETURN NEW;  -- correct_policy_vehicle() closing or emptying this row
   END IF;
 
   RAISE EXCEPTION 'policy_vehicles is append-only: % is not permitted', TG_OP;
@@ -1423,12 +1449,20 @@ CREATE INDEX IF NOT EXISTS idx_policy_drivers_policy ON policy_drivers(policy_id
 CREATE OR REPLACE FUNCTION reject_policy_drivers_mutation()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Two permitted supersession shapes, and only these (ADR 0016 addendum 3):
+  -- closing the row's upper bound, or emptying it outright when the corrected
+  -- row starts at or before this one did. An empty range normalises to
+  -- 'empty', so lower(NEW) is NULL and the "lower bound unchanged" test
+  -- cannot carry that case - which is why it needs naming separately rather
+  -- than falling out of the same condition.
   IF TG_OP = 'UPDATE'
      AND current_setting('luxauto.superseding_policy_driver', true) = 'on'
-     AND lower(NEW.effective_range) IS NOT DISTINCT FROM lower(OLD.effective_range)
+     AND NOT isempty(OLD.effective_range)
+     AND (isempty(NEW.effective_range)
+          OR lower(NEW.effective_range) IS NOT DISTINCT FROM lower(OLD.effective_range))
      AND to_jsonb(NEW) - 'effective_range' = to_jsonb(OLD) - 'effective_range'
   THEN
-    RETURN NEW;  -- correct_policy_driver() closing this row's upper bound
+    RETURN NEW;  -- correct_policy_driver() closing or emptying this row
   END IF;
 
   RAISE EXCEPTION 'policy_drivers is append-only: % is not permitted', TG_OP;
@@ -1534,7 +1568,11 @@ BEGIN
 
   PERFORM set_config('luxauto.superseding_policy_vehicle', 'on', true);
   UPDATE policy_vehicles
-  SET effective_range = tstzrange(lower(v_old_range), lower(p_new_effective_range))
+  -- GREATEST, not the bare new lower bound: correcting a row to a start at or
+  -- before its own leaves it no period during which it was ever right, so it
+  -- is emptied rather than given an impossible range (ADR 0016 addendum 3).
+  SET effective_range = tstzrange(lower(v_old_range),
+                                  GREATEST(lower(v_old_range), lower(p_new_effective_range)))
   WHERE policy_vehicle_id = p_policy_vehicle_id;
   PERFORM set_config('luxauto.superseding_policy_vehicle', 'off', true);
 
@@ -1603,7 +1641,11 @@ BEGIN
 
   PERFORM set_config('luxauto.superseding_policy_driver', 'on', true);
   UPDATE policy_drivers
-  SET effective_range = tstzrange(lower(v_old_range), lower(p_new_effective_range))
+  -- GREATEST, not the bare new lower bound: correcting a row to a start at or
+  -- before its own leaves it no period during which it was ever right, so it
+  -- is emptied rather than given an impossible range (ADR 0016 addendum 3).
+  SET effective_range = tstzrange(lower(v_old_range),
+                                  GREATEST(lower(v_old_range), lower(p_new_effective_range)))
   WHERE policy_driver_id = p_policy_driver_id;
   PERFORM set_config('luxauto.superseding_policy_driver', 'off', true);
 

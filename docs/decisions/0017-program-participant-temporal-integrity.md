@@ -94,3 +94,16 @@ This is not a privilege boundary and isn't presented as one: `odoo` has no `UPDA
 - **Adding or removing a participant mid-term remains deferred**, as does a `program_events`-style audit trail for who changed a panel. ~~And retrofitting the flag-based escape hatch onto the three policy-side correction functions.~~ That retrofit is **done** (same day): the deferred-events trap turned out not to apply to `policy_vehicles`/`policy_drivers`/`policy_endorsements` - none has a deferrable constraint trigger, verified against `pg_trigger`/`pg_constraint` and by attempting the failure - but the active-queries trap reproduced on all three, so all three moved to this mechanism. ADR 0016 addendum 2 and ADR 0014's addendum record it. No `ALTER TABLE ... DISABLE TRIGGER` remains in the schema.
 - `insurance_programs.effective_range` itself is not protected: shortening a program's term after its panel exists could strand participation outside the term, because the check trigger is on `program_participants` and does not fire on writes to `insurance_programs`. Named, not fixed - it is a different table, and giving `insurance_programs` its own temporal discipline is its own decision.
 - ADR 0007's flagged gap is closed. ADR 0016's addendum closed one instance of this category; with this ADR, the category has no known open instances left in the schema.
+
+---
+
+# Addendum: `correct_program_participant()` and earlier-start corrections (2026-08-13)
+
+**Status:** Decided; implemented
+**Full reasoning:** ADR 0016 addendum 3, which owns the writeup for the identical fix across all four correction functions.
+
+`correct_program_participant()` shared the supersession statement the policy-side correction functions use, and therefore shared its bug: correcting a participant row to a start earlier than the row it replaces produced `range lower bound must be less than or equal to range upper bound`. Reproduced here before being changed. The old row is now emptied instead, and this table's append-only trigger permits that shape.
+
+Two things specific to this table were verified rather than assumed. Emptying is compatible with section 2's temporal 100% rule: an empty range contains no instant, so it contributes nothing to the panel sum at any probe, and `empty <@ term` satisfies the containment check - the timeline is computed from the surviving rows, which is what it should be. And the reachable earlier-date corrections here are narrower than on the policy side: a risk-bearing participant's row can only be preceded by another version of itself (the exclusion constraint refuses the overlap, correctly, since moving a changeover earlier is a two-row change) or by a panel gap the 100% rule already forbids. Corrections with no live predecessor - a first version, or a non-risk-bearing `mga_retention` row entered with the wrong start - now work, verified with the panel still totalling 100% at every instant afterwards.
+
+Section 4's trigger listed the permitted columns explicitly where the policy-side triggers compare `to_jsonb(NEW) - 'effective_range'`. That list is now folded into the same comparison: identical in effect, minus the one column it omitted (`created_at`), and a column added to this table later is covered without anyone remembering to extend it.
