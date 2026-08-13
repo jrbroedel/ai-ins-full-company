@@ -40,3 +40,41 @@ The period filter itself lives entirely in Odoo's UI layer, not baked into the S
 - Return-premium/cancellation adjustment is now a named, tracked gap - like ADR 0010's endorsements and ADR 0007's temporal-overlap gap, it needs its own follow-on decision before this report is safe to treat as a final settlement figure rather than a gross-written ledger.
 - No new write path is introduced - this is a read-only report over data `bind_policy()`/`cancel_policy()` already produce. Nothing about ADR 0010's write discipline changes.
 - Not yet decided, left for the implementation task: the exact `luxauto_settlement_view` column list beyond what's implied above, and whether `luxauto.settlement`'s access rights follow the same `base.group_user` read-only pattern as the other three models or need a narrower group (settlement data is arguably more sensitive than a policy list) - worth a deliberate look during implementation, not assumed here.
+
+---
+
+# Addendum: endorsements and return premium in the settlement view (2026-08-13)
+
+**Status:** Decided; implemented
+**Amends:** section 2's deferral ("return-premium and cancellation adjustments are explicitly out of scope") and section 1's period definition, which now applies per transaction rather than per policy.
+**Companion:** ADR 0018's addendum, which answers the other half of the pair this work closed - whether endorsements need closing out at cancellation.
+
+## What the view actually showed before this
+
+Checked against the deployed SQL rather than the ADR text: `luxauto_settlement_view` was `policies` joined to its `bound` event, `CROSS JOIN LATERAL calculate_premium_waterfall(p.quote_id)`. One row per policy per participant, amounts derived entirely from `quotes.premium_amount`.
+
+So the gap was **two-part, not one**. Section 2 named the cancellation half and tracked it. The endorsement half was never named here at all - ADR 0014 built `calculate_endorsement_waterfall()` and left it in exactly the unintegrated position ADR 0013 had left return premium in, and nothing since connected it. A capacity provider reading this report saw neither a mid-term premium increase they were owed a share of, nor a refund they owed a share of.
+
+## The fix
+
+**Decision: the view is a union of three transaction legs - `premium`, `endorsement`, `return_premium` - each carrying `transaction_type` and `transaction_date`, one row per participant per transaction.**
+
+Each leg delegates to the waterfall entrypoint that already exists for it (`calculate_premium_waterfall(quote_id)`, `calculate_endorsement_waterfall(endorsement_id)`, `calculate_cancellation_waterfall(cancellation_id)`), so the per-participant arithmetic is still written exactly once, in the shared `(program_id, amount, as_of)` core. This view adds no math.
+
+**Decision on the filter basis: each transaction is dated by its own recording timestamp - the `bound` event for premium, `policy_endorsements.created_at` for an endorsement, `policy_cancellations.created_at` for a refund - not by the bind date of the policy they belong to, and not by their own effective dates.**
+
+This is section 1's reasoning applied to transaction types that did not exist when it was written. Section 1 chose the bind event over `effective_range` for two reasons: settle a transaction in the period it *happened*, and anchor on a timestamp that is set once and never moves. Both point the same way here. A refund recorded in November belongs in November's settlement, because November is when the carrier actually owed it - dating it to the policy's original bind date would post a refund into a period that closed months earlier, and dating it to the cancellation's *effective* date would let a later correction move it between periods, which is exactly the retroactive instability section 1 rejected `effective_range` for.
+
+`bind_date` stays on every row - it still says which policy the transaction belongs to and when that policy was written - but it is no longer what the period filter runs on. The Odoo model gains `transaction_type` and `transaction_date`, the search view's period filter moves to `transaction_date`, and Bind Month survives as a grouping.
+
+**Superseded records are excluded from both new legs.** An emptied endorsement or cancellation applied for zero time (ADR 0016 addendum 3, ADR 0018 section 6), so it was never owed to anybody. The consequence, stated rather than hidden: correcting a cancellation **restates** the period its corrected record falls in rather than posting a reversing entry in the current one. That is what a correction is for in this schema - the corrected record replaces the original outright - but it does mean a closed settlement period's totals can change if someone corrects a transaction inside it. A reversing-entry ledger is a bigger accounting decision than this addendum makes.
+
+A pure `term_change` endorsement carries no `premium_delta` and contributes no settlement row - the same condition ADR 0014 section 5 already documented for when `calculate_endorsement_waterfall()` is meaningful.
+
+## Consequences
+
+- The report is no longer a gross-written ledger; it is a net position per participant per period. Section 2's warning that "a capacity provider reading this report for a period with mid-period cancellations would see gross figures that overstate what's actually still owed" no longer applies.
+- The `id` hash now includes the source transaction's own UUID and its type, since a policy/participant pair can now legitimately appear on three rows. Same composite-hash convention, wider input.
+- New columns are appended after the original ones rather than placed where they read best: `CREATE OR REPLACE VIEW` cannot reorder or rename existing columns, and dropping the view to tidy the order would drop its grants on every apply.
+- No new database objects - the view count, function count and every other ADR 0015 baseline number are unchanged.
+- Still out of scope and still deferred: an Odoo read-side view over `policy_cancellations`, reinstatement, and the reversing-entry question above.

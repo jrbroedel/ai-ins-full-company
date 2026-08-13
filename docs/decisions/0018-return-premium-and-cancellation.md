@@ -94,8 +94,51 @@ The only caller in the repo, the Odoo cancel wizard, is updated in the same comm
 - Four new callable functions (`cancel_policy` 7-arg, `correct_policy_cancellation`, `calculate_cancellation_waterfall`, `policy_unearned_premium`) are granted to `odoo`; `policy_unearned_premium` is read-only and grantable so a UI can show a refund before committing to it.
 - The ADR 0015 baseline moves: +2 tables, +3 enum types, +7 functions, +2 triggers.
 - `short_rate_factors` is empty and every short-rate cancellation fails until it is loaded from filed sources. That is the intended state, not an incomplete build.
-- `luxauto_settlement_view` and `luxauto_premium_waterfall_view` are unchanged, so a cancellation's return premium does not yet appear in the settlement report - exactly the position ADR 0014 left `calculate_endorsement_waterfall()` in, and the same follow-on (a settlement-report extension that consumes both) still owns it. Flagged rather than quietly widened here.
+- ~~`luxauto_settlement_view` and `luxauto_premium_waterfall_view` are unchanged, so a cancellation's return premium does not yet appear in the settlement report - exactly the position ADR 0014 left `calculate_endorsement_waterfall()` in, and the same follow-on (a settlement-report extension that consumes both) still owns it. Flagged rather than quietly widened here.~~ **Closed by ADR 0013's addendum**, which added both the endorsement and return-premium legs to that view.
 - There is no Odoo read-side model or view over `policy_cancellations`. The wizard writes; nothing reads it back in the UI yet. Same deliberate split ADR 0016 made when it added correction functions without a correction UI.
 - **Adjacent limitation found and left alone:** `correct_policy_vehicle()`/`correct_policy_driver()`/`correct_policy_endorsement()`/`correct_program_participant()` all fail with a raw `range lower bound must be less than or equal to range upper bound` if asked to correct a row to a start *earlier* than the row being superseded - confirmed live, not inferred. This ADR's own correction is immune (it empties instead), and fixing the other four is outside this ADR's scope, but it is a real gap in four shipped functions and should not be discovered a second time by accident.
-- Endorsements whose `effective_range` extends past a cancellation are not closed out - only vehicles and drivers are, which is what this ADR's scope named. A settlement report reading endorsements `as_of` a date after cancellation would still see one in force. Named here as an open item rather than fixed by extending scope mid-build.
+- ~~Endorsements whose `effective_range` extends past a cancellation are not closed out - only vehicles and drivers are, which is what this ADR's scope named. A settlement report reading endorsements `as_of` a date after cancellation would still see one in force. Named here as an open item rather than fixed by extending scope mid-build.~~ **Investigated and closed as not-a-defect** - see the addendum below. The stale range is descriptive only, and truncating it would break the refund recompute a cancellation correction performs.
 - Reinstatement, natural expiry and nonrenewal all remain unbuilt and unclaimed.
+
+---
+
+# Addendum: endorsements are deliberately not closed out at cancellation (2026-08-13)
+
+**Status:** Decided; investigated and deliberately not changed
+**Amends:** the consequence that read "Endorsements whose `effective_range` extends past a cancellation are not closed out... Named here as an open item rather than fixed by extending scope mid-build."
+**Companion:** ADR 0013's addendum, which closed the other half of that pair.
+
+## What was actually wrong: nothing computational
+
+Reproduced live before deciding anything. A policy written at 36,500 with a +7,300 endorsement effective from day 30 to term end, cancelled at day 90:
+
+- `policies.effective_range` is truncated to day 90 and `status` becomes `cancelled`; `policy_vehicles` and `policy_drivers` are closed to day 90.
+- The endorsement row still reads day 30 → day 365, ~9 months past the day coverage stopped. Descriptively stale, exactly as flagged.
+- **The refund is already correct.** Unearned came to 33,492.50, which is 27,499.97 of base premium plus 5,992.53 of the endorsement's own unearned portion - hand-recomputed to the cent. The endorsement's remaining premium was refunded *because* `policy_unearned_premium()` prorates each amount over its own effective period.
+- `calculate_endorsement_waterfall()` returns identical numbers before and after cancellation: its `as_of` is the endorsement's own start, which cancellation does not move.
+- With the ADR 0013 addendum, the settlement view dates endorsements by `created_at`, so a stale range cannot affect what is reported there either.
+
+So this was **stale-but-harmless**, not a bug. No computed result anywhere is wrong because of it.
+
+## Why the obvious tidy-up is not applied
+
+The natural fix - close the endorsement's range at the cancellation date, exactly as vehicles and drivers are closed - was tested before being adopted, and it **introduces a real money error**.
+
+`correct_policy_cancellation()` recomputes the refund against each endorsement's own range when a cancellation's date is corrected. Truncating the range destroys the denominator that recompute needs. Measured, on the case above, correcting the cancellation from day 90 back to day 60:
+
+| | endorsement's unearned share | total refund |
+|---|---|---|
+| endorsement left intact (current behaviour) | 6,646.26 | **37,146.24** |
+| endorsement closed out at day 90 | 3,649.98 | 34,149.96 |
+
+A 2,996.28 error in a number somebody gets paid, produced by a change made purely for tidiness. The correction path was then run for real and returned 37,146.24 - the correct figure, and the one the settlement view reports.
+
+**Decision: leave endorsement ranges intact at cancellation.** The distinction this rests on is worth stating, because it also explains why vehicles and drivers *are* closed out: `policy_vehicles`/`policy_drivers` are a coverage register - what is insured, when - and a row claiming coverage past the cancellation is wrong on its face. `policy_endorsements` is a premium ledger: its range is the period a premium amount is *earned over*, which is precisely the input the refund arithmetic needs preserved. `policies.effective_range` and `policies.status` remain the authoritative statement of what is covered, and neither is ambiguous after a cancellation.
+
+Closing endorsements safely would mean preserving each row's original earning period somewhere the correction path could read it back - a new column or a restore-then-recompute step in `correct_policy_cancellation()`. That is real machinery in exchange for a cosmetic gain, and it is not built here.
+
+## Consequences
+
+- An endorsement row on a cancelled policy still shows a range extending past the policy's coverage end. That is expected, and the policy row is where coverage is read from.
+- The refund arithmetic keeps working through corrections in both directions, which is the property that would have been lost.
+- The open item this addendum replaces is closed as **investigated, not a defect**. If a future consumer ever needs "which endorsements were in force at instant T", it should intersect the endorsement range with the policy's own `effective_range` rather than trusting the endorsement range alone - one line at the point of use, and no data destroyed.

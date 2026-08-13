@@ -6,7 +6,9 @@
         <field name="model">luxauto.settlement</field>
         <field name="arch" type="xml">
             <list create="false" edit="false" delete="false" import="false">
-                <field name="bind_date"/>
+                <field name="transaction_date"/>
+                <field name="transaction_type"/>
+                <field name="bind_date" optional="hide"/>
                 <field name="policy_number"/>
                 <field name="policy_status"/>
                 <field name="participant_name"/>
@@ -30,6 +32,8 @@
                         <group string="Policy">
                             <field name="policy_number"/>
                             <field name="policy_status"/>
+                            <field name="transaction_type"/>
+                            <field name="transaction_date"/>
                             <field name="bind_date"/>
                         </group>
                         <group string="Participant">
@@ -49,8 +53,11 @@
         </field>
     </record>
 
-    <!-- bind_date included here, not policy_status or anything effective_range-based,
-         per ADR 0013's period-definition decision - this is what Odoo's native date
+    <!-- transaction_date, not policy_status or anything effective_range-based, and
+         since the ADR 0013 addendum not bind_date either: this view now carries
+         written premium, endorsements and return premium, and each settles in the
+         period it was recorded. bind_date stays available as a grouping.
+         This is what Odoo's native date
          filter widgets (period presets, custom ranges) apply to. No custom filtering
          logic: declaring the field here is what gets the built-in date filter UI. -->
     <record id="view_luxauto_settlement_search" model="ir.ui.view">
@@ -58,11 +65,15 @@
         <field name="model">luxauto.settlement</field>
         <field name="arch" type="xml">
             <search>
-                <field name="bind_date"/>
+                <field name="transaction_date"/>
                 <field name="policy_number"/>
                 <field name="participant_name"/>
-                <filter name="filter_bind_date" date="bind_date" string="Bind Date"/>
+                <filter name="filter_transaction_date" date="transaction_date" string="Transaction Date"/>
                 <separator/>
+                <filter name="groupby_transaction_month" string="Transaction Month"
+                        context="{'group_by': 'transaction_date:month'}"/>
+                <filter name="groupby_transaction_type" string="Transaction Type"
+                        context="{'group_by': 'transaction_type'}"/>
                 <filter name="groupby_bind_month" string="Bind Month"
                         context="{'group_by': 'bind_date:month'}"/>
                 <filter name="groupby_participant" string="Participant"

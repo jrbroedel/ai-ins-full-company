@@ -7,15 +7,22 @@ class LuxautoSettlement(models.Model):
     _auto = False
     _table = 'luxauto_settlement_view'
     _rec_name = 'policy_number'
-    _order = 'bind_date desc, policy_number'
+    _order = 'transaction_date desc, policy_number'
 
     policy_id = fields.Char(string='Policy ID', readonly=True)
     policy_number = fields.Char(readonly=True)
     policy_status = fields.Char(string='Policy Status', readonly=True)
     # bind_date, not effective_range - a settlement report reflects when premium
-    # was written, not when coverage is active (ADR 0013 section 1). This is the
-    # field the search view's period filter runs on.
+    # was written, not when coverage is active (ADR 0013 section 1). It still
+    # says which policy a row belongs to and when that policy was written, but
+    # it is no longer what the period filter runs on: since the ADR 0013
+    # addendum this view carries endorsements and return premium too, and each
+    # transaction settles in the period it was recorded, not the period its
+    # policy was bound.
     bind_date = fields.Datetime(string='Bind Date', readonly=True)
+    # 'premium' | 'endorsement' | 'return_premium'.
+    transaction_type = fields.Char(string='Transaction', readonly=True)
+    transaction_date = fields.Datetime(string='Transaction Date', readonly=True)
     quote_id = fields.Char(string='Quote ID', readonly=True)
     participant_id = fields.Char(string='Participant ID', readonly=True)
     participant_name = fields.Char(readonly=True)

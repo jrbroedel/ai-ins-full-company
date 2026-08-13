@@ -2762,9 +2762,35 @@ CROSS JOIN LATERAL calculate_premium_waterfall(q.quote_id) w;
 -- calculation, never reimplemented. id is composite-hashed from
 -- policy_id + participant_id, since this view also fans out to one row per
 -- participant per policy.
+-- ADR 0013 addendum: three transaction types, not one. As originally built
+-- this view showed only written premium at bind, which ADR 0013 named as a
+-- gross-written ledger and explicitly deferred netting for. ADR 0014's
+-- endorsement waterfalls and ADR 0018's return premium then both landed
+-- without being wired in, so a capacity provider reading this report saw
+-- neither a mid-term premium increase nor a refund. All three now appear, one
+-- row per participant per transaction.
+--
+-- Each leg is dated by its OWN recording timestamp, not by the bind date:
+-- bind by the 'bound' event, an endorsement by policy_endorsements.created_at,
+-- a return premium by policy_cancellations.created_at. That is the same
+-- reasoning ADR 0013 section 1 used to pick the bind event over
+-- effective_range - settle a transaction in the period it happened, on a
+-- timestamp that is set once and never moves - applied to two transaction
+-- types that did not exist when that decision was made. A refund belongs to
+-- the period the carrier actually owed it, which is when it was recorded, not
+-- the period the policy was originally written in.
+--
+-- bind_date is kept on every row (it still says which policy the transaction
+-- belongs to and when that policy was written); transaction_date is what a
+-- settlement period filters on.
+--
+-- Superseded rows are excluded on both new legs: an emptied endorsement or
+-- cancellation applied for zero time (ADR 0016 addendum 3, ADR 0018), so it
+-- was never owed. A correction therefore restates the period its corrected
+-- record falls in, which is what a correction is for.
 CREATE OR REPLACE VIEW luxauto_settlement_view AS
 SELECT
-  ('x' || substr(md5(p.policy_id::text || w.participant_id::text), 1, 8))::bit(32)::int AS id,
+  ('x' || substr(md5(p.policy_id::text || w.participant_id::text || 'premium'), 1, 8))::bit(32)::int AS id,
   p.policy_id,
   p.policy_number,
   p.status AS policy_status,
@@ -2777,10 +2803,68 @@ SELECT
   w.commission_rate,
   w.gross_share,
   w.commission_amount,
-  w.net_due
+  w.net_due,
+  -- Appended after the original columns on purpose: CREATE OR REPLACE VIEW
+  -- cannot reorder or rename existing ones, and dropping the view to make it
+  -- prettier would drop its grants with it on every apply.
+  'premium'::TEXT AS transaction_type,
+  be.created_at AS transaction_date
 FROM policies p
 JOIN policy_events be ON be.policy_id = p.policy_id AND be.event_type = 'bound'
-CROSS JOIN LATERAL calculate_premium_waterfall(p.quote_id) w;
+CROSS JOIN LATERAL calculate_premium_waterfall(p.quote_id) w
+
+UNION ALL
+
+SELECT
+  ('x' || substr(md5(e.endorsement_id::text || w.participant_id::text || 'endorsement'), 1, 8))::bit(32)::int,
+  p.policy_id,
+  p.policy_number,
+  p.status,
+  be.created_at,
+  p.quote_id,
+  w.participant_id,
+  w.participant_name,
+  w.participant_type,
+  w.share_percentage,
+  w.commission_rate,
+  w.gross_share,
+  w.commission_amount,
+  w.net_due,
+  'endorsement'::TEXT,
+  e.created_at
+FROM policy_endorsements e
+JOIN policies p ON p.policy_id = e.policy_id
+JOIN policy_events be ON be.policy_id = p.policy_id AND be.event_type = 'bound'
+CROSS JOIN LATERAL calculate_endorsement_waterfall(e.endorsement_id) w
+-- A pure term_change carries no premium_delta and has nothing to settle
+-- (ADR 0014 section 5's own note about when that function is meaningful).
+WHERE e.premium_delta IS NOT NULL
+  AND NOT isempty(e.effective_range)
+
+UNION ALL
+
+SELECT
+  ('x' || substr(md5(c.cancellation_id::text || w.participant_id::text || 'return_premium'), 1, 8))::bit(32)::int,
+  p.policy_id,
+  p.policy_number,
+  p.status,
+  be.created_at,
+  p.quote_id,
+  w.participant_id,
+  w.participant_name,
+  w.participant_type,
+  w.share_percentage,
+  w.commission_rate,
+  w.gross_share,
+  w.commission_amount,
+  w.net_due,
+  'return_premium'::TEXT,
+  c.created_at
+FROM policy_cancellations c
+JOIN policies p ON p.policy_id = c.policy_id
+JOIN policy_events be ON be.policy_id = p.policy_id AND be.event_type = 'bound'
+CROSS JOIN LATERAL calculate_cancellation_waterfall(c.cancellation_id) w
+WHERE NOT isempty(c.effective_range);
 
 -- These views are owned by whichever role runs this script (the
 -- Postgres admin, in practice - see ADR 0011), not by the `odoo` role Odoo
