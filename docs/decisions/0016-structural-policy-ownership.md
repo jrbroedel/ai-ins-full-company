@@ -28,7 +28,9 @@ Both tables mirror their source table's columns (minus `application_id`, which b
 
 `name`+`date_of_birth` as the driver natural key, per the option the task itself named: `additional_drivers` has no SSN or license-number column to key off instead (only `name`, `relationship_to_applicant`, `date_of_birth`, and driving-history fields), so this is what's actually available, not an arbitrary choice among several good options.
 
-**A limitation flagged on purpose, not hidden:** both `vin` (on `vehicles`) and `date_of_birth` (on `additional_drivers`) are nullable at the application-data-entry stage - a vehicle without a confirmed VIN yet, or a driver record entered without a birth date. Postgres exclusion constraints treat `NULL` as distinct from `NULL` (not equal), so two vehicles on the same policy that both have a null `vin` - or two drivers that both have a null `date_of_birth` - would **not** be caught as a conflict by these constraints; the protection is real when the identifying field is present and silently absent when it isn't. Same category of gap as ADR 0007's non-temporal 100%-sum check and the still-open `program_participants` overlap gap it flagged: real, worth naming, not worth blocking this ADR on solving (would need a business decision - require VIN/DOB before bind? treat null as its own bucket that still conflicts with itself? - this ADR doesn't make that call).
+**A limitation flagged on purpose, not hidden - since closed, see the addendum below:** both `vin` (on `vehicles`) and `date_of_birth` (on `additional_drivers`) are nullable at the application-data-entry stage - a vehicle without a confirmed VIN yet, or a driver record entered without a birth date. Postgres exclusion constraints treat `NULL` as distinct from `NULL` (not equal), so two vehicles on the same policy that both have a null `vin` - or two drivers that both have a null `date_of_birth` - would **not** be caught as a conflict by these constraints; the protection is real when the identifying field is present and silently absent when it isn't. Same category of gap as ADR 0007's non-temporal 100%-sum check and the still-open `program_participants` overlap gap it flagged: real, worth naming, not worth blocking this ADR on solving (would need a business decision - require VIN/DOB before bind? treat null as its own bucket that still conflicts with itself? - this ADR doesn't make that call).
+
+*The addendum makes that call: the snapshot tables' identity columns are `NOT NULL`. The business decision turned out to be one this project had already made and written down (referral rule DH-04) - see below.*
 
 ## 4. Corrections: `correct_policy_vehicle()` and `correct_policy_driver()`, mirroring `correct_policy_endorsement()` exactly
 
@@ -51,4 +53,44 @@ The `id` hash for both views is a simple single-column hash (`policy_vehicle_id`
 - Two more `SECURITY DEFINER` functions (`correct_policy_vehicle()`, `correct_policy_driver()`) follow the exact template `correct_policy_endorsement()`/ADR 0012 established - `odoo` gets `EXECUTE`, never a direct grant on the tables themselves.
 - `scripts/apply-and-verify-schema.sh`'s baseline (ADR 0015 section 2) needs updating for the new tables/functions/views/triggers - the parser re-derives the object list from the file automatically, but the manually-verified acceptance-test counts are a fact about the file's current state and have to be updated by hand each time the file changes, the same maintenance ADR 0015 already implied every future schema change would carry.
 - Mid-term structural changes (add/remove a vehicle or driver on an already-bound policy) remain explicitly deferred, same as ADR 0014 left endorsements before this ADR resolved the ownership question - this ADR resolves *where the data lives and how the initial snapshot happens*, not *how it changes after bind*. A follow-on ADR still owns that.
-- The `vin`/`date_of_birth` nullability gap in both exclusion constraints is a known, named limitation, not a hidden one - revisit if/when null identifying fields on policy-owned vehicles/drivers turn out to be a real operational problem, not before.
+- ~~The `vin`/`date_of_birth` nullability gap in both exclusion constraints is a known, named limitation, not a hidden one - revisit if/when null identifying fields on policy-owned vehicles/drivers turn out to be a real operational problem, not before.~~ **Closed by the addendum below** (2026-08-13, same day): `policy_vehicles.vin`, `policy_drivers.name` and `policy_drivers.date_of_birth` are `NOT NULL`, and `bind_policy()` refuses an application carrying a null identity with a named condition. It didn't need the business decision this bullet was waiting on - that decision already existed as referral rule DH-04.
+
+---
+
+# Addendum: closing the null-identity gap (2026-08-13)
+
+**Status:** Decided; implemented
+**Amends:** section 3's named limitation and the last consequence above
+**Scope:** identity columns on the two snapshot tables only. Return premium on cancellation, `expired`/`nonrenewed` transitions, and the commission formula are all still open, all still elsewhere.
+
+## Why this is an addendum and not ADR 0017
+
+Because no new architectural decision is being made. The rule "an application missing a VIN or a driver's identity fields cannot be rated or bound" already exists in this repo, in `referral-matrices/luxury_auto_referral_matrix.json`, as rule **DH-04** (`DH04_INSUFFICIENT_DATA_FOR_RISK_COMPUTATION`): a submitted application with a null `vin` or missing driver identity routes to `INFORMATION_REQUEST`. Section 3 above framed the null hole as needing a business decision that hadn't been made ("require VIN/DOB before bind?"). That framing was wrong on the facts: the decision had been made, written down, and given a reason code. What was missing was enforcement at the layer that depends on it.
+
+The gap was therefore never "we don't know the rule." It was the same shape as the gaps ADR 0011 and ADR 0015 exist to close: a guarantee assumed to have happened upstream, trusted rather than checked, at exactly the point where being wrong is expensive. This project's pattern is to encode business rules as hard stops - `SECURITY DEFINER` functions the `odoo` role can only reach through, append-only triggers, exclusion constraints, a schema verifier that refuses to trust its own parser. A nullable identity column on a table whose *entire* protection is keyed on that column is a convention, not a hard stop.
+
+## The fix, at two layers
+
+**Layer 1 - `NOT NULL` on `policy_vehicles.vin`, `policy_drivers.name`, `policy_drivers.date_of_birth`.** This is the actual fix. It closes the exclusion constraints' null hole without special-casing the constraints themselves (a `NOT NULL` column can't be `NULL <> NULL`), and it holds for *any* writer to these tables - `bind_policy()` today, whatever mid-term structural-endorsement mechanism the deferred follow-on ADR eventually builds, and any hand-written correction run by an operator at 2am. `policy_drivers.name` was already `NOT NULL` from the original ADR; it's included in the migration for completeness, not because it changed.
+
+The source tables (`vehicles.vin`, `additional_drivers.date_of_birth`) stay nullable, deliberately. A draft application *should* be able to exist without a VIN - that's the state DH-04 is written to detect. The constraint belongs on the policy-owned snapshot, where the data is no longer a draft.
+
+**Layer 2 - named bind conditions.** `bind_policy()` checks the application's vehicles and drivers *before* the `policies` INSERT and raises `BIND_BLOCKED_MISSING_VEHICLE_VIN` or `BIND_BLOCKED_MISSING_DRIVER_IDENTITY`, each with a `HINT` naming DH-04 and what to fix. Layer 1 alone would reject the same bind with `null value in column "vin" of relation "policy_vehicles" violates not-null constraint` - correct, and useless to whoever hit it, since it describes a table the caller never mentioned and gives no hint that the fix is on the *application*. Same reasoning ADR 0012 gave for checking quote status explicitly even though the `UNIQUE` constraint on `policies.quote_id` would have caught a double-bind anyway: the constraint is the guarantee, the explicit check is the diagnosis. Reason-code style matches the referral matrix's so a human hitting one can grep for it.
+
+The two correction functions get the same named check for the same reason - they're the other writer to these tables, and a correction that blanked a VIN would otherwise hit the raw `NOT NULL` *after* the old row's `effective_range` had already been closed inside the same transaction.
+
+**Ordering note:** the check runs before anything is written, so a blocked bind leaves nothing behind - no policy, no `policy_events` row, no partial snapshot, and the quote stays `issued`. Verified, not assumed (see below).
+
+## Migration
+
+`postgresql_schema.sql` declares the columns `NOT NULL` in the `CREATE TABLE` bodies, but those are `CREATE TABLE IF NOT EXISTS` - on a database that already has the tables, the new constraint would be silently skipped. A guarded `DO` block does the real work: it counts existing null-identity rows first and, if it finds any, raises with the counts and a `HINT` rather than applying. It will not backfill a placeholder VIN or delete rows to make itself apply - these are insurance records, and a schema file that quietly edits them to satisfy its own constraint is a worse outcome than a failed apply. On a database with no violating rows (including a fresh one) the block is a no-op, `SET NOT NULL` being idempotent.
+
+`luxauto` had zero rows in both tables when this was applied - checked, not assumed, and the guard was tested against a deliberately introduced null row anyway, since "there was no data this time" is not a property of the migration.
+
+## Consequences
+
+- `scripts/lib/verify_schema.py` grows a sixth verified category, `not_null_columns`: it parses the file's explicit `ALTER TABLE ... SET NOT NULL` statements and checks `information_schema.columns` for each. This extends ADR 0015 section 2's contract, which covered tables/types/functions/views/triggers - object *existence*. This addendum's whole deliverable is a column constraint applied by an `ALTER`, so "the table exists" verifies nothing about it, and an unverified constraint is exactly the "clean exit code assumed as proof" failure ADR 0015 exists to prevent. Inline `NOT NULL`s in `CREATE TABLE` bodies stay out of scope - covered by the table's own check, and parsing column definitions would be a real parser, not a regex.
+- The baseline moves by one category only (`not_null_columns: 3`); no tables, types, functions, views or triggers were added.
+- `bind_policy()`'s signature is still unchanged - three ADRs running.
+- DH-04 now has enforcement at two layers with no coordination between them: the pipeline routes incomplete applications to `INFORMATION_REQUEST`, and the database refuses the bind regardless of whether that routing happened. That redundancy is the point.
+- The `program_participants` overlap gap that section 3 name-checked as the same category of problem is **still open** - this addendum closes one instance, not the class.

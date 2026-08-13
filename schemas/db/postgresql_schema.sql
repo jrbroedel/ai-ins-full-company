@@ -708,6 +708,10 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
 -- Extended for ADR 0016: also snapshots the application's vehicles and
 -- additional_drivers into policy_vehicles/policy_drivers, atomically with
 -- everything else. Signature unchanged; only the body grows.
+-- Extended again by the ADR 0016 addendum: refuses to bind an application
+-- whose vehicles/drivers are missing the identity fields the snapshot
+-- tables' exclusion constraints key on (BIND_BLOCKED_MISSING_VEHICLE_VIN /
+-- BIND_BLOCKED_MISSING_DRIVER_IDENTITY). Signature still unchanged.
 CREATE OR REPLACE FUNCTION bind_policy(
   p_quote_id UUID,
   p_policy_number TEXT,
@@ -718,6 +722,7 @@ DECLARE
   v_application_id UUID;
   v_policy_id UUID;
   v_effective_range TSTZRANGE;
+  v_blocking_count INTEGER;
 BEGIN
   SELECT status, application_id INTO v_quote_status, v_application_id
   FROM quotes
@@ -735,6 +740,38 @@ BEGIN
 
   IF EXISTS (SELECT 1 FROM policies WHERE quote_id = p_quote_id) THEN
     RAISE EXCEPTION 'bind_policy: quote % already has a policy', p_quote_id;
+  END IF;
+
+  -- ADR 0016 addendum: the snapshot columns below are NOT NULL, which is
+  -- what actually closes the exclusion constraints' null-identity gap. That
+  -- constraint alone would report a null VIN as a bare NOT NULL violation on
+  -- policy_vehicles - technically correct, useless to whoever hit it. These
+  -- two checks name the condition instead, and name it as a bind
+  -- precondition rather than a snapshot mishap: DH-04 in
+  -- luxury_auto_referral_matrix.json already routes an application missing a
+  -- vin or driver identity to INFORMATION_REQUEST, so an application that
+  -- reaches bind with either still null did not have that rule applied to
+  -- it. Checked before the policies INSERT: nothing is written at all, so
+  -- there is no partially-bound policy to clean up.
+  SELECT count(*) INTO v_blocking_count
+  FROM vehicles v
+  WHERE v.application_id = v_application_id AND v.vin IS NULL;
+
+  IF v_blocking_count > 0 THEN
+    RAISE EXCEPTION 'BIND_BLOCKED_MISSING_VEHICLE_VIN: quote % cannot bind - % vehicle(s) on application % have a null vin',
+      p_quote_id, v_blocking_count, v_application_id
+      USING HINT = 'Referral matrix DH-04 (DH04_INSUFFICIENT_DATA_FOR_RISK_COMPUTATION) routes an application with a null vin to INFORMATION_REQUEST. Supply the VIN on the application, then bind.';
+  END IF;
+
+  SELECT count(*) INTO v_blocking_count
+  FROM additional_drivers d
+  WHERE d.application_id = v_application_id
+    AND (d.name IS NULL OR d.date_of_birth IS NULL);
+
+  IF v_blocking_count > 0 THEN
+    RAISE EXCEPTION 'BIND_BLOCKED_MISSING_DRIVER_IDENTITY: quote % cannot bind - % additional driver(s) on application % have a null name or date_of_birth',
+      p_quote_id, v_blocking_count, v_application_id
+      USING HINT = 'Referral matrix DH-04 (DH04_INSUFFICIENT_DATA_FOR_RISK_COMPUTATION) routes an application with missing driver identity fields to INFORMATION_REQUEST. Supply the driver''s name and date of birth on the application, then bind.';
   END IF;
 
   -- effective_range: neither ADR 0010 nor this task specified where a
@@ -1020,7 +1057,9 @@ CREATE TABLE IF NOT EXISTS policy_vehicles (
   make                        TEXT NOT NULL,
   model                       TEXT NOT NULL,
   trim                        TEXT,
-  vin                         TEXT,
+  -- NOT NULL as of the ADR 0016 addendum: nullable here (mirroring the
+  -- source vehicles.vin) left a hole in the exclusion constraint below.
+  vin                         TEXT NOT NULL,
   vehicle_category            vehicle_category_t NOT NULL,
   purchase_price               NUMERIC(12,2),
   current_appraised_value      NUMERIC(12,2),
@@ -1042,9 +1081,11 @@ CREATE TABLE IF NOT EXISTS policy_vehicles (
 
   -- NOT per-policy (unlike policy_endorsements) - per (policy_id, vin), so
   -- two different vehicles on the same policy don't conflict with each
-  -- other. vin is nullable on the source vehicles table; two vehicles with
-  -- both-null vin on the same policy won't be caught here (NULL <> NULL) -
-  -- a named limitation, see ADR 0016 section 3.
+  -- other. vin is NOT NULL here even though the source vehicles.vin is
+  -- nullable: NULL <> NULL in an exclusion constraint, so a nullable vin
+  -- would silently exempt exactly the rows least able to be identified
+  -- (ADR 0016 addendum; DH-04 already routes a null-vin application to
+  -- INFORMATION_REQUEST long before bind).
   CONSTRAINT no_overlapping_policy_vehicles
     EXCLUDE USING gist (policy_id WITH =, vin WITH =, effective_range WITH &&)
 );
@@ -1073,7 +1114,10 @@ CREATE TABLE IF NOT EXISTS policy_drivers (
   effective_range               TSTZRANGE NOT NULL,
   name                           TEXT NOT NULL,
   relationship_to_applicant     TEXT,
-  date_of_birth                  DATE,
+  -- NOT NULL as of the ADR 0016 addendum, same reason as vehicles' vin:
+  -- name+date_of_birth is this table's identity, and half an identity is
+  -- not one. (name was already NOT NULL; date_of_birth was not.)
+  date_of_birth                  DATE NOT NULL,
   years_licensed                 SMALLINT,
   license_status                 license_status_t,
   violations_last_5yr            SMALLINT,
@@ -1081,10 +1125,10 @@ CREATE TABLE IF NOT EXISTS policy_drivers (
   created_at                     TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   -- additional_drivers has no SSN/license-number column - name+date_of_birth
-  -- is the best available natural key, not an arbitrary choice. Same
-  -- null-identity caveat as vehicles' vin: date_of_birth is nullable on the
-  -- source table, so two drivers with both-null date_of_birth on the same
-  -- policy won't conflict here.
+  -- is the best available natural key, not an arbitrary choice. Both halves
+  -- are NOT NULL here (ADR 0016 addendum) even though date_of_birth is
+  -- nullable on the source table, for the same reason vin is: a null half
+  -- of the key would exempt the row from this constraint entirely.
   CONSTRAINT no_overlapping_policy_drivers
     EXCLUDE USING gist (policy_id WITH =, name WITH =, date_of_birth WITH =, effective_range WITH &&)
 );
@@ -1105,6 +1149,40 @@ CREATE OR REPLACE TRIGGER policy_drivers_no_update
 CREATE OR REPLACE TRIGGER policy_drivers_no_delete
   BEFORE DELETE ON policy_drivers
   FOR EACH ROW EXECUTE FUNCTION reject_policy_drivers_mutation();
+
+-- ADR 0016 addendum: the CREATE TABLEs above declare vin/name/date_of_birth
+-- NOT NULL, but they're CREATE TABLE IF NOT EXISTS - a database created
+-- before this addendum already has the tables and would skip those columns'
+-- new constraint entirely. This block is what actually closes the gap on
+-- those databases; on a fresh apply it's a no-op (SET NOT NULL on a column
+-- that is already NOT NULL is idempotent, not an error).
+--
+-- Pre-existing rows are checked, not assumed: SET NOT NULL against a table
+-- holding null identities fails with a bare "column contains null values",
+-- which says nothing about what to do next. These are insurance records -
+-- the schema file will not backfill a placeholder VIN or delete the rows to
+-- make itself apply cleanly, so it stops and says exactly what it found.
+DO $$
+DECLARE
+  v_null_vin_vehicles INTEGER;
+  v_null_identity_drivers INTEGER;
+BEGIN
+  SELECT count(*) INTO v_null_vin_vehicles
+  FROM policy_vehicles WHERE vin IS NULL;
+
+  SELECT count(*) INTO v_null_identity_drivers
+  FROM policy_drivers WHERE name IS NULL OR date_of_birth IS NULL;
+
+  IF v_null_vin_vehicles > 0 OR v_null_identity_drivers > 0 THEN
+    RAISE EXCEPTION 'ADR 0016 addendum: cannot enforce NOT NULL on policy vehicle/driver identity - % policy_vehicles row(s) have a null vin and % policy_drivers row(s) have a null name or date_of_birth',
+      v_null_vin_vehicles, v_null_identity_drivers
+      USING HINT = 'Correct each row via correct_policy_vehicle()/correct_policy_driver() with the real identity, then re-run this file. This schema will not invent a VIN or delete a policy''s vehicle/driver record to make itself apply.';
+  END IF;
+
+  ALTER TABLE policy_vehicles ALTER COLUMN vin SET NOT NULL;
+  ALTER TABLE policy_drivers ALTER COLUMN name SET NOT NULL;
+  ALTER TABLE policy_drivers ALTER COLUMN date_of_birth SET NOT NULL;
+END $$;
 
 -- Corrects a mistaken policy_vehicles snapshot row - same pattern as
 -- correct_policy_endorsement() exactly: close old row, insert corrected row,
@@ -1150,6 +1228,15 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'correct_policy_vehicle: policy vehicle % does not exist', p_policy_vehicle_id;
+  END IF;
+
+  -- Same named condition bind_policy() raises, for the same reason (ADR 0016
+  -- addendum): this is the other writer to policy_vehicles, and a correction
+  -- that blanks the VIN would hit the NOT NULL as an anonymous constraint
+  -- violation - after the old row's range had already been closed.
+  IF p_new_vin IS NULL THEN
+    RAISE EXCEPTION 'BIND_BLOCKED_MISSING_VEHICLE_VIN: correcting policy vehicle % requires a vin', p_policy_vehicle_id
+      USING HINT = 'A corrected snapshot row still has to be identifiable - the exclusion constraint keys on (policy_id, vin). Supply the real VIN.';
   END IF;
 
   ALTER TABLE policy_vehicles DISABLE TRIGGER policy_vehicles_no_update;
@@ -1211,6 +1298,14 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'correct_policy_driver: policy driver % does not exist', p_policy_driver_id;
+  END IF;
+
+  -- Same named condition bind_policy() raises (ADR 0016 addendum) - see
+  -- correct_policy_vehicle() above for why the correction path gets the
+  -- check too, not just the bind path.
+  IF p_new_name IS NULL OR p_new_date_of_birth IS NULL THEN
+    RAISE EXCEPTION 'BIND_BLOCKED_MISSING_DRIVER_IDENTITY: correcting policy driver % requires both a name and a date_of_birth', p_policy_driver_id
+      USING HINT = 'A corrected snapshot row still has to be identifiable - the exclusion constraint keys on (policy_id, name, date_of_birth). Supply both.';
   END IF;
 
   ALTER TABLE policy_drivers DISABLE TRIGGER policy_drivers_no_update;

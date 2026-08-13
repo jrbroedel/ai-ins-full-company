@@ -1,10 +1,18 @@
 """
 Parses schemas/db/postgresql_schema.sql for every object it declares
-(tables, enum types, functions, views, triggers), cross-checks the parser's
-own counts against a manually verified baseline (ADR 0015 section 2) before
-trusting it, then confirms each parsed object actually exists in the target
-database. Exits non-zero if the parser disagrees with the baseline, or if
-any expected object is missing from the database.
+(tables, enum types, functions, views, triggers, and the columns the file
+explicitly SET NOT NULL), cross-checks the parser's own counts against a
+manually verified baseline (ADR 0015 section 2) before trusting it, then
+confirms each parsed object actually exists in the target database. Exits
+non-zero if the parser disagrees with the baseline, or if any expected
+object is missing from the database.
+
+The SET NOT NULL category is the ADR 0016 addendum's extension to ADR 0015
+section 2's contract: that addendum's fix *is* a column constraint, and one
+applied to already-created tables by an ALTER, so "the table exists" says
+nothing about whether it took. Only columns the file alters explicitly are
+checked - inline NOT NULLs in CREATE TABLE bodies are covered by the table's
+own existence check, and parsing them would mean parsing column definitions.
 
 Usage: verify_schema.py <path-to-postgresql_schema.sql>
 Connection: standard libpq environment variables (PGHOST, PGUSER, PGPASSWORD,
@@ -17,7 +25,9 @@ from collections import Counter
 import psycopg2
 
 # Manually verified snapshot (ADR 0015 section 2's acceptance-test discipline;
-# counts updated for ADR 0016's policy_vehicles/policy_drivers addition). This
+# counts updated for ADR 0016's policy_vehicles/policy_drivers addition, and
+# for its addendum's three SET NOT NULL columns - no new tables, types,
+# functions, views or triggers there, so only the new category moves). This
 # is the acceptance test for the parser itself - if the parser's counts don't
 # match this, that's a parser bug to fix, not a schema surprise, and the
 # parser is not trusted against a live database until it does. Updated by
@@ -30,7 +40,15 @@ BASELINE = {
     "functions": 16,
     "views": 6,
     "triggers": 14,
+    "not_null_columns": 3,
 }
+
+# Parsed and verified separately from PATTERNS/DB_QUERIES: a column isn't a
+# named object in a catalog the way a table or a trigger is, so it needs its
+# own (table, column) pair and its own information_schema question.
+NOT_NULL_PATTERN = re.compile(
+    r"^\s*ALTER TABLE (\w+) ALTER COLUMN (\w+) SET NOT NULL", re.MULTILINE
+)
 
 PATTERNS = {
     "tables": re.compile(r"^CREATE TABLE IF NOT EXISTS (\w+)", re.MULTILINE),
@@ -66,11 +84,18 @@ def parse_expected(sql_text):
     }
 
 
-def check_parser_against_baseline(expected):
+def parse_not_null_columns(sql_text):
+    return sorted(set(NOT_NULL_PATTERN.findall(sql_text)))
+
+
+def check_parser_against_baseline(expected, not_null_columns):
     print("=== Parser vs. baseline (ADR 0015 section 2 acceptance test) ===")
     ok = True
     for category, baseline_count in BASELINE.items():
-        parsed_count = sum(expected[category].values())
+        if category == "not_null_columns":
+            parsed_count = len(not_null_columns)
+        else:
+            parsed_count = sum(expected[category].values())
         match = parsed_count == baseline_count
         ok = ok and match
         status = "OK" if match else "MISMATCH"
@@ -87,9 +112,32 @@ def check_parser_against_baseline(expected):
     return ok
 
 
-def check_database(expected, conn):
-    print("\n=== Live database verification ===")
+def check_not_null_columns(not_null_columns, conn):
     all_ok = True
+    with conn.cursor() as cur:
+        for table, column in not_null_columns:
+            cur.execute(
+                """
+                SELECT is_nullable FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = %s AND column_name = %s
+                """,
+                (table, column),
+            )
+            row = cur.fetchone()
+            if row is None:
+                ok, detail = False, "column not found"
+            else:
+                ok = row[0] == "NO"
+                detail = "NOT NULL" if ok else "still nullable"
+            all_ok = all_ok and ok
+            status = "PASS" if ok else "FAIL"
+            print(f"  [{status}] not_null: {table}.{column} ({detail})")
+    return all_ok
+
+
+def check_database(expected, not_null_columns, conn):
+    print("\n=== Live database verification ===")
+    all_ok = check_not_null_columns(not_null_columns, conn)
     with conn.cursor() as cur:
         for category, query in DB_QUERIES.items():
             cur.execute(query)
@@ -113,13 +161,14 @@ def main():
         sql_text = f.read()
 
     expected = parse_expected(sql_text)
+    not_null_columns = parse_not_null_columns(sql_text)
 
-    if not check_parser_against_baseline(expected):
+    if not check_parser_against_baseline(expected, not_null_columns):
         sys.exit(1)
 
     conn = psycopg2.connect()
     try:
-        if not check_database(expected, conn):
+        if not check_database(expected, not_null_columns, conn):
             print("\nOne or more expected objects are missing from the database.")
             sys.exit(1)
     finally:
