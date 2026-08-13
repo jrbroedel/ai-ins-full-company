@@ -59,4 +59,4 @@ Same pattern as the referral matrix's own open items list - these are business d
 ## Consequences
 
 - This is the second table-design addition since ADR 0005 (Odoo integration was the first, in ADR 0006) - `postgresql_schema.sql` is accumulating real structure and should keep being treated as living source of truth, not a one-time artifact.
-- The temporal-overlap gap in the 100%-sum check is a known, tracked simplification - revisit before any real program data goes in, not before.
+- ~~The temporal-overlap gap in the 100%-sum check is a known, tracked simplification - revisit before any real program data goes in, not before.~~ **Closed by ADR 0017** (2026-08-13), still before any real program data went in. It turned out to be worse than a simplification: the non-temporal check also *rejected* correct panel changes, so the panel could never have changed at all.

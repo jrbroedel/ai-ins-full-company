@@ -25,9 +25,11 @@ from collections import Counter
 import psycopg2
 
 # Manually verified snapshot (ADR 0015 section 2's acceptance-test discipline;
-# counts updated for ADR 0016's policy_vehicles/policy_drivers addition, and
-# for its addendum's three SET NOT NULL columns - no new tables, types,
-# functions, views or triggers there, so only the new category moves). This
+# counts updated for ADR 0016's policy_vehicles/policy_drivers addition, its
+# addendum's three SET NOT NULL columns, and ADR 0017's program_participants
+# work: +3 functions (first_program_share_gap, correct_program_participant,
+# reject_program_participants_mutation), +2 triggers (the two append-only
+# ones), +3 SET NOT NULL columns, no new tables/types/views). This
 # is the acceptance test for the parser itself - if the parser's counts don't
 # match this, that's a parser bug to fix, not a schema surprise, and the
 # parser is not trusted against a live database until it does. Updated by
@@ -37,10 +39,10 @@ import psycopg2
 BASELINE = {
     "tables": 24,
     "types": 16,
-    "functions": 16,
+    "functions": 19,
     "views": 6,
-    "triggers": 14,
-    "not_null_columns": 3,
+    "triggers": 16,
+    "not_null_columns": 6,
 }
 
 # Parsed and verified separately from PATTERNS/DB_QUERIES: a column isn't a

@@ -454,34 +454,169 @@ CREATE TABLE IF NOT EXISTS program_participants (
                                                        -- (e.g. the MGA's own fee under the program)
   profit_commission_formula         TEXT,  -- free text pending underwriting/finance sign-off - see
                                               -- ADR 0007's open items, not yet a computed formula
-  effective_range                   TSTZRANGE NOT NULL
+  effective_range                   TSTZRANGE NOT NULL,
+
+  -- ADR 0017. Scoped per (program_id, participant_name, participant_type),
+  -- not per program_id: multiple participants are legitimately concurrent on
+  -- one program, exactly as multiple vehicles are on one policy (ADR 0016).
+  -- The same named entity may hold two different roles on one program (a
+  -- fronting carrier that also takes a reinsurance share), so the role is
+  -- part of the key; what can never happen is the same entity holding the
+  -- same role twice at once, which is a duplicate that the waterfall would
+  -- silently pay twice.
+  CONSTRAINT no_overlapping_program_participants
+    EXCLUDE USING gist (program_id WITH =, participant_name WITH =,
+                        participant_type WITH =, effective_range WITH &&)
 );
 
 CREATE INDEX IF NOT EXISTS idx_program_participants_program ON program_participants(program_id);
 
+-- ADR 0017: append-only, same discipline as policy_endorsements/
+-- policy_vehicles/policy_drivers. A participant's share changing over the
+-- life of a program is a new row, never an edit to the old one - the old
+-- row is what a settlement report for a past period has to be able to read.
+--
+-- The ONE mechanical difference from the policy-side append-only tables, and
+-- the reason for the escape hatch below: those tables let their correction
+-- function run `ALTER TABLE ... DISABLE TRIGGER` for a single statement.
+-- That is impossible here. This table also carries a DEFERRABLE constraint
+-- trigger (the share-sum check), so any UPDATE leaves pending trigger events,
+-- and Postgres refuses `ALTER TABLE ... ENABLE TRIGGER` while a table has
+-- pending trigger events - the re-enable fails and the supersession cannot
+-- complete. Verified against luxauto-pg, not assumed; see ADR 0017.
+--
+-- So the exception is expressed in the trigger instead, and narrowly: the one
+-- mutation a supersession actually needs is closing a row's upper bound,
+-- leaving every other column and the lower bound untouched. That is stricter
+-- than DISABLE TRIGGER, which turns the rule off entirely for the duration.
+-- The flag is transaction-local (set_config's is_local) and cleared by
+-- correct_program_participant() immediately after its UPDATE. It is not a
+-- privilege boundary - `odoo` has no UPDATE grant on this table at all, and
+-- anyone who could set the flag and hand-craft the matching UPDATE could
+-- equally drop the trigger - it is a guard against the function's own
+-- escape hatch being reachable by accident from ordinary application writes.
+CREATE OR REPLACE FUNCTION reject_program_participants_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'UPDATE'
+     AND current_setting('luxauto.superseding_participant', true) = 'on'
+     AND NEW.participant_id   =  OLD.participant_id
+     AND NEW.program_id       =  OLD.program_id
+     AND NEW.participant_name =  OLD.participant_name
+     AND NEW.participant_type =  OLD.participant_type
+     AND NEW.share_percentage =  OLD.share_percentage
+     AND NEW.commission_rate IS NOT DISTINCT FROM OLD.commission_rate
+     AND NEW.profit_commission_formula IS NOT DISTINCT FROM OLD.profit_commission_formula
+     AND lower(NEW.effective_range) IS NOT DISTINCT FROM lower(OLD.effective_range)
+  THEN
+    RETURN NEW;  -- correct_program_participant() closing this row's upper bound
+  END IF;
+
+  RAISE EXCEPTION 'program_participants is append-only: % is not permitted', TG_OP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER program_participants_no_update
+  BEFORE UPDATE ON program_participants
+  FOR EACH ROW EXECUTE FUNCTION reject_program_participants_mutation();
+
+CREATE OR REPLACE TRIGGER program_participants_no_delete
+  BEFORE DELETE ON program_participants
+  FOR EACH ROW EXECUTE FUNCTION reject_program_participants_mutation();
+
 -- Risk-bearing participant shares (capacity_provider + reinsurer) must sum to
--- 100% per program. This is a simplified, non-temporal version of the check -
--- it validates the CURRENT total for the affected program on every write,
--- not a full time-range-overlap-aware version like the state rating table's
--- exclusion constraint. Flagged explicitly as a simplification: a program
--- whose participant panel changes over time needs a more rigorous version
--- before this is production-safe. Documented here rather than silently
--- claiming more rigor than what's actually implemented.
+-- 100% per program - at every instant of the program's own term, not summed
+-- across all history (ADR 0017; ADR 0007 shipped the non-temporal version and
+-- flagged it, ADR 0014 and ADR 0016 both name-checked the gap as still open).
+--
+-- Why "at every instant" rather than "at each version boundary": those are
+-- the same rule. Shares are piecewise-constant in time - the active set only
+-- changes where some row's range starts or ends - so checking every boundary
+-- point IS checking every instant, with finitely many probes. This function
+-- returns the earliest instant inside the program term where the risk-bearing
+-- shares don't total 100, or no rows if the program is sound. One
+-- implementation, used by both the constraint trigger and the migration guard
+-- below, rather than the same logic written twice.
+--
+-- A program with no risk-bearing participants at all is not checked (the
+-- EXISTS below): that's a program whose panel hasn't been set up yet, which
+-- has to remain insertable, and it's the same escape the original
+-- `total_share != 0` clause provided.
+CREATE OR REPLACE FUNCTION first_program_share_gap(p_program_id UUID)
+RETURNS TABLE (bad_instant TIMESTAMPTZ, total_share NUMERIC) AS $$
+  WITH prog AS (
+    SELECT effective_range AS term FROM insurance_programs WHERE program_id = p_program_id
+  ),
+  risk AS (
+    SELECT share_percentage, effective_range
+    FROM program_participants
+    WHERE program_id = p_program_id
+      AND participant_type IN ('capacity_provider', 'reinsurer')
+  ),
+  -- Every point where the active set can change, plus the start of the
+  -- program term itself (which catches a panel that starts late).
+  probes AS (
+    SELECT COALESCE(lower(term), '-infinity'::TIMESTAMPTZ) AS t FROM prog
+    UNION
+    SELECT lower(effective_range) FROM risk
+    UNION
+    SELECT upper(effective_range) FROM risk
+  )
+  SELECT p.t,
+         COALESCE((SELECT SUM(r.share_percentage) FROM risk r WHERE r.effective_range @> p.t), 0)
+  FROM probes p, prog
+  WHERE p.t IS NOT NULL                 -- an unbounded row bound; the program's own probe covers it
+    AND prog.term @> p.t                -- '[)' semantics: the term's own upper bound isn't inside it
+    AND EXISTS (SELECT 1 FROM risk)
+    AND COALESCE((SELECT SUM(r.share_percentage) FROM risk r WHERE r.effective_range @> p.t), 0)
+        NOT BETWEEN 99.99 AND 100.01
+  ORDER BY p.t
+  LIMIT 1;
+$$ LANGUAGE sql STABLE;
+
 CREATE OR REPLACE FUNCTION check_program_shares_sum_to_100()
 RETURNS TRIGGER AS $$
 DECLARE
-  affected_program UUID;
-  total_share NUMERIC(6,2);
+  v_program_id UUID;
+  v_term TSTZRANGE;
+  v_outside RECORD;
+  v_gap RECORD;
 BEGIN
-  affected_program := COALESCE(NEW.program_id, OLD.program_id);
-  SELECT COALESCE(SUM(share_percentage), 0) INTO total_share
-  FROM program_participants
-  WHERE program_id = affected_program
-    AND participant_type IN ('capacity_provider', 'reinsurer');
-  IF total_share NOT BETWEEN 99.99 AND 100.01 AND total_share != 0 THEN
-    RAISE EXCEPTION 'program % risk-bearing participant shares sum to %%%, must equal 100%%',
-      affected_program, total_share;
+  v_program_id := COALESCE(NEW.program_id, OLD.program_id);
+
+  SELECT effective_range INTO v_term
+  FROM insurance_programs
+  WHERE program_id = v_program_id;
+
+  -- The program itself went away in this transaction (ON DELETE CASCADE);
+  -- there is no term left to validate the panel against.
+  IF NOT FOUND THEN
+    RETURN NULL;
   END IF;
+
+  -- Participation outside the program's own term is what makes "100% at
+  -- every instant of the term" a well-defined question in the first place.
+  SELECT participant_name, participant_type, effective_range INTO v_outside
+  FROM program_participants
+  WHERE program_id = v_program_id
+    AND NOT (effective_range <@ v_term)
+  LIMIT 1;
+
+  IF FOUND THEN
+    RAISE EXCEPTION 'PROGRAM_PARTICIPANT_OUTSIDE_TERM: % (%) on program % is effective % , which is not contained in the program term %',
+      v_outside.participant_name, v_outside.participant_type, v_program_id,
+      v_outside.effective_range, v_term
+      USING HINT = 'A participant cannot bear risk when the program is not in force. Either shorten the participant''s effective_range to fit the program term, or change the program term first.';
+  END IF;
+
+  SELECT * INTO v_gap FROM first_program_share_gap(v_program_id);
+
+  IF FOUND THEN
+    RAISE EXCEPTION 'PROGRAM_SHARES_NOT_100_AT_INSTANT: program % risk-bearing participant shares sum to %%% as of %, must equal 100%%',
+      v_program_id, v_gap.total_share, v_gap.bad_instant
+      USING HINT = 'Under 100% means a gap (an instant where part of the risk is unplaced); over 100% usually means an old row was not closed when its replacement was added. This trigger is DEFERRABLE INITIALLY DEFERRED, so close the outgoing row and add the incoming one in the same transaction.';
+  END IF;
+
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
@@ -494,6 +629,130 @@ DO $$ BEGIN
 EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
+
+-- ADR 0017 migration, same guarded shape as the ADR 0016 addendum's: the
+-- CREATE TABLE above carries the exclusion constraint, but it's CREATE TABLE
+-- IF NOT EXISTS, so a database that already has this table would never get
+-- it. Existing rows are counted and reported before anything is enforced -
+-- these are capacity agreements, and a schema file that "fixes" them to
+-- apply cleanly is worse than one that refuses.
+--
+-- The identity columns (participant_name, participant_type, effective_range)
+-- were already NOT NULL from ADR 0007 - nothing to change, stated explicitly
+-- and re-asserted idempotently so the ADR 0015 verifier checks them rather
+-- than the file merely assuming them.
+DO $$
+DECLARE
+  v_overlaps INTEGER;
+  v_bad_programs INTEGER;
+BEGIN
+  SELECT count(*) INTO v_overlaps
+  FROM program_participants a
+  JOIN program_participants b
+    ON a.participant_id < b.participant_id
+   AND a.program_id = b.program_id
+   AND a.participant_name = b.participant_name
+   AND a.participant_type = b.participant_type
+   AND a.effective_range && b.effective_range;
+
+  IF v_overlaps > 0 THEN
+    RAISE EXCEPTION 'ADR 0017: cannot add no_overlapping_program_participants - % overlapping pair(s) of rows share a (program, participant, role) and an effective period', v_overlaps
+      USING HINT = 'Each pair is one participant counted twice for the same period - the waterfall pays both. Close the superseded row''s effective_range (or delete the duplicate) before re-running this file.';
+  END IF;
+
+  SELECT count(*) INTO v_bad_programs
+  FROM insurance_programs p
+  WHERE EXISTS (SELECT 1 FROM first_program_share_gap(p.program_id));
+
+  IF v_bad_programs > 0 THEN
+    RAISE EXCEPTION 'ADR 0017: cannot enforce the temporal 100%% share rule - % existing program(s) do not total 100%% at every instant of their term', v_bad_programs
+      USING HINT = 'Run: SELECT p.program_id, g.* FROM insurance_programs p, LATERAL first_program_share_gap(p.program_id) g; to see the first bad instant per program. Fix the panels, then re-run this file.';
+  END IF;
+
+  ALTER TABLE program_participants ALTER COLUMN participant_name SET NOT NULL;
+  ALTER TABLE program_participants ALTER COLUMN participant_type SET NOT NULL;
+  ALTER TABLE program_participants ALTER COLUMN effective_range SET NOT NULL;
+
+  -- Checked explicitly rather than wrapped in EXCEPTION WHEN duplicate_object
+  -- like the enum types above: an EXCLUDE constraint builds an index behind
+  -- itself, so re-adding an existing one raises duplicate_table ("relation
+  -- ... already exists"), not duplicate_object, and a duplicate_object
+  -- handler silently fails to catch it. Found by re-running this file, which
+  -- is the entire point of ADR 0015's idempotency requirement.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'no_overlapping_program_participants'
+      AND conrelid = 'program_participants'::regclass
+  ) THEN
+    ALTER TABLE program_participants
+      ADD CONSTRAINT no_overlapping_program_participants
+      EXCLUDE USING gist (program_id WITH =, participant_name WITH =,
+                          participant_type WITH =, effective_range WITH &&);
+  END IF;
+END $$;
+
+-- Supersedes one participant row with a corrected/renegotiated one, mirroring
+-- correct_policy_endorsement()/correct_policy_vehicle() (ADR 0014/0016):
+-- close the old row's range at the new row's start, insert the new row, never
+-- mutate in place. Same shape, different escape hatch - see the append-only
+-- trigger function above for why this one can't use DISABLE TRIGGER.
+-- No audit-log write, unlike its policy-side siblings -
+-- policy_events is foreign-keyed to a policy and there is no program-level
+-- event table; the append-only row history is this table's only audit trail
+-- today, and it records what changed and when, but not who. Named as an open
+-- item in ADR 0017 rather than fixed by inventing a table here.
+--
+-- A share change usually needs a second call in the same transaction (drop
+-- one participant to 30%, raise another to 70%): the sum trigger is DEFERRED
+-- precisely so a panel change can be several statements and still be checked
+-- as one.
+CREATE OR REPLACE FUNCTION correct_program_participant(
+  p_participant_id UUID,
+  p_new_effective_range TSTZRANGE,
+  p_new_participant_type participant_type_t,
+  p_new_participant_name TEXT,
+  p_new_share_percentage NUMERIC,
+  p_new_commission_rate NUMERIC,
+  p_new_profit_commission_formula TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_program_id UUID;
+  v_old_range TSTZRANGE;
+  v_new_id UUID;
+BEGIN
+  SELECT program_id, effective_range INTO v_program_id, v_old_range
+  FROM program_participants
+  WHERE participant_id = p_participant_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'correct_program_participant: participant % does not exist', p_participant_id;
+  END IF;
+
+  IF p_new_participant_name IS NULL OR p_new_participant_type IS NULL THEN
+    RAISE EXCEPTION 'PROGRAM_PARTICIPANT_IDENTITY_REQUIRED: correcting participant % requires both a participant_name and a participant_type', p_participant_id
+      USING HINT = 'The overlap constraint keys on (program_id, participant_name, participant_type) - a row missing either half would be exempt from it.';
+  END IF;
+
+  PERFORM set_config('luxauto.superseding_participant', 'on', true);
+  UPDATE program_participants
+  SET effective_range = tstzrange(lower(v_old_range), lower(p_new_effective_range))
+  WHERE participant_id = p_participant_id;
+  PERFORM set_config('luxauto.superseding_participant', 'off', true);
+
+  INSERT INTO program_participants (
+    program_id, participant_type, participant_name, share_percentage,
+    commission_rate, profit_commission_formula, effective_range
+  )
+  VALUES (
+    v_program_id, p_new_participant_type, p_new_participant_name, p_new_share_percentage,
+    p_new_commission_rate, p_new_profit_commission_formula, p_new_effective_range
+  )
+  RETURNING participant_id INTO v_new_id;
+
+  RETURN v_new_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ============================================================================
 -- QUOTES

@@ -93,4 +93,4 @@ The two correction functions get the same named check for the same reason - they
 - The baseline moves by one category only (`not_null_columns: 3`); no tables, types, functions, views or triggers were added.
 - `bind_policy()`'s signature is still unchanged - three ADRs running.
 - DH-04 now has enforcement at two layers with no coordination between them: the pipeline routes incomplete applications to `INFORMATION_REQUEST`, and the database refuses the bind regardless of whether that routing happened. That redundancy is the point.
-- The `program_participants` overlap gap that section 3 name-checked as the same category of problem is **still open** - this addendum closes one instance, not the class.
+- ~~The `program_participants` overlap gap that section 3 name-checked as the same category of problem is **still open** - this addendum closes one instance, not the class.~~ Closed by **ADR 0017** (2026-08-13), which found the same bug shape there (two active identity rows, no constraint keyed on that identity) plus a non-temporal share check that was actively rejecting correct data.
