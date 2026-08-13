@@ -2230,6 +2230,407 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ============================================================================
+-- NONRENEWAL AND EXPIRATION (ADR 0019)
+-- The two remaining ways a policy stops, after ADR 0018's cancellation.
+-- policy_status_t has carried 'expired' and 'nonrenewed' since ADR 0010 and
+-- nothing ever set either one; cancel_policy() was the only status
+-- transition in the schema.
+--
+-- The split: nonrenewal is a carrier DECISION, recorded when it is made and
+-- taking effect when the term ends. Expiration is what happens when a term
+-- ends and nobody decided anything. So one scheduled function owns both
+-- term-end transitions, and it picks which status to write based on whether
+-- a nonrenewal decision was recorded - see ADR 0019 sections 2 and 3.
+-- ============================================================================
+
+-- Deliberately empty, exactly like short_rate_factors (ADR 0018). Nonrenewal
+-- notice periods are state-regulated - commonly 30-60+ days of advance
+-- written notice, varying by state and sometimes by how long the insured has
+-- been with the carrier - and the governing number comes from a filed rule or
+-- a DOI bulletin, not from general knowledge. This table is the shape those
+-- requirements load into; it ships with no rows, and
+-- nonrenewal_notice_days() below refuses rather than assuming one.
+CREATE TABLE IF NOT EXISTS nonrenewal_notice_requirements (
+  notice_requirement_id   UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  state                   CHAR(2) NOT NULL,
+  -- NULL means "any program in this state"; a program-specific row wins.
+  program_id              UUID REFERENCES insurance_programs(program_id),
+  notice_days             SMALLINT NOT NULL,
+  -- The mechanism for tenure-banded requirements (a state requiring longer
+  -- notice once an insured has been with the carrier N years). NULL means the
+  -- requirement applies regardless of tenure. Note that until renewal exists
+  -- (explicitly out of scope, ADR 0019), a policy's tenure is just its own
+  -- age, so this is always well under one year in practice - the column is
+  -- here so a real filed banded requirement can be represented at all, not
+  -- because anything can currently exceed the lowest band.
+  min_policy_years        SMALLINT,
+  effective_range         TSTZRANGE NOT NULL,
+  -- Provenance, same discipline as short_rate_factors and
+  -- state_rating_table_versions: a notice period with no filing behind it is
+  -- what this table exists to prevent.
+  serff_filing_tracking_number TEXT,
+  regulatory_reference    TEXT NOT NULL,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT nonrenewal_notice_requirements_days_ck CHECK (notice_days >= 0),
+  CONSTRAINT nonrenewal_notice_requirements_years_ck CHECK (min_policy_years IS NULL OR min_policy_years >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_nonrenewal_notice_requirements_state
+  ON nonrenewal_notice_requirements(state);
+
+-- Returns the filed notice requirement, or raises. Never returns a default:
+-- "no filed requirement loaded" and "the filed requirement is zero days" are
+-- different answers and only one of them is safe to act on.
+CREATE OR REPLACE FUNCTION nonrenewal_notice_days(
+  p_state CHAR(2),
+  p_program_id UUID,
+  p_policy_years NUMERIC,
+  p_as_of TIMESTAMPTZ
+) RETURNS SMALLINT AS $$
+DECLARE
+  v_days SMALLINT;
+BEGIN
+  SELECT r.notice_days INTO v_days
+  FROM nonrenewal_notice_requirements r
+  WHERE r.state = p_state
+    AND (r.program_id IS NULL OR r.program_id = p_program_id)
+    AND (r.min_policy_years IS NULL OR r.min_policy_years <= p_policy_years)
+    AND r.effective_range @> p_as_of
+  -- Most specific wins: program-specific over statewide, then the highest
+  -- tenure band the policy actually qualifies for.
+  ORDER BY (r.program_id IS NOT NULL) DESC, r.min_policy_years DESC NULLS LAST
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'NONRENEWAL_NOTICE_REQUIREMENT_NOT_CONFIGURED: no filed nonrenewal notice requirement loaded for state %, program %, policy tenure % years, as of %',
+      p_state, p_program_id, ROUND(p_policy_years, 2), p_as_of
+      USING HINT = 'Nonrenewal notice periods are state-regulated. Load nonrenewal_notice_requirements from the actual filed rule or DOI bulletin for this state before issuing a nonrenewal - this schema will not assume a notice period on a decision that has to be defensible to a regulator.';
+  END IF;
+
+  RETURN v_days;
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- The nonrenewal decision itself. effective_range is [notice given, term end)
+-- - the notice window the decision covers - which mirrors how
+-- policy_cancellations stores its unearned window and gives the correction
+-- path the original term end after the fact.
+CREATE TABLE IF NOT EXISTS policy_nonrenewals (
+  nonrenewal_id       UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  policy_id           UUID NOT NULL REFERENCES policies(policy_id),
+  effective_range     TSTZRANGE NOT NULL,
+  reason_code         TEXT NOT NULL,
+  -- What the filed requirement was, and what was actually given, both
+  -- recorded at decision time: the validation below is only as good as the
+  -- table it read, and a later audit needs to see which number it used.
+  notice_days_required SMALLINT NOT NULL,
+  notice_days_given   INTEGER NOT NULL,
+  notes               TEXT,
+  performed_by        TEXT NOT NULL,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- Per policy, like policy_cancellations': a policy has one nonrenewal
+  -- decision in force at a time. A superseded decision carries an empty
+  -- range, which overlaps nothing.
+  CONSTRAINT no_overlapping_policy_nonrenewals
+    EXCLUDE USING gist (policy_id WITH =, effective_range WITH &&)
+);
+
+CREATE INDEX IF NOT EXISTS idx_policy_nonrenewals_policy ON policy_nonrenewals(policy_id);
+
+-- Append-only, with the narrow transaction-local-flag escape hatch from ADR
+-- 0016 addendum 2 and the empty-range shape from addendum 3 - both applied
+-- from the start rather than rediscovered. Permitted shapes: closing the
+-- upper bound, or emptying a non-empty row. Never a DELETE.
+CREATE OR REPLACE FUNCTION reject_policy_nonrenewals_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'UPDATE'
+     AND current_setting('luxauto.superseding_policy_nonrenewal', true) = 'on'
+     AND NOT isempty(OLD.effective_range)
+     AND (isempty(NEW.effective_range)
+          OR lower(NEW.effective_range) IS NOT DISTINCT FROM lower(OLD.effective_range))
+     AND to_jsonb(NEW) - 'effective_range' = to_jsonb(OLD) - 'effective_range'
+  THEN
+    RETURN NEW;  -- correct_policy_nonrenewal() superseding this row
+  END IF;
+
+  RAISE EXCEPTION 'policy_nonrenewals is append-only: % is not permitted', TG_OP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER policy_nonrenewals_no_update
+  BEFORE UPDATE ON policy_nonrenewals
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_nonrenewals_mutation();
+
+CREATE OR REPLACE TRIGGER policy_nonrenewals_no_delete
+  BEFORE DELETE ON policy_nonrenewals
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_nonrenewals_mutation();
+
+-- Records a decision not to renew. Does NOT change policies.status: the
+-- policy is still in force until its term ends, and 'active' in this schema
+-- means in force (cancel_policy() refuses anything else, and an insured who
+-- has just received a nonrenewal notice can still cancel mid-term). The
+-- status flip to 'nonrenewed' happens at term end, in expire_policies()
+-- below, which is also what keeps nonrenewal and expiration from being two
+-- mechanisms that could disagree about the same instant. See ADR 0019
+-- section 2.
+CREATE OR REPLACE FUNCTION nonrenew_policy(
+  p_policy_id UUID,
+  p_reason_code TEXT,
+  p_notice_at TIMESTAMPTZ,
+  p_notes TEXT,
+  p_performed_by TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_status policy_status_t;
+  v_term TSTZRANGE;
+  v_at TIMESTAMPTZ;
+  v_state CHAR(2);
+  v_program_id UUID;
+  v_policy_years NUMERIC;
+  v_required SMALLINT;
+  v_given INTEGER;
+  v_nonrenewal_id UUID;
+BEGIN
+  SELECT status, effective_range INTO v_status, v_term
+  FROM policies
+  WHERE policy_id = p_policy_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'nonrenew_policy: policy % does not exist', p_policy_id;
+  END IF;
+
+  -- Same precondition discipline as bind/cancel: a cancelled, expired or
+  -- already-nonrenewed policy has reached a terminal state, and deciding not
+  -- to renew it is either a duplicate or a misreading of what happened.
+  IF v_status <> 'active' THEN
+    RAISE EXCEPTION 'nonrenew_policy: policy % is not active (current status: %)', p_policy_id, v_status;
+  END IF;
+
+  IF p_reason_code IS NULL OR btrim(p_reason_code) = '' THEN
+    RAISE EXCEPTION 'NONRENEWAL_REASON_CODE_REQUIRED: nonrenewing policy % requires a reason_code', p_policy_id
+      USING HINT = 'Use a coded reason the way the referral matrix, decision_log and cancellations do (e.g. NR_LOSS_HISTORY, NR_APPETITE_EXIT, NR_UNDERWRITING_INELIGIBLE). Prose belongs in notes.';
+  END IF;
+
+  IF upper(v_term) IS NULL THEN
+    RAISE EXCEPTION 'NONRENEWAL_UNBOUNDED_TERM: policy % has no term end (%), so there is nothing to decline to renew', p_policy_id, v_term
+      USING HINT = 'A nonrenewal is a decision about what happens when a term ends. Fix the policy term first.';
+  END IF;
+
+  v_at := COALESCE(p_notice_at, now());
+
+  IF NOT (v_term @> v_at) THEN
+    RAISE EXCEPTION 'NONRENEWAL_DATE_OUTSIDE_TERM: notice date % is not inside policy %''s term %', v_at, p_policy_id, v_term
+      USING HINT = 'Notice is given while the policy is in force. A date after the term end is a decision about a policy that has already ended; a date before it is a typo.';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM policy_nonrenewals n
+             WHERE n.policy_id = p_policy_id AND NOT isempty(n.effective_range)) THEN
+    RAISE EXCEPTION 'NONRENEWAL_ALREADY_RECORDED: policy % already has a nonrenewal decision in force', p_policy_id
+      USING HINT = 'Use correct_policy_nonrenewal() to change the notice date, reason or notes of the existing decision.';
+  END IF;
+
+  SELECT a.garaging_state, q.program_id INTO v_state, v_program_id
+  FROM policies p
+  JOIN quotes q ON q.quote_id = p.quote_id
+  JOIN applications a ON a.application_id = q.application_id
+  WHERE p.policy_id = p_policy_id;
+
+  v_policy_years := EXTRACT(EPOCH FROM (v_at - lower(v_term))) / (365.25 * 86400);
+  v_required := nonrenewal_notice_days(v_state, v_program_id, v_policy_years, v_at);
+  v_given := FLOOR(EXTRACT(EPOCH FROM (upper(v_term) - v_at)) / 86400);
+
+  IF v_given < v_required THEN
+    RAISE EXCEPTION 'NONRENEWAL_NOTICE_TOO_SHORT: policy % requires % days notice in %, but notice at % leaves only % days before the term ends at %',
+      p_policy_id, v_required, v_state, v_at, v_given, upper(v_term)
+      USING HINT = 'Issue the notice earlier, or let the policy run to term and expire. A nonrenewal recorded with insufficient notice is not enforceable and this schema will not record one.';
+  END IF;
+
+  INSERT INTO policy_nonrenewals (
+    policy_id, effective_range, reason_code, notice_days_required, notice_days_given, notes, performed_by
+  )
+  VALUES (
+    p_policy_id, tstzrange(v_at, upper(v_term)), p_reason_code, v_required, v_given, p_notes, p_performed_by
+  )
+  RETURNING nonrenewal_id INTO v_nonrenewal_id;
+
+  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+  VALUES (p_policy_id, 'nonrenewal_noticed', p_performed_by,
+          format('Nonrenewal notice (%s), %s days given against %s required, effective at term end %s: %s',
+                 p_reason_code, v_given, v_required, upper(v_term), COALESCE(p_notes, '')));
+
+  RETURN v_nonrenewal_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Corrects a nonrenewal recorded with the wrong notice date, reason or
+-- notes. Supersedes by EMPTYING the old row, the same choice
+-- correct_policy_cancellation() made and for the same reason: a nonrenewal
+-- is a point decision whose range describes the notice window ONE decision
+-- covered, not a period fact that was true until the correction took over.
+-- It is also the shape that works in both directions - the earlier-date case
+-- that ADR 0016 addendum 3 had to fix in four other correction functions
+-- cannot arise here, because no shortened range is ever constructed.
+--
+-- Re-validates the corrected notice date against the filed requirement: a
+-- correction that moved the notice later could otherwise slip under the
+-- notice period the original satisfied.
+--
+-- Not a withdrawal. "This nonrenewal should never have been issued" means
+-- the policy renews after all, which is renewal - explicitly out of scope
+-- for ADR 0019 and undesigned.
+CREATE OR REPLACE FUNCTION correct_policy_nonrenewal(
+  p_nonrenewal_id UUID,
+  p_new_notice_at TIMESTAMPTZ,
+  p_new_reason_code TEXT,
+  p_new_notes TEXT,
+  p_performed_by TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_policy_id UUID;
+  v_old_range TSTZRANGE;
+  v_old_at TIMESTAMPTZ;
+  v_term TSTZRANGE;
+  v_state CHAR(2);
+  v_program_id UUID;
+  v_policy_years NUMERIC;
+  v_required SMALLINT;
+  v_given INTEGER;
+  v_new_id UUID;
+BEGIN
+  SELECT policy_id, effective_range INTO v_policy_id, v_old_range
+  FROM policy_nonrenewals
+  WHERE nonrenewal_id = p_nonrenewal_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'correct_policy_nonrenewal: nonrenewal % does not exist', p_nonrenewal_id;
+  END IF;
+
+  IF isempty(v_old_range) THEN
+    RAISE EXCEPTION 'correct_policy_nonrenewal: nonrenewal % has already been superseded', p_nonrenewal_id
+      USING HINT = 'Correct the nonrenewal that is currently in force for this policy, not one a previous correction already replaced.';
+  END IF;
+
+  IF p_new_reason_code IS NULL OR btrim(p_new_reason_code) = '' THEN
+    RAISE EXCEPTION 'NONRENEWAL_REASON_CODE_REQUIRED: correcting nonrenewal % requires a reason_code', p_nonrenewal_id
+      USING HINT = 'A corrected nonrenewal still has to say why, in the same coded form as the original.';
+  END IF;
+
+  v_old_at := lower(v_old_range);
+
+  -- The term: the policy's own start, and the term end preserved as this
+  -- row's upper bound (the policy row is not truncated by a nonrenewal, but
+  -- reading it from the record keeps this symmetric with
+  -- correct_policy_cancellation()).
+  SELECT tstzrange(lower(p.effective_range), upper(v_old_range)) INTO v_term
+  FROM policies p WHERE p.policy_id = v_policy_id;
+
+  IF NOT (v_term @> p_new_notice_at) THEN
+    RAISE EXCEPTION 'NONRENEWAL_DATE_OUTSIDE_TERM: corrected notice date % is not inside policy %''s term %', p_new_notice_at, v_policy_id, v_term
+      USING HINT = 'A correction moves the notice date within the term the policy actually ran.';
+  END IF;
+
+  SELECT a.garaging_state, q.program_id INTO v_state, v_program_id
+  FROM policies p
+  JOIN quotes q ON q.quote_id = p.quote_id
+  JOIN applications a ON a.application_id = q.application_id
+  WHERE p.policy_id = v_policy_id;
+
+  v_policy_years := EXTRACT(EPOCH FROM (p_new_notice_at - lower(v_term))) / (365.25 * 86400);
+  v_required := nonrenewal_notice_days(v_state, v_program_id, v_policy_years, p_new_notice_at);
+  v_given := FLOOR(EXTRACT(EPOCH FROM (upper(v_term) - p_new_notice_at)) / 86400);
+
+  IF v_given < v_required THEN
+    RAISE EXCEPTION 'NONRENEWAL_NOTICE_TOO_SHORT: corrected notice at % leaves only % days before policy %''s term ends at %, against % days required in %',
+      p_new_notice_at, v_given, v_policy_id, upper(v_term), v_required, v_state
+      USING HINT = 'Correcting a notice date later can push it inside the required notice period. Correct to a date that still satisfies the filed requirement.';
+  END IF;
+
+  PERFORM set_config('luxauto.superseding_policy_nonrenewal', 'on', true);
+  UPDATE policy_nonrenewals
+  SET effective_range = tstzrange(v_old_at, v_old_at)  -- empty: superseded entirely
+  WHERE nonrenewal_id = p_nonrenewal_id;
+  PERFORM set_config('luxauto.superseding_policy_nonrenewal', 'off', true);
+
+  INSERT INTO policy_nonrenewals (
+    policy_id, effective_range, reason_code, notice_days_required, notice_days_given, notes, performed_by
+  )
+  VALUES (
+    v_policy_id, tstzrange(p_new_notice_at, upper(v_term)), p_new_reason_code, v_required, v_given, p_new_notes, p_performed_by
+  )
+  RETURNING nonrenewal_id INTO v_new_id;
+
+  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+  VALUES (v_policy_id, 'nonrenewal_corrected', p_performed_by,
+          format('Corrected nonrenewal %s with new nonrenewal %s (%s, %s days given against %s required)',
+                 p_nonrenewal_id, v_new_id, p_new_reason_code, v_given, v_required));
+
+  RETURN v_new_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- The scheduled term-end transition, run by scripts/expire-policies.sh on a
+-- systemd timer (ADR 0019 section 3 - pg_cron is preloaded on luxauto-pg but
+-- not allow-listed by azure.extensions, so it cannot be created).
+--
+-- Only touches policies that are still 'active' with a term end at or before
+-- p_as_of. That single filter is what makes it idempotent (a policy it has
+-- already transitioned is no longer 'active', so a second run skips it) and
+-- what keeps it away from cancelled policies - ADR 0018's cancel_policy()
+-- truncates effective_range to the cancellation date, so a cancelled policy
+-- DOES have a term end in the past and a date-only query would sweep it up
+-- and overwrite a terminal status. The status filter is load-bearing, not
+-- defensive decoration.
+--
+-- A policy with a nonrenewal decision in force becomes 'nonrenewed'; every
+-- other expiring policy becomes 'expired'. One function owns both so the two
+-- can never disagree about the same policy at the same instant.
+CREATE OR REPLACE FUNCTION expire_policies(p_as_of TIMESTAMPTZ DEFAULT now())
+RETURNS TABLE (expired_count INTEGER, nonrenewed_count INTEGER) AS $$
+DECLARE
+  v_expired INTEGER := 0;
+  v_nonrenewed INTEGER := 0;
+BEGIN
+  WITH due AS (
+    SELECT p.policy_id,
+           EXISTS (SELECT 1 FROM policy_nonrenewals n
+                   WHERE n.policy_id = p.policy_id AND NOT isempty(n.effective_range)) AS nonrenewed
+    FROM policies p
+    WHERE p.status = 'active'
+      AND upper(p.effective_range) IS NOT NULL
+      AND upper(p.effective_range) <= p_as_of
+    FOR UPDATE OF p
+  ),
+  updated AS (
+    UPDATE policies p
+    SET status = CASE WHEN d.nonrenewed THEN 'nonrenewed'::policy_status_t ELSE 'expired'::policy_status_t END
+    FROM due d
+    WHERE p.policy_id = d.policy_id
+    RETURNING p.policy_id, d.nonrenewed
+  ),
+  logged AS (
+    INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+    SELECT u.policy_id,
+           CASE WHEN u.nonrenewed THEN 'nonrenewed' ELSE 'expired' END,
+           'system',
+           format('Term ended; status set by expire_policies() as of %s', p_as_of)
+    FROM updated u
+    RETURNING policy_id
+  )
+  SELECT count(*) FILTER (WHERE NOT nonrenewed)::INTEGER,
+         count(*) FILTER (WHERE nonrenewed)::INTEGER
+  INTO v_expired, v_nonrenewed
+  FROM updated;
+
+  RETURN QUERY SELECT v_expired, v_nonrenewed;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- ============================================================================
 -- ODOO READ-SIDE VIEWS (ADR 0006 pattern, ADR 0010 scope)
 -- These three views exist purely for Odoo to read: each derives a hashed,
 -- display-only pseudo-integer `id` from its underlying UUID key(s), the
@@ -2410,6 +2811,12 @@ GRANT EXECUTE ON FUNCTION correct_policy_cancellation(
   UUID, TIMESTAMPTZ, cancellation_type_t, TEXT, refund_method_t, TEXT, TEXT
 ) TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_cancellation_waterfall(UUID) TO odoo;
+-- ADR 0019. expire_policies() is granted so the scheduled job can run as the
+-- least-privilege `odoo` role rather than as the table owner.
+GRANT EXECUTE ON FUNCTION nonrenew_policy(UUID, TEXT, TIMESTAMPTZ, TEXT, TEXT) TO odoo;
+GRANT EXECUTE ON FUNCTION correct_policy_nonrenewal(UUID, TIMESTAMPTZ, TEXT, TEXT, TEXT) TO odoo;
+GRANT EXECUTE ON FUNCTION nonrenewal_notice_days(CHAR(2), UUID, NUMERIC, TIMESTAMPTZ) TO odoo;
+GRANT EXECUTE ON FUNCTION expire_policies(TIMESTAMPTZ) TO odoo;
 -- Read-only and useful before the fact: a cancellation UI should be able to
 -- show the return premium it is about to create.
 GRANT EXECUTE ON FUNCTION policy_unearned_premium(UUID, TSTZRANGE, TIMESTAMPTZ) TO odoo;

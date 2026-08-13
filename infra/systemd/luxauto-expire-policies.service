@@ -1,0 +1,14 @@
+# ADR 0019 section 3. Installed on luxauto-odoo; see infra/systemd/README.md.
+[Unit]
+Description=Luxury Auto MGA - term-end policy status transitions (ADR 0019)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Runs as odoo so it can read /etc/odoo/odoo.conf (0640 odoo:odoo) for the
+# least-privilege role's password. expire_policies() is SECURITY DEFINER and
+# granted to odoo, so this job needs no table privileges of its own.
+User=odoo
+Group=odoo
+ExecStart=/opt/odoo-custom-addons/luxauto/scripts/expire-policies.sh

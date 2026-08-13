@@ -1,0 +1,16 @@
+# ADR 0019 section 3. Hourly, not daily: a policy whose term ended shows the
+# wrong status until the job runs, and an hour of staleness on a status field
+# is cheap to bound when the job itself is one indexed UPDATE. Persistent=true
+# so a VM that was down catches up on the next boot instead of silently
+# skipping a term end.
+[Unit]
+Description=Hourly term-end policy status transitions (ADR 0019)
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=120
+Persistent=true
+Unit=luxauto-expire-policies.service
+
+[Install]
+WantedBy=timers.target

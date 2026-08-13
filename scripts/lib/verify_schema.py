@@ -29,19 +29,23 @@ import psycopg2
 # addendum's three SET NOT NULL columns, and ADR 0017's program_participants
 # work: +3 functions (first_program_share_gap, correct_program_participant,
 # reject_program_participants_mutation), +2 triggers (the two append-only
-# ones), +3 SET NOT NULL columns, no new tables/types/views). This
-# is the acceptance test for the parser itself - if the parser's counts don't
+# ones), +3 SET NOT NULL columns, ADR 0018's cancellation work, and ADR
+# 0019's nonrenewal/expiration work: +2 tables (nonrenewal_notice_requirements,
+# policy_nonrenewals), +5 functions (nonrenewal_notice_days, nonrenew_policy,
+# correct_policy_nonrenewal, expire_policies,
+# reject_policy_nonrenewals_mutation), +2 triggers, no new types or views).
+# This is the acceptance test for the parser itself - if the parser's counts don't
 # match this, that's a parser bug to fix, not a schema surprise, and the
 # parser is not trusted against a live database until it does. Updated by
 # hand each time the schema file changes - the object *names* are parsed
 # automatically, but this snapshot is a fact about the file's current state,
 # not something the parser can derive about itself.
 BASELINE = {
-    "tables": 26,
+    "tables": 28,
     "types": 19,
-    "functions": 26,
+    "functions": 31,
     "views": 6,
-    "triggers": 18,
+    "triggers": 20,
     "not_null_columns": 6,
 }
 
