@@ -1092,41 +1092,26 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
+-- ADR 0012's original signature, superseded by ADR 0018's seven-argument
+-- cancel_policy() further down this file. It stays callable, and refuses:
+-- it has nowhere to record who initiated the cancellation, and that is the
+-- input deciding whether a filed short-rate table applies instead of
+-- pro-rata. It also never computed a return premium, never closed out the
+-- policy's vehicle/driver snapshots, and truncated coverage to now() with no
+-- way to say otherwise - so silently forwarding to the new function under
+-- assumed arguments would be picking, on the caller's behalf, exactly the
+-- things ADR 0018 exists to make explicit. Same reasoning as
+-- SHORT_RATE_TABLE_NOT_CONFIGURED: a loud failure beats a plausible-looking
+-- default on a number someone gets paid.
 CREATE OR REPLACE FUNCTION cancel_policy(
   p_policy_id UUID,
   p_performed_by TEXT,
   p_notes TEXT
 ) RETURNS VOID AS $$
-DECLARE
-  v_status policy_status_t;
-  v_range TSTZRANGE;
 BEGIN
-  SELECT status, effective_range INTO v_status, v_range
-  FROM policies
-  WHERE policy_id = p_policy_id
-  FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'cancel_policy: policy % does not exist', p_policy_id;
-  END IF;
-
-  -- Not explicitly asked for, but the same discipline as bind_policy's
-  -- precondition checks: cancelling a non-active policy either duplicates an
-  -- audit event that already happened or silently reinterprets an expired/
-  -- nonrenewed policy as newly cancelled - both worth rejecting explicitly
-  -- rather than allowing a confusing, misleading write.
-  IF v_status <> 'active' THEN
-    RAISE EXCEPTION 'cancel_policy: policy % is not active (current status: %)',
-      p_policy_id, v_status;
-  END IF;
-
-  UPDATE policies
-  SET status = 'cancelled',
-      effective_range = tstzrange(lower(v_range), now())
-  WHERE policy_id = p_policy_id;
-
-  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
-  VALUES (p_policy_id, 'cancelled', p_performed_by, p_notes);
+  RAISE EXCEPTION 'CANCELLATION_TYPE_REQUIRED: cancel_policy(policy, performed_by, notes) cannot record who initiated the cancellation or how the return premium is computed (policy %, requested by %)',
+    p_policy_id, COALESCE(p_performed_by, 'unknown')
+    USING HINT = 'Call cancel_policy(policy_id, cancellation_type, reason_code, refund_method, cancelled_at, notes, performed_by) instead - ADR 0018. insured_initiated vs company_initiated decides pro-rata vs short-rate, and pro_rata is always available.';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
@@ -1643,6 +1628,566 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ============================================================================
+-- RETURN PREMIUM AND CANCELLATION (ADR 0018)
+-- Mid-term coverage reductions need nothing here: a reduction is an
+-- endorsement with a negative premium_delta, which policy_endorsements and
+-- calculate_premium_waterfall(program_id, amount, as_of) already handle
+-- (ADR 0014 section 5 reasoned it; ADR 0018 verified it end to end rather
+-- than continuing to assume it). What this section adds is the other half -
+-- full cancellation, which is a policy-terminating event, not a premium
+-- adjustment: it truncates coverage, closes out the policy's vehicle and
+-- driver snapshots, computes a return premium, and records why.
+--
+-- policies.status (ADR 0010) already exists and cancel_policy() (ADR 0012)
+-- already sets it, so cancellation status is not inferred from range
+-- arithmetic and needs no new mechanism here - see ADR 0018 section 2.
+-- ============================================================================
+
+DO $$ BEGIN
+  CREATE TYPE cancellation_type_t AS ENUM ('insured_initiated', 'company_initiated');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE refund_method_t AS ENUM ('pro_rata', 'short_rate');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+-- How a filed short-rate table's number is meant to be applied. Stored per
+-- row rather than assumed, because the two conventions in common use produce
+-- different refunds from the same policy, and which one a given filing means
+-- is a fact about that filing - not something this schema gets to pick.
+DO $$ BEGIN
+  CREATE TYPE short_rate_basis_t AS ENUM ('unearned_premium_multiplier', 'percent_of_annual_premium_returned');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+-- Deliberately empty. Short-rate percentages are filed, state-regulated
+-- numbers: several states restrict short-rate to insured-initiated
+-- cancellations, cap it, or prohibit it outright, and the applicable table
+-- is part of a rate filing. This table is the shape those numbers load into;
+-- it ships with no rows, and short_rate_factor() below fails loudly rather
+-- than defaulting to a guess. Same discipline as
+-- state_rating_table_schema.json's build_note: every field must trace back
+-- to a real source document (a filed cancellation/short-rate table, a DOI
+-- bulletin), or it's a data gap waiting to surface at the worst time.
+CREATE TABLE IF NOT EXISTS short_rate_factors (
+  short_rate_factor_id    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  state                   CHAR(2) NOT NULL,
+  -- NULL means "applies to any program in this state"; a program-specific
+  -- row wins over a statewide one (short_rate_factor() orders on this).
+  program_id              UUID REFERENCES insurance_programs(program_id),
+  elapsed_fraction_from   NUMERIC(5,4) NOT NULL DEFAULT 0,   -- [from, to) of the
+  elapsed_fraction_to     NUMERIC(5,4) NOT NULL DEFAULT 1,   -- term already elapsed
+  factor                  NUMERIC(6,4) NOT NULL,
+  basis                   short_rate_basis_t NOT NULL,
+  applies_to              cancellation_type_t,               -- NULL = both; a state that
+                                                                -- permits short-rate only on
+                                                                -- insured-initiated says so here
+  effective_range         TSTZRANGE NOT NULL,
+  -- Provenance, mirroring state_rating_table_versions: a factor with no
+  -- filing behind it is exactly what this table exists to prevent.
+  serff_filing_tracking_number TEXT NOT NULL,
+  rate_manual_reference   TEXT,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT short_rate_factors_fraction_ck
+    CHECK (elapsed_fraction_from >= 0 AND elapsed_fraction_to <= 1
+           AND elapsed_fraction_from < elapsed_fraction_to),
+  CONSTRAINT short_rate_factors_factor_ck CHECK (factor >= 0 AND factor <= 1)
+);
+
+CREATE INDEX IF NOT EXISTS idx_short_rate_factors_state ON short_rate_factors(state);
+
+-- Returns the filed short-rate factor for a state/program/elapsed-fraction,
+-- or raises. It never returns a default: "no filed table loaded" and "the
+-- filed table says zero" are different answers, and only one of them is safe
+-- to act on.
+CREATE OR REPLACE FUNCTION short_rate_factor(
+  p_state CHAR(2),
+  p_program_id UUID,
+  p_cancellation_type cancellation_type_t,
+  p_elapsed_fraction NUMERIC,
+  p_as_of TIMESTAMPTZ
+) RETURNS TABLE (factor NUMERIC, basis short_rate_basis_t) AS $$
+DECLARE
+  v_factor NUMERIC;
+  v_basis short_rate_basis_t;
+BEGIN
+  SELECT f.factor, f.basis INTO v_factor, v_basis
+  FROM short_rate_factors f
+  WHERE f.state = p_state
+    AND (f.program_id IS NULL OR f.program_id = p_program_id)
+    AND (f.applies_to IS NULL OR f.applies_to = p_cancellation_type)
+    AND p_elapsed_fraction >= f.elapsed_fraction_from
+    AND p_elapsed_fraction <  f.elapsed_fraction_to
+    AND f.effective_range @> p_as_of
+  ORDER BY (f.program_id IS NOT NULL) DESC, (f.applies_to IS NOT NULL) DESC
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SHORT_RATE_TABLE_NOT_CONFIGURED: no filed short-rate factor loaded for state %, program %, % cancellation at % of the term elapsed',
+      p_state, p_program_id, p_cancellation_type, ROUND(p_elapsed_fraction, 4)
+      USING HINT = 'Short-rate percentages are filed, state-regulated numbers - load short_rate_factors from the actual filed cancellation/short-rate table and DOI bulletins for this state before using refund_method short_rate. Pro-rata is pure arithmetic and needs no filing, so it remains available in the meantime.';
+  END IF;
+
+  RETURN QUERY SELECT v_factor, v_basis;
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Pro-rata unearned premium for a policy as of an instant: every premium
+-- amount in force is earned evenly across its OWN effective period, and what
+-- has not been earned by p_as_of is unearned. That means the quote's written
+-- premium over the policy term, plus each endorsement's premium_delta over
+-- that endorsement's own range - a mid-term increase that ran for two months
+-- of a twelve-month policy is not unearned the same way the original premium
+-- is. Superseded endorsement rows carry their closed ranges, so they
+-- contribute exactly the period they were actually in force and nothing
+-- more.
+--
+-- The term is passed in rather than read from policies.effective_range: by
+-- the time a correction re-computes this, the policy row has already been
+-- truncated to the earlier cancellation date, and the original term is what
+-- the arithmetic needs. policy_cancellations.effective_range preserves it.
+CREATE OR REPLACE FUNCTION policy_unearned_premium(
+  p_policy_id UUID,
+  p_term TSTZRANGE,
+  p_as_of TIMESTAMPTZ
+) RETURNS NUMERIC AS $$
+DECLARE
+  v_written NUMERIC;
+  v_unearned NUMERIC;
+BEGIN
+  IF lower(p_term) IS NULL OR upper(p_term) IS NULL THEN
+    RAISE EXCEPTION 'CANCELLATION_UNBOUNDED_TERM: policy % has an unbounded term (%), which has no pro-rata fraction', p_policy_id, p_term
+      USING HINT = 'A policy term needs both bounds before a return premium can be computed. Fix the policy term first.';
+  END IF;
+
+  SELECT q.premium_amount INTO v_written
+  FROM policies p
+  JOIN quotes q ON q.quote_id = p.quote_id
+  WHERE p.policy_id = p_policy_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'policy_unearned_premium: policy % does not exist', p_policy_id;
+  END IF;
+
+  SELECT ROUND(
+    COALESCE(v_written, 0)
+      * GREATEST(0, EXTRACT(EPOCH FROM (upper(p_term) - GREATEST(lower(p_term), p_as_of))))
+      / EXTRACT(EPOCH FROM (upper(p_term) - lower(p_term)))
+    + COALESCE((
+        SELECT SUM(
+          e.premium_delta
+            * GREATEST(0, EXTRACT(EPOCH FROM (upper(e.effective_range) - GREATEST(lower(e.effective_range), p_as_of))))
+            / EXTRACT(EPOCH FROM (upper(e.effective_range) - lower(e.effective_range)))
+        )
+        FROM policy_endorsements e
+        WHERE e.policy_id = p_policy_id
+          AND e.premium_delta IS NOT NULL
+          AND lower(e.effective_range) IS NOT NULL
+          AND upper(e.effective_range) IS NOT NULL
+          AND upper(e.effective_range) > p_as_of
+          AND NOT isempty(e.effective_range)
+      ), 0)
+  , 2) INTO v_unearned;
+
+  RETURN v_unearned;
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- One cancellation per policy per period. effective_range is the UNEARNED
+-- period the refund covers - [cancelled_at, the policy's original term end) -
+-- which is also what lets a correction recompute against the original term
+-- after policies.effective_range has been truncated. Append-only and
+-- versioned, same discipline as policy_endorsements/policy_vehicles.
+CREATE TABLE IF NOT EXISTS policy_cancellations (
+  cancellation_id     UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  policy_id           UUID NOT NULL REFERENCES policies(policy_id),
+  effective_range     TSTZRANGE NOT NULL,
+  cancellation_type   cancellation_type_t NOT NULL,
+  -- Coded, not free text, matching the reason-code discipline the referral
+  -- matrix and decision_log already use; notes carries the prose.
+  reason_code         TEXT NOT NULL,
+  refund_method       refund_method_t NOT NULL,
+  short_rate_factor   NUMERIC(6,4),          -- NULL for pro_rata
+  short_rate_basis    short_rate_basis_t,    -- NULL for pro_rata
+  unearned_premium    NUMERIC(12,2) NOT NULL,  -- pro-rata unearned, before any short-rate factor
+  return_premium      NUMERIC(12,2) NOT NULL,  -- signed: negative = owed back to the insured
+  notes               TEXT,
+  performed_by        TEXT NOT NULL,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- Per policy, like policy_endorsements' and unlike policy_vehicles': a
+  -- policy has one cancellation in force at a time, not several concurrent
+  -- ones. A superseded cancellation carries a closed (possibly empty) range.
+  CONSTRAINT no_overlapping_policy_cancellations
+    EXCLUDE USING gist (policy_id WITH =, effective_range WITH &&),
+  CONSTRAINT policy_cancellations_short_rate_ck
+    CHECK ((refund_method = 'pro_rata'   AND short_rate_factor IS NULL     AND short_rate_basis IS NULL)
+        OR (refund_method = 'short_rate' AND short_rate_factor IS NOT NULL AND short_rate_basis IS NOT NULL))
+);
+
+CREATE INDEX IF NOT EXISTS idx_policy_cancellations_policy ON policy_cancellations(policy_id);
+
+-- Append-only with the narrow escape hatch from the ADR 0016 addendum 2
+-- rather than ALTER TABLE ... DISABLE TRIGGER - built this way from the
+-- start rather than discovering both traps a third time.
+-- One difference from the vehicle/driver/endorsement version of this
+-- trigger, forced by what a corrected cancellation actually means: the
+-- permitted mutation is emptying the range, not closing its upper bound.
+-- Postgres normalises an empty range to 'empty', so lower(NEW) is NULL and
+-- the "lower bound unchanged" test those triggers use cannot hold here. See
+-- correct_policy_cancellation() for why emptying is the right supersession
+-- for this table.
+CREATE OR REPLACE FUNCTION reject_policy_cancellations_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'UPDATE'
+     AND current_setting('luxauto.superseding_policy_cancellation', true) = 'on'
+     AND isempty(NEW.effective_range)
+     AND NOT isempty(OLD.effective_range)
+     AND to_jsonb(NEW) - 'effective_range' = to_jsonb(OLD) - 'effective_range'
+  THEN
+    RETURN NEW;  -- correct_policy_cancellation() superseding this row
+  END IF;
+
+  RAISE EXCEPTION 'policy_cancellations is append-only: % is not permitted', TG_OP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER policy_cancellations_no_update
+  BEFORE UPDATE ON policy_cancellations
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_cancellations_mutation();
+
+CREATE OR REPLACE TRIGGER policy_cancellations_no_delete
+  BEFORE DELETE ON policy_cancellations
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_cancellations_mutation();
+
+-- Closes the policy's vehicle/driver snapshot rows at an instant. NOT
+-- correct_policy_vehicle()/correct_policy_driver(): those exist to fix a
+-- mistaken snapshot and therefore insert a replacement row and log a
+-- '..._corrected' event. A cancellation creates no successor row - coverage
+-- ends - and logging it as a correction would say the snapshot was wrong
+-- when it was right until the policy stopped. What the two paths do share is
+-- the mutation itself, and the append-only trigger already permits exactly
+-- it: close the upper bound, lower bound and every other column unchanged.
+--
+-- GREATEST(lower, p_at) rather than p_at flat: a row that starts after the
+-- cancellation (a future-dated correction) closes to its own start, an empty
+-- range, rather than an invalid one with upper < lower.
+CREATE OR REPLACE FUNCTION close_policy_coverage(p_policy_id UUID, p_at TIMESTAMPTZ)
+RETURNS VOID AS $$
+BEGIN
+  PERFORM set_config('luxauto.superseding_policy_vehicle', 'on', true);
+  UPDATE policy_vehicles
+  SET effective_range = tstzrange(lower(effective_range), GREATEST(lower(effective_range), p_at))
+  WHERE policy_id = p_policy_id
+    AND (upper(effective_range) IS NULL OR upper(effective_range) > p_at)
+    AND NOT isempty(effective_range);
+  PERFORM set_config('luxauto.superseding_policy_vehicle', 'off', true);
+
+  PERFORM set_config('luxauto.superseding_policy_driver', 'on', true);
+  UPDATE policy_drivers
+  SET effective_range = tstzrange(lower(effective_range), GREATEST(lower(effective_range), p_at))
+  WHERE policy_id = p_policy_id
+    AND (upper(effective_range) IS NULL OR upper(effective_range) > p_at)
+    AND NOT isempty(effective_range);
+  PERFORM set_config('luxauto.superseding_policy_driver', 'off', true);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- The cancellation itself: one transaction covering the refund calculation,
+-- the coverage truncation, the vehicle/driver closeout, the cancellation
+-- record and the audit event. A cancellation that adjusted premium but left
+-- vehicles in force (or the reverse) is exactly the partial state ADR 0010's
+-- write discipline exists to prevent, so it is one function, not a sequence
+-- a caller is trusted to complete.
+--
+-- Overloads ADR 0012's cancel_policy(UUID, TEXT, TEXT) rather than replacing
+-- it, the same composition ADR 0014 used for calculate_premium_waterfall.
+-- The old signature now raises: it has nowhere to put the initiator, and the
+-- initiator is what decides pro-rata vs short-rate.
+CREATE OR REPLACE FUNCTION cancel_policy(
+  p_policy_id UUID,
+  p_cancellation_type cancellation_type_t,
+  p_reason_code TEXT,
+  p_refund_method refund_method_t,
+  p_cancelled_at TIMESTAMPTZ,
+  p_notes TEXT,
+  p_performed_by TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_status policy_status_t;
+  v_term TSTZRANGE;
+  v_at TIMESTAMPTZ;
+  v_state CHAR(2);
+  v_program_id UUID;
+  v_written NUMERIC;
+  v_elapsed NUMERIC;
+  v_unearned NUMERIC;
+  v_factor NUMERIC;
+  v_basis short_rate_basis_t;
+  v_return NUMERIC;
+  v_cancellation_id UUID;
+BEGIN
+  SELECT status, effective_range INTO v_status, v_term
+  FROM policies
+  WHERE policy_id = p_policy_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'cancel_policy: policy % does not exist', p_policy_id;
+  END IF;
+
+  -- Same precondition ADR 0012 set, unchanged: cancelling a non-active
+  -- policy either duplicates an event that already happened or silently
+  -- reinterprets an expired/nonrenewed policy as newly cancelled.
+  IF v_status <> 'active' THEN
+    RAISE EXCEPTION 'cancel_policy: policy % is not active (current status: %)', p_policy_id, v_status;
+  END IF;
+
+  IF p_reason_code IS NULL OR btrim(p_reason_code) = '' THEN
+    RAISE EXCEPTION 'CANCELLATION_REASON_CODE_REQUIRED: cancelling policy % requires a reason_code', p_policy_id
+      USING HINT = 'Use a coded reason the way the referral matrix and decision_log do (e.g. CX_INSURED_REQUEST, CX_NONPAYMENT, CX_UNDERWRITING_INELIGIBLE). Prose belongs in notes.';
+  END IF;
+
+  v_at := COALESCE(p_cancelled_at, now());
+
+  IF NOT (v_term @> v_at) THEN
+    RAISE EXCEPTION 'CANCELLATION_DATE_OUTSIDE_TERM: cancellation date % is not inside policy %''s term %', v_at, p_policy_id, v_term
+      USING HINT = 'A cancellation ends coverage partway through a term; a date outside it is either a typo or a different event (expiry, nonrenewal), which this function deliberately does not handle.';
+  END IF;
+
+  SELECT a.garaging_state, q.program_id, q.premium_amount
+    INTO v_state, v_program_id, v_written
+  FROM policies p
+  JOIN quotes q ON q.quote_id = p.quote_id
+  JOIN applications a ON a.application_id = q.application_id
+  WHERE p.policy_id = p_policy_id;
+
+  v_unearned := policy_unearned_premium(p_policy_id, v_term, v_at);
+
+  IF p_refund_method = 'short_rate' THEN
+    v_elapsed := EXTRACT(EPOCH FROM (v_at - lower(v_term)))
+                 / EXTRACT(EPOCH FROM (upper(v_term) - lower(v_term)));
+    SELECT f.factor, f.basis INTO v_factor, v_basis
+    FROM short_rate_factor(v_state, v_program_id, p_cancellation_type, v_elapsed, v_at) f;
+
+    v_return := CASE v_basis
+      WHEN 'unearned_premium_multiplier'        THEN -ROUND(v_unearned * v_factor, 2)
+      WHEN 'percent_of_annual_premium_returned' THEN -ROUND(v_written  * v_factor, 2)
+    END;
+  ELSE
+    -- Pro-rata: pure arithmetic, no filed table, nothing to configure.
+    v_return := -v_unearned;
+  END IF;
+
+  PERFORM close_policy_coverage(p_policy_id, v_at);
+
+  UPDATE policies
+  SET status = 'cancelled',
+      effective_range = tstzrange(lower(v_term), v_at)
+  WHERE policy_id = p_policy_id;
+
+  INSERT INTO policy_cancellations (
+    policy_id, effective_range, cancellation_type, reason_code, refund_method,
+    short_rate_factor, short_rate_basis, unearned_premium, return_premium, notes, performed_by
+  )
+  VALUES (
+    p_policy_id, tstzrange(v_at, upper(v_term)), p_cancellation_type, p_reason_code, p_refund_method,
+    v_factor, v_basis, v_unearned, v_return, p_notes, p_performed_by
+  )
+  RETURNING cancellation_id INTO v_cancellation_id;
+
+  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+  VALUES (p_policy_id, 'cancelled', p_performed_by,
+          format('%s cancellation (%s), %s return premium %s: %s',
+                 p_cancellation_type, p_reason_code, p_refund_method, v_return, COALESCE(p_notes, '')));
+
+  RETURN v_cancellation_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Resolves a cancellation into the three raw inputs the shared waterfall
+-- arithmetic takes, exactly as calculate_endorsement_waterfall() does for an
+-- endorsement (ADR 0014 section 5). The return premium is negative, so every
+-- participant's gross_share/commission_amount/net_due comes back negative in
+-- proportion to their share - money owed back, split the way the premium was
+-- split. as_of is the cancellation date: the panel in force when coverage
+-- ended is the panel that owes the refund.
+CREATE OR REPLACE FUNCTION calculate_cancellation_waterfall(p_cancellation_id UUID)
+RETURNS TABLE (
+  participant_id      UUID,
+  participant_name    TEXT,
+  participant_type    participant_type_t,
+  share_percentage    NUMERIC(5,2),
+  commission_rate     NUMERIC(5,2),
+  gross_share          NUMERIC(14,2),
+  commission_amount    NUMERIC(14,2),
+  net_due               NUMERIC(14,2)
+) AS $$
+  SELECT w.*
+  FROM policy_cancellations c
+  JOIN policies p ON p.policy_id = c.policy_id
+  JOIN quotes q ON q.quote_id = p.quote_id
+  CROSS JOIN LATERAL calculate_premium_waterfall(q.program_id, c.return_premium, lower(c.effective_range)) w
+  WHERE c.cancellation_id = p_cancellation_id
+    AND NOT isempty(c.effective_range);
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Corrects a cancellation entered with the wrong date, initiator, reason or
+-- refund method - same close-the-old-row-then-insert shape as
+-- correct_policy_endorsement()/correct_policy_vehicle(), with the refund
+-- recomputed against the ORIGINAL term (preserved as the old row's upper
+-- bound) rather than the already-truncated policies row.
+--
+-- Not a reinstatement. "This cancellation should never have happened" puts a
+-- policy back in force, which is a different business event with its own
+-- questions (does coverage apply to the gap? is a new policy issued?) - ADR
+-- 0018 names it as deferred rather than approximating it here.
+--
+-- Supersession here EMPTIES the old row rather than closing it at the new
+-- row's start, which is where this function deliberately departs from
+-- correct_policy_endorsement()/correct_policy_vehicle(). Those correct a
+-- period fact: an endorsement really was in force from its start until the
+-- correction took over, so splitting the range at that point is true. A
+-- cancellation is a point event whose range describes the unearned period
+-- ONE refund was computed over. Closing a cancellation dated 9 February at
+-- 30 April would assert that a refund covering February-to-term-end actually
+-- covered February-to-April - a number nobody computed. "This cancellation
+-- applied for zero time; here is the one that replaced it" is the only
+-- accurate statement, and it keeps the exclusion constraint meaning exactly
+-- "at most one cancellation in force", since empty ranges overlap nothing.
+-- Correcting to an earlier date also has no valid closed range available at
+-- all (upper < lower errors), so this is the only shape that works in both
+-- directions.
+CREATE OR REPLACE FUNCTION correct_policy_cancellation(
+  p_cancellation_id UUID,
+  p_new_cancelled_at TIMESTAMPTZ,
+  p_new_cancellation_type cancellation_type_t,
+  p_new_reason_code TEXT,
+  p_new_refund_method refund_method_t,
+  p_new_notes TEXT,
+  p_performed_by TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_policy_id UUID;
+  v_old_range TSTZRANGE;
+  v_old_at TIMESTAMPTZ;
+  v_term TSTZRANGE;
+  v_state CHAR(2);
+  v_program_id UUID;
+  v_written NUMERIC;
+  v_elapsed NUMERIC;
+  v_unearned NUMERIC;
+  v_factor NUMERIC;
+  v_basis short_rate_basis_t;
+  v_return NUMERIC;
+  v_new_id UUID;
+BEGIN
+  SELECT policy_id, effective_range INTO v_policy_id, v_old_range
+  FROM policy_cancellations
+  WHERE cancellation_id = p_cancellation_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'correct_policy_cancellation: cancellation % does not exist', p_cancellation_id;
+  END IF;
+
+  IF p_new_reason_code IS NULL OR btrim(p_new_reason_code) = '' THEN
+    RAISE EXCEPTION 'CANCELLATION_REASON_CODE_REQUIRED: correcting cancellation % requires a reason_code', p_cancellation_id
+      USING HINT = 'A corrected cancellation still has to say why, in the same coded form as the original.';
+  END IF;
+
+  v_old_at := lower(v_old_range);
+
+  -- The original term: the cancellation row's own range ends where the term
+  -- did, which is why it is stored that way (see the table comment).
+  SELECT tstzrange(lower(p.effective_range), upper(v_old_range))
+    INTO v_term
+  FROM policies p
+  WHERE p.policy_id = v_policy_id;
+
+  IF NOT (v_term @> p_new_cancelled_at) THEN
+    RAISE EXCEPTION 'CANCELLATION_DATE_OUTSIDE_TERM: corrected cancellation date % is not inside policy %''s original term %', p_new_cancelled_at, v_policy_id, v_term
+      USING HINT = 'Corrections move a cancellation within the policy term; a date outside it is a different event.';
+  END IF;
+
+  SELECT a.garaging_state, q.program_id, q.premium_amount
+    INTO v_state, v_program_id, v_written
+  FROM policies p
+  JOIN quotes q ON q.quote_id = p.quote_id
+  JOIN applications a ON a.application_id = q.application_id
+  WHERE p.policy_id = v_policy_id;
+
+  v_unearned := policy_unearned_premium(v_policy_id, v_term, p_new_cancelled_at);
+
+  IF p_new_refund_method = 'short_rate' THEN
+    v_elapsed := EXTRACT(EPOCH FROM (p_new_cancelled_at - lower(v_term)))
+                 / EXTRACT(EPOCH FROM (upper(v_term) - lower(v_term)));
+    SELECT f.factor, f.basis INTO v_factor, v_basis
+    FROM short_rate_factor(v_state, v_program_id, p_new_cancellation_type, v_elapsed, p_new_cancelled_at) f;
+
+    v_return := CASE v_basis
+      WHEN 'unearned_premium_multiplier'        THEN -ROUND(v_unearned * v_factor, 2)
+      WHEN 'percent_of_annual_premium_returned' THEN -ROUND(v_written  * v_factor, 2)
+    END;
+  ELSE
+    v_return := -v_unearned;
+  END IF;
+
+  PERFORM set_config('luxauto.superseding_policy_cancellation', 'on', true);
+  UPDATE policy_cancellations
+  SET effective_range = tstzrange(v_old_at, v_old_at)  -- empty: superseded entirely
+  WHERE cancellation_id = p_cancellation_id;
+  PERFORM set_config('luxauto.superseding_policy_cancellation', 'off', true);
+
+  INSERT INTO policy_cancellations (
+    policy_id, effective_range, cancellation_type, reason_code, refund_method,
+    short_rate_factor, short_rate_basis, unearned_premium, return_premium, notes, performed_by
+  )
+  VALUES (
+    v_policy_id, tstzrange(p_new_cancelled_at, upper(v_term)), p_new_cancellation_type, p_new_reason_code,
+    p_new_refund_method, v_factor, v_basis, v_unearned, v_return, p_new_notes, p_performed_by
+  )
+  RETURNING cancellation_id INTO v_new_id;
+
+  -- Coverage follows the corrected date: the policy term, and any snapshot
+  -- row the original cancellation closed at the old date, both move. Rows
+  -- closed at the old date are matched exactly, so a vehicle that had
+  -- already ended earlier for its own reasons is left alone.
+  UPDATE policies
+  SET effective_range = tstzrange(lower(v_term), p_new_cancelled_at)
+  WHERE policy_id = v_policy_id;
+
+  PERFORM set_config('luxauto.superseding_policy_vehicle', 'on', true);
+  UPDATE policy_vehicles
+  SET effective_range = tstzrange(lower(effective_range), GREATEST(lower(effective_range), p_new_cancelled_at))
+  WHERE policy_id = v_policy_id AND upper(effective_range) = v_old_at;
+  PERFORM set_config('luxauto.superseding_policy_vehicle', 'off', true);
+
+  PERFORM set_config('luxauto.superseding_policy_driver', 'on', true);
+  UPDATE policy_drivers
+  SET effective_range = tstzrange(lower(effective_range), GREATEST(lower(effective_range), p_new_cancelled_at))
+  WHERE policy_id = v_policy_id AND upper(effective_range) = v_old_at;
+  PERFORM set_config('luxauto.superseding_policy_driver', 'off', true);
+
+  -- And anything still open past the corrected date (a later correction date
+  -- reopens nothing, but an earlier one can leave rows running long).
+  PERFORM close_policy_coverage(v_policy_id, p_new_cancelled_at);
+
+  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+  VALUES (v_policy_id, 'cancellation_corrected', p_performed_by,
+          format('Corrected cancellation %s with new cancellation %s (%s, %s, return premium %s)',
+                 p_cancellation_id, v_new_id, p_new_cancellation_type, p_new_refund_method, v_return));
+
+  RETURN v_new_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- ============================================================================
 -- ODOO READ-SIDE VIEWS (ADR 0006 pattern, ADR 0010 scope)
 -- These three views exist purely for Odoo to read: each derives a hashed,
 -- display-only pseudo-integer `id` from its underlying UUID key(s), the
@@ -1813,6 +2358,19 @@ GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID, NUMERIC, TIMESTAMPTZ
 GRANT EXECUTE ON FUNCTION calculate_endorsement_waterfall(UUID) TO odoo;
 GRANT EXECUTE ON FUNCTION bind_policy(UUID, TEXT, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION cancel_policy(UUID, TEXT, TEXT) TO odoo;
+-- ADR 0018. The three-argument cancel_policy above still needs its grant: it
+-- is reachable and raises CANCELLATION_TYPE_REQUIRED, which is the diagnosis
+-- an old caller should get rather than "permission denied".
+GRANT EXECUTE ON FUNCTION cancel_policy(
+  UUID, cancellation_type_t, TEXT, refund_method_t, TIMESTAMPTZ, TEXT, TEXT
+) TO odoo;
+GRANT EXECUTE ON FUNCTION correct_policy_cancellation(
+  UUID, TIMESTAMPTZ, cancellation_type_t, TEXT, refund_method_t, TEXT, TEXT
+) TO odoo;
+GRANT EXECUTE ON FUNCTION calculate_cancellation_waterfall(UUID) TO odoo;
+-- Read-only and useful before the fact: a cancellation UI should be able to
+-- show the return premium it is about to create.
+GRANT EXECUTE ON FUNCTION policy_unearned_premium(UUID, TSTZRANGE, TIMESTAMPTZ) TO odoo;
 GRANT EXECUTE ON FUNCTION endorse_policy(UUID, TSTZRANGE, endorsement_type_t, NUMERIC, TEXT, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION correct_policy_endorsement(UUID, TSTZRANGE, endorsement_type_t, NUMERIC, TEXT, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION correct_policy_vehicle(

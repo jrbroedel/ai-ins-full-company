@@ -37,11 +37,11 @@ import psycopg2
 # automatically, but this snapshot is a fact about the file's current state,
 # not something the parser can derive about itself.
 BASELINE = {
-    "tables": 24,
-    "types": 16,
-    "functions": 19,
+    "tables": 26,
+    "types": 19,
+    "functions": 26,
     "views": 6,
-    "triggers": 16,
+    "triggers": 18,
     "not_null_columns": 6,
 }
 
