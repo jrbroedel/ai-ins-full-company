@@ -21,6 +21,18 @@
               action="action_luxauto_policy"
               sequence="20"/>
 
+    <menuitem id="menu_luxauto_policy_vehicle"
+              name="Policy Vehicles"
+              parent="menu_luxauto_root"
+              action="action_luxauto_policy_vehicle"
+              sequence="22"/>
+
+    <menuitem id="menu_luxauto_policy_driver"
+              name="Policy Drivers"
+              parent="menu_luxauto_root"
+              action="action_luxauto_policy_driver"
+              sequence="24"/>
+
     <menuitem id="menu_luxauto_premium_waterfall"
               name="Premium Waterfall"
               parent="menu_luxauto_root"

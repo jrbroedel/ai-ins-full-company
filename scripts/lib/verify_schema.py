@@ -16,16 +16,20 @@ from collections import Counter
 
 import psycopg2
 
-# ADR 0015 section 2's manually verified snapshot. This is the acceptance test
-# for the parser itself - if the parser's counts don't match this, that's a
-# parser bug to fix, not a schema surprise, and the parser is not trusted
-# against a live database until it does.
+# Manually verified snapshot (ADR 0015 section 2's acceptance-test discipline;
+# counts updated for ADR 0016's policy_vehicles/policy_drivers addition). This
+# is the acceptance test for the parser itself - if the parser's counts don't
+# match this, that's a parser bug to fix, not a schema surprise, and the
+# parser is not trusted against a live database until it does. Updated by
+# hand each time the schema file changes - the object *names* are parsed
+# automatically, but this snapshot is a fact about the file's current state,
+# not something the parser can derive about itself.
 BASELINE = {
-    "tables": 22,
+    "tables": 24,
     "types": 16,
-    "functions": 12,
-    "views": 4,
-    "triggers": 10,
+    "functions": 16,
+    "views": 6,
+    "triggers": 14,
 }
 
 PATTERNS = {

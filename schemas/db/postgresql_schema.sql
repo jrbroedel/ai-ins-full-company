@@ -705,6 +705,9 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
 -- defense against a double-bind either way, but the explicit check here is
 -- what turns that into a clear application-level error instead of a raw
 -- constraint-violation message reaching the caller.
+-- Extended for ADR 0016: also snapshots the application's vehicles and
+-- additional_drivers into policy_vehicles/policy_drivers, atomically with
+-- everything else. Signature unchanged; only the body grows.
 CREATE OR REPLACE FUNCTION bind_policy(
   p_quote_id UUID,
   p_policy_number TEXT,
@@ -712,9 +715,11 @@ CREATE OR REPLACE FUNCTION bind_policy(
 ) RETURNS UUID AS $$
 DECLARE
   v_quote_status TEXT;
+  v_application_id UUID;
   v_policy_id UUID;
+  v_effective_range TSTZRANGE;
 BEGIN
-  SELECT status INTO v_quote_status
+  SELECT status, application_id INTO v_quote_status, v_application_id
   FROM quotes
   WHERE quote_id = p_quote_id
   FOR UPDATE;
@@ -737,12 +742,50 @@ BEGIN
   -- standard one-year term starting at bind time - a reasonable placeholder,
   -- not a considered decision; a real term-selection mechanism is an open
   -- item for whoever builds the actual bind UI/flow.
+  v_effective_range := tstzrange(now(), now() + interval '1 year');
+
   INSERT INTO policies (policy_id, quote_id, policy_number, effective_range, status)
-  VALUES (
-    uuid_generate_v4(), p_quote_id, p_policy_number,
-    tstzrange(now(), now() + interval '1 year'), 'active'
-  )
+  VALUES (uuid_generate_v4(), p_quote_id, p_policy_number, v_effective_range, 'active')
   RETURNING policy_id INTO v_policy_id;
+
+  -- ADR 0016: snapshot vehicles/drivers onto the policy at bind time - a
+  -- bound policy owns its own copy rather than continuing to point at the
+  -- application's, which can keep changing after bind with no effect on
+  -- what's actually insured. Mid-term add/remove of a vehicle or driver is
+  -- still deferred - see ADR 0016 section 2. Set-based INSERT...SELECT, not
+  -- a per-row loop: if any row conflicts (e.g. two vehicles on the same
+  -- application sharing a VIN by data-entry mistake), the whole INSERT
+  -- fails and the exception aborts this entire function - the policies row
+  -- and quote status flip above roll back too, not just this insert.
+  INSERT INTO policy_vehicles (
+    policy_vehicle_id, policy_id, source_vehicle_id, effective_range,
+    year, make, model, trim, vin, vehicle_category, purchase_price,
+    current_appraised_value, appraisal_date, appraisal_source,
+    agreed_value_requested, annual_mileage, primary_use,
+    garaging_street, garaging_city, garaging_state, garaging_zip,
+    garage_type, security_features, modifications, existing_liens, lienholder_name
+  )
+  SELECT
+    uuid_generate_v4(), v_policy_id, v.vehicle_id, v_effective_range,
+    v.year, v.make, v.model, v.trim, v.vin, v.vehicle_category, v.purchase_price,
+    v.current_appraised_value, v.appraisal_date, v.appraisal_source,
+    v.agreed_value_requested, v.annual_mileage, v.primary_use,
+    v.garaging_street, v.garaging_city, v.garaging_state, v.garaging_zip,
+    v.garage_type, v.security_features, v.modifications, v.existing_liens, v.lienholder_name
+  FROM vehicles v
+  WHERE v.application_id = v_application_id;
+
+  INSERT INTO policy_drivers (
+    policy_driver_id, policy_id, source_driver_id, effective_range,
+    name, relationship_to_applicant, date_of_birth, years_licensed,
+    license_status, violations_last_5yr, at_fault_accidents_last_5yr
+  )
+  SELECT
+    uuid_generate_v4(), v_policy_id, d.driver_id, v_effective_range,
+    d.name, d.relationship_to_applicant, d.date_of_birth, d.years_licensed,
+    d.license_status, d.violations_last_5yr, d.at_fault_accidents_last_5yr
+  FROM additional_drivers d
+  WHERE d.application_id = v_application_id;
 
   UPDATE quotes SET status = 'bound' WHERE quote_id = p_quote_id;
 
@@ -955,6 +998,248 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ============================================================================
+-- STRUCTURAL POLICY OWNERSHIP: VEHICLES AND DRIVERS (ADR 0016)
+-- A bound policy owns its own snapshot of vehicles/drivers, taken at bind
+-- time by bind_policy() (below) - not a live pointer back to the
+-- application's rows, which keep changing after bind with no effect on
+-- what's actually insured. coverage_requested (limits/deductibles) is NOT
+-- structural - it stays under ADR 0014's premium/term endorsement
+-- machinery. Exclusion constraints are scoped per (policy_id, vin) /
+-- (policy_id, name, date_of_birth), not per policy like
+-- policy_endorsements' - multiple vehicles/drivers are legitimately
+-- concurrent on one policy, and a per-policy scope would reject the second
+-- car outright.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS policy_vehicles (
+  policy_vehicle_id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  policy_id                  UUID NOT NULL REFERENCES policies(policy_id),
+  source_vehicle_id          UUID NOT NULL REFERENCES vehicles(vehicle_id),
+  effective_range            TSTZRANGE NOT NULL,
+  year                        SMALLINT NOT NULL,
+  make                        TEXT NOT NULL,
+  model                       TEXT NOT NULL,
+  trim                        TEXT,
+  vin                         TEXT,
+  vehicle_category            vehicle_category_t NOT NULL,
+  purchase_price               NUMERIC(12,2),
+  current_appraised_value      NUMERIC(12,2),
+  appraisal_date                DATE,
+  appraisal_source              TEXT,
+  agreed_value_requested        BOOLEAN NOT NULL DEFAULT false,
+  annual_mileage                 INTEGER,
+  primary_use                    primary_use_t,
+  garaging_street                TEXT,
+  garaging_city                  TEXT,
+  garaging_state                 CHAR(2) NOT NULL,
+  garaging_zip                   TEXT,
+  garage_type                    garage_type_t,
+  security_features              TEXT[] NOT NULL DEFAULT '{}',
+  modifications                  TEXT,
+  existing_liens                 BOOLEAN,
+  lienholder_name                TEXT,
+  created_at                     TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- NOT per-policy (unlike policy_endorsements) - per (policy_id, vin), so
+  -- two different vehicles on the same policy don't conflict with each
+  -- other. vin is nullable on the source vehicles table; two vehicles with
+  -- both-null vin on the same policy won't be caught here (NULL <> NULL) -
+  -- a named limitation, see ADR 0016 section 3.
+  CONSTRAINT no_overlapping_policy_vehicles
+    EXCLUDE USING gist (policy_id WITH =, vin WITH =, effective_range WITH &&)
+);
+
+CREATE INDEX IF NOT EXISTS idx_policy_vehicles_policy ON policy_vehicles(policy_id);
+
+CREATE OR REPLACE FUNCTION reject_policy_vehicles_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'policy_vehicles is append-only: % is not permitted', TG_OP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER policy_vehicles_no_update
+  BEFORE UPDATE ON policy_vehicles
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_vehicles_mutation();
+
+CREATE OR REPLACE TRIGGER policy_vehicles_no_delete
+  BEFORE DELETE ON policy_vehicles
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_vehicles_mutation();
+
+CREATE TABLE IF NOT EXISTS policy_drivers (
+  policy_driver_id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  policy_id                    UUID NOT NULL REFERENCES policies(policy_id),
+  source_driver_id             UUID NOT NULL REFERENCES additional_drivers(driver_id),
+  effective_range               TSTZRANGE NOT NULL,
+  name                           TEXT NOT NULL,
+  relationship_to_applicant     TEXT,
+  date_of_birth                  DATE,
+  years_licensed                 SMALLINT,
+  license_status                 license_status_t,
+  violations_last_5yr            SMALLINT,
+  at_fault_accidents_last_5yr    SMALLINT,
+  created_at                     TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- additional_drivers has no SSN/license-number column - name+date_of_birth
+  -- is the best available natural key, not an arbitrary choice. Same
+  -- null-identity caveat as vehicles' vin: date_of_birth is nullable on the
+  -- source table, so two drivers with both-null date_of_birth on the same
+  -- policy won't conflict here.
+  CONSTRAINT no_overlapping_policy_drivers
+    EXCLUDE USING gist (policy_id WITH =, name WITH =, date_of_birth WITH =, effective_range WITH &&)
+);
+
+CREATE INDEX IF NOT EXISTS idx_policy_drivers_policy ON policy_drivers(policy_id);
+
+CREATE OR REPLACE FUNCTION reject_policy_drivers_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'policy_drivers is append-only: % is not permitted', TG_OP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER policy_drivers_no_update
+  BEFORE UPDATE ON policy_drivers
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_drivers_mutation();
+
+CREATE OR REPLACE TRIGGER policy_drivers_no_delete
+  BEFORE DELETE ON policy_drivers
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_drivers_mutation();
+
+-- Corrects a mistaken policy_vehicles snapshot row - same pattern as
+-- correct_policy_endorsement() exactly: close old row, insert corrected row,
+-- log the correction, never mutate in place.
+CREATE OR REPLACE FUNCTION correct_policy_vehicle(
+  p_policy_vehicle_id UUID,
+  p_new_effective_range TSTZRANGE,
+  p_new_year SMALLINT,
+  p_new_make TEXT,
+  p_new_model TEXT,
+  p_new_trim TEXT,
+  p_new_vin TEXT,
+  p_new_vehicle_category vehicle_category_t,
+  p_new_purchase_price NUMERIC,
+  p_new_current_appraised_value NUMERIC,
+  p_new_appraisal_date DATE,
+  p_new_appraisal_source TEXT,
+  p_new_agreed_value_requested BOOLEAN,
+  p_new_annual_mileage INTEGER,
+  p_new_primary_use primary_use_t,
+  p_new_garaging_street TEXT,
+  p_new_garaging_city TEXT,
+  p_new_garaging_state CHAR(2),
+  p_new_garaging_zip TEXT,
+  p_new_garage_type garage_type_t,
+  p_new_security_features TEXT[],
+  p_new_modifications TEXT,
+  p_new_existing_liens BOOLEAN,
+  p_new_lienholder_name TEXT,
+  p_performed_by TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_policy_id UUID;
+  v_source_vehicle_id UUID;
+  v_old_range TSTZRANGE;
+  v_new_id UUID;
+BEGIN
+  SELECT policy_id, source_vehicle_id, effective_range
+    INTO v_policy_id, v_source_vehicle_id, v_old_range
+  FROM policy_vehicles
+  WHERE policy_vehicle_id = p_policy_vehicle_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'correct_policy_vehicle: policy vehicle % does not exist', p_policy_vehicle_id;
+  END IF;
+
+  ALTER TABLE policy_vehicles DISABLE TRIGGER policy_vehicles_no_update;
+  UPDATE policy_vehicles
+  SET effective_range = tstzrange(lower(v_old_range), lower(p_new_effective_range))
+  WHERE policy_vehicle_id = p_policy_vehicle_id;
+  ALTER TABLE policy_vehicles ENABLE TRIGGER policy_vehicles_no_update;
+
+  INSERT INTO policy_vehicles (
+    policy_vehicle_id, policy_id, source_vehicle_id, effective_range,
+    year, make, model, trim, vin, vehicle_category, purchase_price,
+    current_appraised_value, appraisal_date, appraisal_source,
+    agreed_value_requested, annual_mileage, primary_use,
+    garaging_street, garaging_city, garaging_state, garaging_zip,
+    garage_type, security_features, modifications, existing_liens, lienholder_name
+  )
+  VALUES (
+    uuid_generate_v4(), v_policy_id, v_source_vehicle_id, p_new_effective_range,
+    p_new_year, p_new_make, p_new_model, p_new_trim, p_new_vin, p_new_vehicle_category, p_new_purchase_price,
+    p_new_current_appraised_value, p_new_appraisal_date, p_new_appraisal_source,
+    p_new_agreed_value_requested, p_new_annual_mileage, p_new_primary_use,
+    p_new_garaging_street, p_new_garaging_city, p_new_garaging_state, p_new_garaging_zip,
+    p_new_garage_type, p_new_security_features, p_new_modifications, p_new_existing_liens, p_new_lienholder_name
+  )
+  RETURNING policy_vehicle_id INTO v_new_id;
+
+  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+  VALUES (v_policy_id, 'policy_vehicle_corrected', p_performed_by,
+          format('Corrected policy vehicle %s with new policy vehicle %s', p_policy_vehicle_id, v_new_id));
+
+  RETURN v_new_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Corrects a mistaken policy_drivers snapshot row - same pattern.
+CREATE OR REPLACE FUNCTION correct_policy_driver(
+  p_policy_driver_id UUID,
+  p_new_effective_range TSTZRANGE,
+  p_new_name TEXT,
+  p_new_relationship_to_applicant TEXT,
+  p_new_date_of_birth DATE,
+  p_new_years_licensed SMALLINT,
+  p_new_license_status license_status_t,
+  p_new_violations_last_5yr SMALLINT,
+  p_new_at_fault_accidents_last_5yr SMALLINT,
+  p_performed_by TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_policy_id UUID;
+  v_source_driver_id UUID;
+  v_old_range TSTZRANGE;
+  v_new_id UUID;
+BEGIN
+  SELECT policy_id, source_driver_id, effective_range
+    INTO v_policy_id, v_source_driver_id, v_old_range
+  FROM policy_drivers
+  WHERE policy_driver_id = p_policy_driver_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'correct_policy_driver: policy driver % does not exist', p_policy_driver_id;
+  END IF;
+
+  ALTER TABLE policy_drivers DISABLE TRIGGER policy_drivers_no_update;
+  UPDATE policy_drivers
+  SET effective_range = tstzrange(lower(v_old_range), lower(p_new_effective_range))
+  WHERE policy_driver_id = p_policy_driver_id;
+  ALTER TABLE policy_drivers ENABLE TRIGGER policy_drivers_no_update;
+
+  INSERT INTO policy_drivers (
+    policy_driver_id, policy_id, source_driver_id, effective_range,
+    name, relationship_to_applicant, date_of_birth, years_licensed,
+    license_status, violations_last_5yr, at_fault_accidents_last_5yr
+  )
+  VALUES (
+    uuid_generate_v4(), v_policy_id, v_source_driver_id, p_new_effective_range,
+    p_new_name, p_new_relationship_to_applicant, p_new_date_of_birth, p_new_years_licensed,
+    p_new_license_status, p_new_violations_last_5yr, p_new_at_fault_accidents_last_5yr
+  )
+  RETURNING policy_driver_id INTO v_new_id;
+
+  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+  VALUES (v_policy_id, 'policy_driver_corrected', p_performed_by,
+          format('Corrected policy driver %s with new policy driver %s', p_policy_driver_id, v_new_id));
+
+  RETURN v_new_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- ============================================================================
 -- ODOO READ-SIDE VIEWS (ADR 0006 pattern, ADR 0010 scope)
 -- These three views exist purely for Odoo to read: each derives a hashed,
 -- display-only pseudo-integer `id` from its underlying UUID key(s), the
@@ -1008,6 +1293,42 @@ SELECT
 FROM policies p
 JOIN quotes q ON q.quote_id = p.quote_id
 JOIN applications ap ON ap.application_id = q.application_id;
+
+-- Policy Vehicle / Policy Driver views (ADR 0016): each row is already
+-- uniquely keyed by its own policy_vehicle_id/policy_driver_id - no fan-out
+-- like the waterfall/settlement views below, so a simple single-column hash
+-- is enough (not the composite hash those views need).
+CREATE OR REPLACE VIEW luxauto_policy_vehicle_view AS
+SELECT
+  ('x' || substr(md5(pv.policy_vehicle_id::text), 1, 8))::bit(32)::int AS id,
+  pv.policy_vehicle_id,
+  pv.policy_id,
+  pv.effective_range,
+  pv.year,
+  pv.make,
+  pv.model,
+  pv.trim,
+  pv.vin,
+  pv.vehicle_category,
+  pv.garaging_state,
+  pv.agreed_value_requested,
+  pv.current_appraised_value
+FROM policy_vehicles pv;
+
+CREATE OR REPLACE VIEW luxauto_policy_driver_view AS
+SELECT
+  ('x' || substr(md5(pd.policy_driver_id::text), 1, 8))::bit(32)::int AS id,
+  pd.policy_driver_id,
+  pd.policy_id,
+  pd.effective_range,
+  pd.name,
+  pd.relationship_to_applicant,
+  pd.date_of_birth,
+  pd.years_licensed,
+  pd.license_status,
+  pd.violations_last_5yr,
+  pd.at_fault_accidents_last_5yr
+FROM policy_drivers pd;
 
 -- Premium/Waterfall view: quotes + program_participants, one row per
 -- participant per quote - the id is hashed from a composite of quote_id and
@@ -1080,6 +1401,8 @@ CROSS JOIN LATERAL calculate_premium_waterfall(p.quote_id) w;
 -- rest of this file already makes about running against that database.
 GRANT SELECT ON luxauto_insured_view TO odoo;
 GRANT SELECT ON luxauto_policy_view TO odoo;
+GRANT SELECT ON luxauto_policy_vehicle_view TO odoo;
+GRANT SELECT ON luxauto_policy_driver_view TO odoo;
 GRANT SELECT ON luxauto_premium_waterfall_view TO odoo;
 GRANT SELECT ON luxauto_settlement_view TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID) TO odoo;
@@ -1089,6 +1412,14 @@ GRANT EXECUTE ON FUNCTION bind_policy(UUID, TEXT, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION cancel_policy(UUID, TEXT, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION endorse_policy(UUID, TSTZRANGE, endorsement_type_t, NUMERIC, TEXT, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION correct_policy_endorsement(UUID, TSTZRANGE, endorsement_type_t, NUMERIC, TEXT, TEXT) TO odoo;
+GRANT EXECUTE ON FUNCTION correct_policy_vehicle(
+  UUID, TSTZRANGE, SMALLINT, TEXT, TEXT, TEXT, TEXT, vehicle_category_t,
+  NUMERIC, NUMERIC, DATE, TEXT, BOOLEAN, INTEGER, primary_use_t,
+  TEXT, TEXT, CHAR(2), TEXT, garage_type_t, TEXT[], TEXT, BOOLEAN, TEXT, TEXT
+) TO odoo;
+GRANT EXECUTE ON FUNCTION correct_policy_driver(
+  UUID, TSTZRANGE, TEXT, TEXT, DATE, SMALLINT, license_status_t, SMALLINT, SMALLINT, TEXT
+) TO odoo;
 
 -- ============================================================================
 -- DOCUMENTS (metadata only - files live in Azure Blob Storage per ADR 0002/0003)
