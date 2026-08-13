@@ -17,31 +17,91 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;  -- required for the state-rating-tab
 -- changes, this file changes with it - these are not meant to drift apart.
 -- ============================================================================
 
-CREATE TYPE license_status_t AS ENUM ('valid', 'suspended', 'revoked', 'expired');
-CREATE TYPE credit_score_band_t AS ENUM ('excellent', 'good', 'fair', 'poor', 'not_available');
-CREATE TYPE vehicle_category_t AS ENUM ('production_luxury', 'exotic', 'classic_collector', 'modified_performance');
-CREATE TYPE primary_use_t AS ENUM ('pleasure', 'commute', 'business', 'show_display');
-CREATE TYPE garage_type_t AS ENUM ('attached_locked', 'detached_locked', 'gated_community', 'unsecured_street', 'climate_controlled_storage');
-CREATE TYPE claim_type_t AS ENUM ('collision', 'comprehensive', 'liability', 'glass', 'theft');
-CREATE TYPE violation_type_t AS ENUM ('DUI', 'reckless_driving', 'speeding', 'other_moving_violation');
-CREATE TYPE sanctions_result_t AS ENUM ('clear', 'positive_hit', 'pending');
-CREATE TYPE title_status_t AS ENUM ('clean', 'salvage', 'rebuilt', 'flood', 'lemon_law_buyback');
-CREATE TYPE filing_status_t AS ENUM ('prior_approval', 'file_and_use', 'use_and_file', 'flex_rating_band', 'competitive_no_file');
-CREATE TYPE referral_action_t AS ENUM (
-  'AUTO_PROCEED', 'AUTO_PROCEED_WITH_FLAG', 'INFORMATION_REQUEST',
-  'MANUAL_REVIEW_REQUIRED', 'MANUAL_REVIEW_SENIOR',
-  'DECLINE_RECOMMENDED', 'HARD_DECLINE_COMPLIANCE'
-);
-CREATE TYPE application_status_t AS ENUM (
-  'draft', 'submitted', 'information_requested', 'in_review',
-  'quoted', 'bound', 'declined', 'withdrawn'
-);
-CREATE TYPE document_type_t AS ENUM (
-  'appraisal', 'loss_run', 'engineering_report', 'rendered_quote_pdf',
-  'application_form', 'title_report', 'mvr_report', 'other'
-);
-CREATE TYPE policy_status_t AS ENUM ('active', 'cancelled', 'expired', 'nonrenewed');
-CREATE TYPE endorsement_type_t AS ENUM ('premium_adjustment', 'term_change');
+DO $$ BEGIN
+  CREATE TYPE license_status_t AS ENUM ('valid', 'suspended', 'revoked', 'expired');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE credit_score_band_t AS ENUM ('excellent', 'good', 'fair', 'poor', 'not_available');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE vehicle_category_t AS ENUM ('production_luxury', 'exotic', 'classic_collector', 'modified_performance');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE primary_use_t AS ENUM ('pleasure', 'commute', 'business', 'show_display');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE garage_type_t AS ENUM ('attached_locked', 'detached_locked', 'gated_community', 'unsecured_street', 'climate_controlled_storage');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE claim_type_t AS ENUM ('collision', 'comprehensive', 'liability', 'glass', 'theft');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE violation_type_t AS ENUM ('DUI', 'reckless_driving', 'speeding', 'other_moving_violation');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE sanctions_result_t AS ENUM ('clear', 'positive_hit', 'pending');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE title_status_t AS ENUM ('clean', 'salvage', 'rebuilt', 'flood', 'lemon_law_buyback');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE filing_status_t AS ENUM ('prior_approval', 'file_and_use', 'use_and_file', 'flex_rating_band', 'competitive_no_file');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE referral_action_t AS ENUM (
+    'AUTO_PROCEED', 'AUTO_PROCEED_WITH_FLAG', 'INFORMATION_REQUEST',
+    'MANUAL_REVIEW_REQUIRED', 'MANUAL_REVIEW_SENIOR',
+    'DECLINE_RECOMMENDED', 'HARD_DECLINE_COMPLIANCE'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE application_status_t AS ENUM (
+    'draft', 'submitted', 'information_requested', 'in_review',
+    'quoted', 'bound', 'declined', 'withdrawn'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE document_type_t AS ENUM (
+    'appraisal', 'loss_run', 'engineering_report', 'rendered_quote_pdf',
+    'application_form', 'title_report', 'mvr_report', 'other'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE policy_status_t AS ENUM ('active', 'cancelled', 'expired', 'nonrenewed');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE TYPE endorsement_type_t AS ENUM ('premium_adjustment', 'term_change');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- STATE RATING TABLE REGISTRY
@@ -49,7 +109,7 @@ CREATE TYPE endorsement_type_t AS ENUM ('premium_adjustment', 'term_change');
 -- infrastructure, not configuration - see that schema's own header comment.
 -- ============================================================================
 
-CREATE TABLE state_rating_table_versions (
+CREATE TABLE IF NOT EXISTS state_rating_table_versions (
   record_id                       UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   state                           CHAR(2) NOT NULL,
   regulator_name                  TEXT NOT NULL,
@@ -83,7 +143,7 @@ CREATE TABLE state_rating_table_versions (
     EXCLUDE USING gist (state WITH =, effective_range WITH &&)
 );
 
-CREATE INDEX idx_state_rating_state ON state_rating_table_versions(state);
+CREATE INDEX IF NOT EXISTS idx_state_rating_state ON state_rating_table_versions(state);
 
 COMMENT ON TABLE state_rating_table_versions IS
   'One row per state per effective-date version. rate quotes must pin to a specific record_id (see quotes.state_rating_table_record_id) so a later rate change never silently re-rates an in-flight quote.';
@@ -96,7 +156,7 @@ COMMENT ON COLUMN state_rating_table_versions.approved_rating_variables IS
 -- applications over time (renewals, additional vehicles).
 -- ============================================================================
 
-CREATE TABLE applicants (
+CREATE TABLE IF NOT EXISTS applicants (
   applicant_id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   first_name                      TEXT NOT NULL,
   last_name                       TEXT NOT NULL,
@@ -124,7 +184,7 @@ CREATE TABLE applicants (
 -- attributes) - no per-state migrations needed.
 -- ============================================================================
 
-CREATE TABLE applications (
+CREATE TABLE IF NOT EXISTS applications (
   application_id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   applicant_id                    UUID NOT NULL REFERENCES applicants(applicant_id),
   status                          application_status_t NOT NULL DEFAULT 'draft',
@@ -138,9 +198,9 @@ CREATE TABLE applications (
   updated_at                      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_applications_applicant ON applications(applicant_id);
-CREATE INDEX idx_applications_garaging_state ON applications(garaging_state);
-CREATE INDEX idx_applications_status ON applications(status);
+CREATE INDEX IF NOT EXISTS idx_applications_applicant ON applications(applicant_id);
+CREATE INDEX IF NOT EXISTS idx_applications_garaging_state ON applications(garaging_state);
+CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status);
 
 COMMENT ON COLUMN applications.state_specific_extensions IS
   'Namespace for per-state supplemental fields (e.g. MI PIP tiers). What belongs here is driven by state_rating_table_versions.state_specific_application_fields for this application''s garaging_state, not hardcoded - see application schema v1.1 changelog.';
@@ -149,7 +209,7 @@ COMMENT ON COLUMN applications.state_specific_extensions IS
 -- ADDITIONAL DRIVERS
 -- ============================================================================
 
-CREATE TABLE additional_drivers (
+CREATE TABLE IF NOT EXISTS additional_drivers (
   driver_id                       UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   application_id                  UUID NOT NULL REFERENCES applications(application_id) ON DELETE CASCADE,
   name                             TEXT NOT NULL,
@@ -161,13 +221,13 @@ CREATE TABLE additional_drivers (
   at_fault_accidents_last_5yr     SMALLINT
 );
 
-CREATE INDEX idx_additional_drivers_application ON additional_drivers(application_id);
+CREATE INDEX IF NOT EXISTS idx_additional_drivers_application ON additional_drivers(application_id);
 
 -- ============================================================================
 -- VEHICLES
 -- ============================================================================
 
-CREATE TABLE vehicles (
+CREATE TABLE IF NOT EXISTS vehicles (
   vehicle_id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   application_id                  UUID NOT NULL REFERENCES applications(application_id) ON DELETE CASCADE,
   year                             SMALLINT NOT NULL,
@@ -196,15 +256,15 @@ CREATE TABLE vehicles (
   lienholder_name                 TEXT
 );
 
-CREATE INDEX idx_vehicles_application ON vehicles(application_id);
-CREATE INDEX idx_vehicles_vin ON vehicles(vin);
+CREATE INDEX IF NOT EXISTS idx_vehicles_application ON vehicles(application_id);
+CREATE INDEX IF NOT EXISTS idx_vehicles_vin ON vehicles(vin);
 
 -- ============================================================================
 -- COVERAGE REQUESTED / PRIOR INSURANCE
 -- 1:1 with applications - split out for clarity, not normalization purity.
 -- ============================================================================
 
-CREATE TABLE coverage_requested (
+CREATE TABLE IF NOT EXISTS coverage_requested (
   application_id                   UUID PRIMARY KEY REFERENCES applications(application_id) ON DELETE CASCADE,
   liability_bodily_injury_limits   TEXT,
   liability_property_damage_limit  NUMERIC(12,2),
@@ -218,7 +278,7 @@ CREATE TABLE coverage_requested (
   umbrella_limit                   NUMERIC(12,2)
 );
 
-CREATE TABLE prior_insurance (
+CREATE TABLE IF NOT EXISTS prior_insurance (
   application_id                   UUID PRIMARY KEY REFERENCES applications(application_id) ON DELETE CASCADE,
   current_carrier                  TEXT,
   years_with_current_carrier      SMALLINT,
@@ -228,7 +288,7 @@ CREATE TABLE prior_insurance (
   cancellation_reason              TEXT
 );
 
-CREATE TABLE claims_history (
+CREATE TABLE IF NOT EXISTS claims_history (
   claim_id                         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   application_id                   UUID NOT NULL REFERENCES applications(application_id) ON DELETE CASCADE,
   claim_date                       DATE NOT NULL,
@@ -238,14 +298,14 @@ CREATE TABLE claims_history (
   description                      TEXT
 );
 
-CREATE INDEX idx_claims_application ON claims_history(application_id);
+CREATE INDEX IF NOT EXISTS idx_claims_application ON claims_history(application_id);
 
 -- ============================================================================
 -- ENRICHMENT (populated by the pipeline post-intake, pre-referral - implements
 -- application schema v1.1's enrichment_computed section)
 -- ============================================================================
 
-CREATE TABLE applicant_enrichment (
+CREATE TABLE IF NOT EXISTS applicant_enrichment (
   application_id                   UUID PRIMARY KEY REFERENCES applications(application_id) ON DELETE CASCADE,
   sanctions_screen_result          sanctions_result_t NOT NULL DEFAULT 'pending',
   household_unlisted_resident_found BOOLEAN NOT NULL DEFAULT false,
@@ -257,7 +317,7 @@ CREATE TABLE applicant_enrichment (
 -- Unified violation history for both the applicant and additional drivers -
 -- subject_driver_id NULL means "the applicant"; otherwise references a
 -- specific additional_drivers row. Avoids two near-identical tables.
-CREATE TABLE person_violations (
+CREATE TABLE IF NOT EXISTS person_violations (
   violation_id                     UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   application_id                   UUID NOT NULL REFERENCES applications(application_id) ON DELETE CASCADE,
   subject_driver_id                UUID REFERENCES additional_drivers(driver_id),  -- NULL = applicant
@@ -268,14 +328,14 @@ CREATE TABLE person_violations (
   source                           TEXT NOT NULL
 );
 
-CREATE INDEX idx_person_violations_application ON person_violations(application_id);
+CREATE INDEX IF NOT EXISTS idx_person_violations_application ON person_violations(application_id);
 
-CREATE TABLE additional_driver_sanctions (
+CREATE TABLE IF NOT EXISTS additional_driver_sanctions (
   driver_id                        UUID PRIMARY KEY REFERENCES additional_drivers(driver_id) ON DELETE CASCADE,
   sanctions_screen_result          sanctions_result_t NOT NULL DEFAULT 'pending'
 );
 
-CREATE TABLE vehicle_enrichment (
+CREATE TABLE IF NOT EXISTS vehicle_enrichment (
   vehicle_id                       UUID PRIMARY KEY REFERENCES vehicles(vehicle_id) ON DELETE CASCADE,
   decoded_make                     TEXT,
   decoded_model                    TEXT,
@@ -289,7 +349,7 @@ CREATE TABLE vehicle_enrichment (
   enriched_at                      TIMESTAMPTZ
 );
 
-CREATE TABLE producer_verification (
+CREATE TABLE IF NOT EXISTS producer_verification (
   application_id                   UUID PRIMARY KEY REFERENCES applications(application_id) ON DELETE CASCADE,
   verified                         BOOLEAN NOT NULL DEFAULT false,
   license_status                   TEXT,
@@ -301,7 +361,7 @@ CREATE TABLE producer_verification (
 -- UNDERWRITING FLAGS (pipeline output)
 -- ============================================================================
 
-CREATE TABLE underwriting_flags (
+CREATE TABLE IF NOT EXISTS underwriting_flags (
   application_id                   UUID PRIMARY KEY REFERENCES applications(application_id) ON DELETE CASCADE,
   risk_score                       NUMERIC(6,2),
   vehicle_theft_risk_index         NUMERIC(6,2),
@@ -321,7 +381,7 @@ CREATE TABLE underwriting_flags (
 -- unredacted, even if the ultimate outcome is 'proceed.'"
 -- ============================================================================
 
-CREATE TABLE decision_log (
+CREATE TABLE IF NOT EXISTS decision_log (
   log_id                            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   application_id                    UUID NOT NULL REFERENCES applications(application_id) ON DELETE CASCADE,
   rule_id                           TEXT NOT NULL,           -- e.g. 'DH-01', matches
@@ -337,8 +397,8 @@ CREATE TABLE decision_log (
   created_at                        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_decision_log_application ON decision_log(application_id);
-CREATE INDEX idx_decision_log_rule ON decision_log(rule_id);
+CREATE INDEX IF NOT EXISTS idx_decision_log_application ON decision_log(application_id);
+CREATE INDEX IF NOT EXISTS idx_decision_log_rule ON decision_log(rule_id);
 
 -- Enforce append-only at the database level: no UPDATE, no DELETE, ever.
 -- A logging mistake gets corrected with a new row referencing the old one
@@ -351,11 +411,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER decision_log_no_update
+CREATE OR REPLACE TRIGGER decision_log_no_update
   BEFORE UPDATE ON decision_log
   FOR EACH ROW EXECUTE FUNCTION reject_decision_log_mutation();
 
-CREATE TRIGGER decision_log_no_delete
+CREATE OR REPLACE TRIGGER decision_log_no_delete
   BEFORE DELETE ON decision_log
   FOR EACH ROW EXECUTE FUNCTION reject_decision_log_mutation();
 
@@ -369,9 +429,13 @@ CREATE TRIGGER decision_log_no_delete
 -- full scoping discussion.
 -- ============================================================================
 
-CREATE TYPE participant_type_t AS ENUM ('capacity_provider', 'reinsurer', 'mga_retention');
+DO $$ BEGIN
+  CREATE TYPE participant_type_t AS ENUM ('capacity_provider', 'reinsurer', 'mga_retention');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE insurance_programs (
+CREATE TABLE IF NOT EXISTS insurance_programs (
   program_id                        UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   program_name                      TEXT NOT NULL,
   capacity_provider_name            TEXT NOT NULL,  -- the admitted fronting carrier
@@ -380,7 +444,7 @@ CREATE TABLE insurance_programs (
   created_at                        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE program_participants (
+CREATE TABLE IF NOT EXISTS program_participants (
   participant_id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   program_id                        UUID NOT NULL REFERENCES insurance_programs(program_id) ON DELETE CASCADE,
   participant_type                  participant_type_t NOT NULL,
@@ -393,7 +457,7 @@ CREATE TABLE program_participants (
   effective_range                   TSTZRANGE NOT NULL
 );
 
-CREATE INDEX idx_program_participants_program ON program_participants(program_id);
+CREATE INDEX IF NOT EXISTS idx_program_participants_program ON program_participants(program_id);
 
 -- Risk-bearing participant shares (capacity_provider + reinsurer) must sum to
 -- 100% per program. This is a simplified, non-temporal version of the check -
@@ -422,10 +486,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE CONSTRAINT TRIGGER program_participants_sum_check
-  AFTER INSERT OR UPDATE OR DELETE ON program_participants
-  DEFERRABLE INITIALLY DEFERRED
-  FOR EACH ROW EXECUTE FUNCTION check_program_shares_sum_to_100();
+DO $$ BEGIN
+  CREATE CONSTRAINT TRIGGER program_participants_sum_check
+    AFTER INSERT OR UPDATE OR DELETE ON program_participants
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION check_program_shares_sum_to_100();
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- QUOTES
@@ -434,7 +502,7 @@ CREATE CONSTRAINT TRIGGER program_participants_sum_check
 -- own comment, and the registry schema's "how_this_is_used" item 6).
 -- ============================================================================
 
-CREATE TABLE quotes (
+CREATE TABLE IF NOT EXISTS quotes (
   quote_id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   application_id                    UUID NOT NULL REFERENCES applications(application_id) ON DELETE CASCADE,
   state_rating_table_record_id      UUID NOT NULL REFERENCES state_rating_table_versions(record_id),
@@ -453,8 +521,8 @@ CREATE TABLE quotes (
   expires_at                        TIMESTAMPTZ
 );
 
-CREATE INDEX idx_quotes_application ON quotes(application_id);
-CREATE INDEX idx_quotes_program ON quotes(program_id);
+CREATE INDEX IF NOT EXISTS idx_quotes_application ON quotes(application_id);
+CREATE INDEX IF NOT EXISTS idx_quotes_program ON quotes(program_id);
 
 -- ============================================================================
 -- POLICIES (ADR 0010)
@@ -467,7 +535,7 @@ CREATE INDEX idx_quotes_program ON quotes(program_id);
 -- ADR 0010's own note and the follow-on ADR it calls for.
 -- ============================================================================
 
-CREATE TABLE policies (
+CREATE TABLE IF NOT EXISTS policies (
   policy_id                         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   quote_id                          UUID NOT NULL UNIQUE REFERENCES quotes(quote_id),
   policy_number                     TEXT,
@@ -477,8 +545,8 @@ CREATE TABLE policies (
   updated_at                        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_policies_quote ON policies(quote_id);
-CREATE INDEX idx_policies_status ON policies(status);
+CREATE INDEX IF NOT EXISTS idx_policies_quote ON policies(quote_id);
+CREATE INDEX IF NOT EXISTS idx_policies_status ON policies(status);
 
 -- ============================================================================
 -- POLICY EVENTS (ADR 0010)
@@ -493,7 +561,7 @@ CREATE INDEX idx_policies_status ON policies(status);
 -- the old one in notes, not by editing history.
 -- ============================================================================
 
-CREATE TABLE policy_events (
+CREATE TABLE IF NOT EXISTS policy_events (
   event_id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   policy_id                         UUID NOT NULL REFERENCES policies(policy_id) ON DELETE CASCADE,
   event_type                        TEXT NOT NULL,             -- e.g. 'bound', 'cancelled'
@@ -502,7 +570,7 @@ CREATE TABLE policy_events (
   created_at                        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_policy_events_policy ON policy_events(policy_id);
+CREATE INDEX IF NOT EXISTS idx_policy_events_policy ON policy_events(policy_id);
 
 CREATE OR REPLACE FUNCTION reject_policy_events_mutation()
 RETURNS TRIGGER AS $$
@@ -511,11 +579,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER policy_events_no_update
+CREATE OR REPLACE TRIGGER policy_events_no_update
   BEFORE UPDATE ON policy_events
   FOR EACH ROW EXECUTE FUNCTION reject_policy_events_mutation();
 
-CREATE TRIGGER policy_events_no_delete
+CREATE OR REPLACE TRIGGER policy_events_no_delete
   BEFORE DELETE ON policy_events
   FOR EACH ROW EXECUTE FUNCTION reject_policy_events_mutation();
 
@@ -733,7 +801,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 -- state_rating_table_versions and program_participants.
 -- ============================================================================
 
-CREATE TABLE policy_endorsements (
+CREATE TABLE IF NOT EXISTS policy_endorsements (
   endorsement_id      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   policy_id           UUID NOT NULL REFERENCES policies(policy_id),
   effective_range     TSTZRANGE NOT NULL,
@@ -750,7 +818,7 @@ CREATE TABLE policy_endorsements (
     EXCLUDE USING gist (policy_id WITH =, effective_range WITH &&)
 );
 
-CREATE INDEX idx_policy_endorsements_policy ON policy_endorsements(policy_id);
+CREATE INDEX IF NOT EXISTS idx_policy_endorsements_policy ON policy_endorsements(policy_id);
 
 -- Append-only, same reasoning as decision_log/policy_events: the exclusion
 -- constraint above only stops a *conflicting* write. It does nothing to stop
@@ -765,11 +833,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER policy_endorsements_no_update
+CREATE OR REPLACE TRIGGER policy_endorsements_no_update
   BEFORE UPDATE ON policy_endorsements
   FOR EACH ROW EXECUTE FUNCTION reject_policy_endorsements_mutation();
 
-CREATE TRIGGER policy_endorsements_no_delete
+CREATE OR REPLACE TRIGGER policy_endorsements_no_delete
   BEFORE DELETE ON policy_endorsements
   FOR EACH ROW EXECUTE FUNCTION reject_policy_endorsements_mutation();
 
@@ -1026,7 +1094,7 @@ GRANT EXECUTE ON FUNCTION correct_policy_endorsement(UUID, TSTZRANGE, endorsemen
 -- DOCUMENTS (metadata only - files live in Azure Blob Storage per ADR 0002/0003)
 -- ============================================================================
 
-CREATE TABLE documents (
+CREATE TABLE IF NOT EXISTS documents (
   document_id                       UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   application_id                    UUID NOT NULL REFERENCES applications(application_id) ON DELETE CASCADE,
   document_type                     document_type_t NOT NULL,
@@ -1038,7 +1106,7 @@ CREATE TABLE documents (
   uploaded_by                       TEXT
 );
 
-CREATE INDEX idx_documents_application ON documents(application_id);
+CREATE INDEX IF NOT EXISTS idx_documents_application ON documents(application_id);
 
 -- ============================================================================
 -- updated_at maintenance
@@ -1052,9 +1120,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER applicants_updated_at BEFORE UPDATE ON applicants
+CREATE OR REPLACE TRIGGER applicants_updated_at BEFORE UPDATE ON applicants
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER applications_updated_at BEFORE UPDATE ON applications
+CREATE OR REPLACE TRIGGER applications_updated_at BEFORE UPDATE ON applications
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER policies_updated_at BEFORE UPDATE ON policies
+CREATE OR REPLACE TRIGGER policies_updated_at BEFORE UPDATE ON policies
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
