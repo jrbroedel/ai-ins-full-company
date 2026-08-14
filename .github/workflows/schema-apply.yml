@@ -36,3 +36,15 @@ jobs:
 
       - name: Apply and verify schema
         run: scripts/apply-and-verify-schema.sh
+
+      # ADR 0022. Deliberately a step in THIS job rather than a workflow of its
+      # own: the suites exercise the schema this job just applied, so they have
+      # a real dependency on it and must not start before it finishes. ADR
+      # 0020's argument for keeping schema-apply and deploy-vm uncoupled does
+      # not transfer here - that independence was about two things that do not
+      # need each other, which is the opposite of this case.
+      #
+      # A failing suite fails the job, and therefore the push. The suites never
+      # commit; see scripts/run-tests.sh for the static check that enforces it.
+      - name: Run behavioural test suites
+        run: scripts/run-tests.sh
