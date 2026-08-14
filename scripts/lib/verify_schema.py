@@ -42,6 +42,14 @@ import psycopg2
 # first_program_share_gap is NOT a sixth new function - ADR 0021 changes its
 # return type, which needs a DROP before the CREATE OR REPLACE, but it is the
 # same one object the baseline already counted).
+#
+# ADR 0021's addendum moves no count. It adds a defaulted p_term_override
+# parameter to program_share_gaps and first_program_share_gap - which needs a
+# DROP of each one-argument form first, since a defaulted parameter overloads
+# rather than replaces - and extends the body of
+# check_program_term_contains_participants. Same objects, same names, new
+# signatures, so all six categories stay where ADR 0021 left them. Confirmed
+# by running the parser, not assumed.
 # This is the acceptance test for the parser itself - if the parser's counts don't
 # match this, that's a parser bug to fix, not a schema surprise, and the
 # parser is not trusted against a live database until it does. Updated by

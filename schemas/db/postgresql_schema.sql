@@ -562,12 +562,31 @@ CREATE OR REPLACE TRIGGER program_participants_no_delete
 --
 -- Returns no rows for a sound program. `direction` is derived from the same
 -- total the row reports, so the two can never disagree.
+--
+-- ADR 0021 addendum adds `p_term_override`. The insurance_programs term
+-- trigger has to ask this question about a term that does not exist yet - it
+-- runs BEFORE UPDATE, so `NEW.effective_range` is not what a read of
+-- insurance_programs would return. A parameter was chosen over a sibling
+-- function for the reason ADR 0017 and ADR 0021 both gave: the probe set, the
+-- containment semantics and the tolerance band are the rule, and the rule
+-- lives in one place. Passing NULL (the default, and what every pre-existing
+-- caller does implicitly) reads the committed term exactly as before.
+--
+-- Both one-argument forms are dropped rather than left in place: adding a
+-- defaulted parameter creates an OVERLOAD, not a replacement, and a bare
+-- program_share_gaps(uuid) call would then be ambiguous between the two.
 DROP FUNCTION IF EXISTS first_program_share_gap(UUID);
+DROP FUNCTION IF EXISTS program_share_gaps(UUID);
 
-CREATE OR REPLACE FUNCTION program_share_gaps(p_program_id UUID)
+CREATE OR REPLACE FUNCTION program_share_gaps(
+  p_program_id UUID,
+  p_term_override TSTZRANGE DEFAULT NULL
+)
 RETURNS TABLE (bad_instant TIMESTAMPTZ, total_share NUMERIC, direction TEXT) AS $$
   WITH prog AS (
-    SELECT effective_range AS term FROM insurance_programs WHERE program_id = p_program_id
+    SELECT COALESCE(p_term_override,
+                    (SELECT effective_range FROM insurance_programs
+                      WHERE program_id = p_program_id)) AS term
   ),
   risk AS (
     SELECT share_percentage, effective_range
@@ -602,10 +621,13 @@ RETURNS TABLE (bad_instant TIMESTAMPTZ, total_share NUMERIC, direction TEXT) AS 
   ORDER BY t;
 $$ LANGUAGE sql STABLE;
 
-CREATE OR REPLACE FUNCTION first_program_share_gap(p_program_id UUID)
+CREATE OR REPLACE FUNCTION first_program_share_gap(
+  p_program_id UUID,
+  p_term_override TSTZRANGE DEFAULT NULL
+)
 RETURNS TABLE (bad_instant TIMESTAMPTZ, total_share NUMERIC, direction TEXT) AS $$
   SELECT bad_instant, total_share, direction
-  FROM program_share_gaps(p_program_id)
+  FROM program_share_gaps(p_program_id, p_term_override)
   ORDER BY bad_instant
   LIMIT 1;
 $$ LANGUAGE sql STABLE;
@@ -1008,14 +1030,30 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 -- closes or adjusts participation first - remove_program_participant() or
 -- correct_program_participant() - and then shortens the term.
 --
--- Widening needs no special case and gets none: containment against a
--- superset is satisfied by every row that was contained in the subset, so a
--- widen simply finds nothing to complain about. Tested, not assumed.
+-- Widening needs no special case for *containment* and gets none: containment
+-- against a superset is satisfied by every row that was contained in the
+-- subset, so a widen finds nothing to strand. Tested, not assumed.
+--
+-- ADR 0021 addendum: but widening does stretch the window the 100% share rule
+-- is evaluated over, and the share check lives on program_participants and
+-- never fires for a write to this table. ADR 0021 shipped that as a named open
+-- item; the addendum closes it here. A term change that exposes instants the
+-- old term did not cover now evaluates the share rule against the incoming
+-- range and, if the newly reachable stretch is under-placed, opens a
+-- program_coverage_gaps row in the same transaction rather than blocking.
+--
+-- Blocking was rejected: the panel is not wrong, the term is simply longer
+-- than the panel currently reaches, and that is a normal thing to do while a
+-- renewal is being placed. Leaving it untracked was the bug. Opening the gap
+-- makes the state exactly the state a deliberate mid-term removal produces,
+-- which the rest of ADR 0021 already knows how to reason about.
 CREATE OR REPLACE FUNCTION check_program_term_contains_participants()
 RETURNS TRIGGER AS $$
 DECLARE
   v_offenders TEXT;
   v_count INTEGER;
+  v_gap RECORD;
+  v_open_gaps INTEGER;
 BEGIN
   SELECT count(*),
          string_agg(format('%s (%s) effective %s',
@@ -1030,6 +1068,62 @@ BEGIN
     RAISE EXCEPTION 'PROGRAM_TERM_STRANDS_PARTICIPANT: changing program % term from % to % would leave % participant row(s) outside it: %',
       NEW.program_id, OLD.effective_range, NEW.effective_range, v_count, v_offenders
       USING HINT = 'A participant cannot bear risk when the program is not in force. Close or adjust the participant rows first - remove_program_participant() for a departure, correct_program_participant() for a shortened participation - then change the program term.';
+  END IF;
+
+  -- Does the incoming term reach any instant the outgoing one did not?
+  --
+  -- `NOT (NEW <@ OLD)` is the whole test, and it is not the same as "the
+  -- upper bound went up". Two cases break the bound-comparison version, both
+  -- reproduced before this was written:
+  --   * a lower-bound-only extension - [2026-06,2027-01) -> [2026-01,2027-01)
+  --     leaves upper() identical while exposing six months;
+  --   * a shift - [2026-01,2027-01) -> [2026-06,2027-06) - where neither
+  --     range contains the other, so `OLD <@ NEW` is false too, yet five
+  --     months at the top end are newly reachable.
+  -- Containment is what "exposes new instants" actually means for a range
+  -- type, so the range operator states it directly instead of a pair of
+  -- bound comparisons that have to be got right in both directions. A pure
+  -- narrow satisfies NEW <@ OLD and is skipped: every instant it keeps was
+  -- already inside the old term and already checked.
+  IF NOT (NEW.effective_range <@ OLD.effective_range) THEN
+    SELECT * INTO v_gap
+    FROM program_share_gaps(NEW.program_id, NEW.effective_range)
+    WHERE direction = 'under'
+    ORDER BY bad_instant
+    LIMIT 1;
+
+    -- Filtered to 'under' deliberately. An 'over' finding here is reachable -
+    -- the participants sum check is DEFERRABLE INITIALLY DEFERRED, so an
+    -- overlapping row inserted earlier in this same transaction is visible to
+    -- this BEFORE trigger while its own check is still pending - and it must
+    -- not be touched. Over-100% is a hard block everywhere else in the
+    -- schema, and silently opening a gap row for one would make a term change
+    -- the single way to suppress an overlap. Left alone, the deferred check
+    -- raises on it at commit exactly as it always does.
+    IF FOUND THEN
+      -- Suppression is per-program and coarse (ADR 0021 section 1), so one
+      -- open row already covers this program's whole timeline; a second would
+      -- be noise and an extra thing for someone to resolve. Resolving is
+      -- still safe, because resolve_program_coverage_gap() re-evaluates the
+      -- share math fresh and refuses while any hole remains.
+      SELECT count(*) INTO v_open_gaps
+      FROM program_coverage_gaps
+      WHERE program_id = NEW.program_id AND NOT resolved;
+
+      IF v_open_gaps = 0 THEN
+        -- participant_id_removed stays NULL: no participant left. This is the
+        -- case ADR 0021 made that column nullable for, arriving sooner than
+        -- that ADR expected it to.
+        INSERT INTO program_coverage_gaps (program_id, participant_id_removed, removal_date, reason)
+        VALUES (NEW.program_id, NULL, v_gap.bad_instant,
+                format('program term widened from %s to %s; risk-bearing shares total %s percent at %s',
+                       OLD.effective_range, NEW.effective_range,
+                       v_gap.total_share, v_gap.bad_instant));
+
+        RAISE NOTICE 'PROGRAM_TERM_WIDENED_GAP_OPENED: program % term now reaches % where shares total % percent; opened a program_coverage_gaps row rather than blocking the term change',
+          NEW.program_id, v_gap.bad_instant, v_gap.total_share;
+      END IF;
+    END IF;
   END IF;
 
   RETURN NEW;

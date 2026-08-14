@@ -115,7 +115,67 @@ ADR 0016 addendum 2 and ADR 0017 section 4 record two traps for anything that su
 
 - **No Odoo model over `program_coverage_gaps`.** Gaps are opened and resolved through `psql` by whoever is doing the panel work, exactly as participant corrections are today. Someone has to remember to resolve them.
 - **No alerting on a stale open gap.** Nothing reminds anyone that a program has been under-placed for six months. The NOTICE fires on writes to the panel, which is precisely when nobody is ignoring it; the case that needs attention is the program nobody has touched. A periodic check would fit the systemd-timer pattern ADR 0019 established for `expire_policies()`, and is not built here.
-- **Widening a program term can create an untracked under-100% stretch** (section 4). Latent, not silent - the next participant write raises - but the widen itself is accepted.
+- ~~**Widening a program term can create an untracked under-100% stretch** (section 4). Latent, not silent - the next participant write raises - but the widen itself is accepted.~~ **Closed by the addendum below** (same day): a term change that exposes instants the old term did not cover now opens a `program_coverage_gaps` row in the same transaction instead of leaving the hole untracked.
 - **Gap suppression is per-program, not per-window** (section 1). An open gap on a program masks unrelated under-100% holes elsewhere in that program's term.
 - **The share check re-evaluates the whole timeline per changed row**, being a `FOR EACH ROW` constraint trigger, which also multiplies the suppression NOTICE. Predates this ADR; unaddressed.
 - **Still no `program_events` audit trail.** `program_coverage_gaps` records why a hole was opened and how it was closed, which is more than existed before, but it covers only this one kind of panel change. Who changed a share, and why, is still unrecorded - ADR 0017's open item, narrowed rather than closed.
+
+---
+
+# Addendum: term changes that expose new instants (2026-08-14)
+
+**Status:** Decided; implemented
+**Closes:** this ADR's own open item - "widening a program term can create an untracked under-100% stretch."
+
+Section 4 shipped the containment guard and named what it did not cover. Widening `insurance_programs.effective_range` stretches the window the 100% share rule is evaluated over, the share check lives on `program_participants` and never fires for a write to `insurance_programs`, and so a widened program could sit with genuinely unplaced instants and no `program_coverage_gaps` row. Reproduced again before anything was changed: a 2026 program widened to 2025-2028 was accepted, left two under-100% instants, and created zero gap rows.
+
+**Decision: do not block. When a term change exposes instants the old term did not reach, evaluate the share rule against the incoming range and open a `program_coverage_gaps` row for any under-100% finding, in the same transaction.**
+
+Blocking was the wrong tool. The panel is not wrong - the term is simply longer than the panel currently reaches, which is an ordinary thing to do while a renewal is being placed. Leaving it untracked was the bug, not the widen itself. Opening the gap puts the program in exactly the state a deliberate mid-term removal produces, which every other mechanism in this ADR already knows how to reason about: the check is suppressed, the NOTICE fires, and `resolve_program_coverage_gap()` refuses to close it until the panel actually covers the term.
+
+## 1. "Widening" is the wrong word for the test, and the right test is containment
+
+The condition is **`NOT (NEW.effective_range <@ OLD.effective_range)`** - does the incoming term reach any instant the outgoing one did not. Two cheaper-looking tests were considered and both are wrong, each demonstrated against the live database before the comparison was written:
+
+**`upper(NEW) > upper(OLD)` misses a lower-bound extension.** Moving `[2026-06, 2027-01)` to `[2026-01, 2027-01)` leaves `upper()` identical while exposing six uncovered months. The naive test reports `false`; the containment test reports `true`. This is the case that would have shipped a silently broken guard.
+
+**`OLD <@ NEW` - "is the new term a superset" - misses a shift.** Moving `[2026-01, 2027-01)` to `[2026-06, 2027-06)` leaves neither range containing the other, so a superset test reports `false`, yet five months at the top end are newly reachable and unplaced. A shift also passes the containment guard whenever the panel happens to sit inside the overlap, so it is genuinely reachable rather than theoretical.
+
+Containment is what "exposes new instants" *means* for a range type. Stating it with the range operator says so directly, instead of a pair of bound comparisons that have to be independently correct at both ends and for unbounded and empty ranges besides. A pure narrow satisfies `NEW <@ OLD` and is skipped, which is correct: every instant a narrow keeps was already inside the old term and already checked. Narrowing still goes through the unchanged containment block, and still hard-blocks when it would strand a row.
+
+## 2. An over-100% finding is reachable here, and is deliberately left alone
+
+This was worth checking rather than assuming, and the assumption would have been wrong.
+
+The reasoning that suggests it is unreachable: every participant row satisfies `effective_range <@ OLD` (the invariant this trigger and the `OUTSIDE_TERM` check jointly maintain), so any newly exposed instant is covered by no participant at all and totals 0 - under, never over.
+
+The reasoning is incomplete, because the probe runs over the whole incoming term, not only the newly exposed part, and **the participants sum check is `DEFERRABLE INITIALLY DEFERRED`**. A transaction that inserts an overlapping participant row and *then* widens the term presents this `BEFORE` trigger with an overlap whose own check is still pending. Demonstrated - the trigger sees `130.00 over` at that point.
+
+So the gap-opening query filters on `direction = 'under'`. An over-100% finding is neither suppressed nor specially reported here; it is left for the deferred check to raise at commit, exactly as it does everywhere else. Auto-opening a gap row for one would have made a term change the single way in the schema to suppress an overlap, which is precisely the exception ADR 0021 section 1 promised never to create. Tested end to end: the widen opens a row for the under, and the 130% overlap still fails the transaction at commit.
+
+## 3. Parameterised, not duplicated
+
+`program_share_gaps()` and `first_program_share_gap()` take a `p_term_override TSTZRANGE DEFAULT NULL`. The trigger has to ask about a term that does not exist yet - it runs `BEFORE UPDATE`, so `NEW.effective_range` is not what a read of `insurance_programs` returns - and the pre-existing signature could only read the committed row.
+
+A sibling function was the alternative and was rejected on the grounds ADR 0017 and this ADR both argued: the probe set, the containment semantics and the tolerance band *are* the rule, and a second copy is a second thing to keep correct. Passing `NULL`, which every pre-existing caller now does implicitly, reads the committed term exactly as before.
+
+One mechanical trap worth recording, because it does not fail loudly at apply time: **a defaulted parameter overloads rather than replaces.** Leaving the one-argument forms in place would have made a bare `program_share_gaps(uuid)` call ambiguous - `function is not unique` - at some later moment far from this change. Both one-argument forms are dropped explicitly before the new ones are created, and a bare call was tested afterwards to confirm it still resolves.
+
+## 4. One gap row, not one per finding
+
+The trigger opens at most one row, and only when the program has no unresolved gap already. Suppression is per-program and coarse by section 1's decision, so one open row already covers the program's whole timeline; a second would be noise and one more thing for someone to close. This is safe because `resolve_program_coverage_gap()` re-evaluates the share math fresh rather than trusting the row - closing the single gap still requires the whole term to be placed, including a hole that arrived after the row was opened. Verified unchanged against a gap opened this way: it refuses while the newly exposed stretch is unplaced, and succeeds once a 2027 layer is added.
+
+`participant_id_removed` is left NULL, which is the case section 1 made that column nullable for - a gap that is a statement about a program's coverage rather than about any removal. It arrived sooner than that ADR expected.
+
+## Consequences
+
+- The last open item this ADR named about its own mechanism is closed. A term change can no longer leave an untracked hole.
+- Two of ADR 0021's original tests deliberately changed behaviour, and both were re-run: T9 (widen) now reports one open gap row where it reported zero, and T19 (widen then an unrelated participant write) now succeeds under suppression where it previously raised. The other eighteen are unchanged.
+- **The ADR 0015 verifier baseline does not move.** Confirmed by running the parser rather than assumed: the addendum changes two function signatures and one function body, adds no object, and leaves all six categories where ADR 0021 left them - 29 tables, 19 types, 36 functions, 6 views, 21 triggers, 6 `SET NOT NULL` columns.
+- Still no `GRANT` on anything involved, and the automatic gap row is opened by a trigger rather than a callable function, so this adds no new reachable surface.
+
+## Still open
+
+- **A gap opened by a term change still has to be resolved by hand**, like every other gap - no Odoo model, no alerting. The NOTICE and the `reason` text (which records the old and new ranges) are all a later reader gets.
+- **Narrowing is not re-checked against the share rule.** It does not need to be - every instant a narrow keeps was inside the old term - but this is an argument, not an enforced invariant, and it would stop holding if participation were ever allowed outside the program term.
+- Everything else ADR 0021 listed as open remains open, unchanged.
