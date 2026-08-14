@@ -33,7 +33,15 @@ import psycopg2
 # 0019's nonrenewal/expiration work: +2 tables (nonrenewal_notice_requirements,
 # policy_nonrenewals), +5 functions (nonrenewal_notice_days, nonrenew_policy,
 # correct_policy_nonrenewal, expire_policies,
-# reject_policy_nonrenewals_mutation), +2 triggers, no new types or views).
+# reject_policy_nonrenewals_mutation), +2 triggers, no new types or views;
+# and ADR 0021's participant-removal work: +1 table (program_coverage_gaps),
+# +5 functions (program_share_gaps, remove_program_participant,
+# resolve_program_coverage_gap, check_program_term_contains_participants,
+# add_program_participant_with_reallocation), +1 trigger
+# (insurance_programs_term_check), no new types, views or SET NOT NULL columns.
+# first_program_share_gap is NOT a sixth new function - ADR 0021 changes its
+# return type, which needs a DROP before the CREATE OR REPLACE, but it is the
+# same one object the baseline already counted).
 # This is the acceptance test for the parser itself - if the parser's counts don't
 # match this, that's a parser bug to fix, not a schema surprise, and the
 # parser is not trusted against a live database until it does. Updated by
@@ -41,11 +49,11 @@ import psycopg2
 # automatically, but this snapshot is a fact about the file's current state,
 # not something the parser can derive about itself.
 BASELINE = {
-    "tables": 28,
+    "tables": 29,
     "types": 19,
-    "functions": 31,
+    "functions": 36,
     "views": 6,
-    "triggers": 20,
+    "triggers": 21,
     "not_null_columns": 6,
 }
 

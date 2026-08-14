@@ -544,8 +544,28 @@ CREATE OR REPLACE TRIGGER program_participants_no_delete
 -- EXISTS below): that's a program whose panel hasn't been set up yet, which
 -- has to remain insertable, and it's the same escape the original
 -- `total_share != 0` clause provided.
-CREATE OR REPLACE FUNCTION first_program_share_gap(p_program_id UUID)
-RETURNS TABLE (bad_instant TIMESTAMPTZ, total_share NUMERIC) AS $$
+-- ADR 0021 splits this in two. `program_share_gaps()` is the probe engine and
+-- returns EVERY bad instant, each labelled 'under' or 'over';
+-- `first_program_share_gap()` is the LIMIT 1 wrapper ADR 0017's callers
+-- already use, now carrying the same third column.
+--
+-- The split is forced by ADR 0021's suppression rule, not cosmetic. ADR 0021
+-- lets an under-100% stretch exist while it is tracked by an open
+-- program_coverage_gaps row, but keeps over-100% an unconditional hard block.
+-- A function that reports only the *earliest* bad instant cannot express that
+-- pair: on a program with an under at March and an over at September, the
+-- suppressed under is all the caller would ever see, and the overlap - the
+-- case where the waterfall pays someone twice - would pass silently. The
+-- trigger therefore asks for the two directions separately, which needs a
+-- function that returns more than one row. The probe logic itself is still
+-- written exactly once, here, per ADR 0017's single-source-of-truth point.
+--
+-- Returns no rows for a sound program. `direction` is derived from the same
+-- total the row reports, so the two can never disagree.
+DROP FUNCTION IF EXISTS first_program_share_gap(UUID);
+
+CREATE OR REPLACE FUNCTION program_share_gaps(p_program_id UUID)
+RETURNS TABLE (bad_instant TIMESTAMPTZ, total_share NUMERIC, direction TEXT) AS $$
   WITH prog AS (
     SELECT effective_range AS term FROM insurance_programs WHERE program_id = p_program_id
   ),
@@ -563,18 +583,66 @@ RETURNS TABLE (bad_instant TIMESTAMPTZ, total_share NUMERIC) AS $$
     SELECT lower(effective_range) FROM risk
     UNION
     SELECT upper(effective_range) FROM risk
+  ),
+  -- The total per probe, computed once rather than twice as ADR 0017's
+  -- version did (it repeated the correlated SUM in the select list and the
+  -- WHERE clause); same result, and 'direction' now has a single source.
+  totals AS (
+    SELECT p.t,
+           COALESCE((SELECT SUM(r.share_percentage) FROM risk r
+                     WHERE r.effective_range @> p.t), 0) AS total
+    FROM probes p, prog
+    WHERE p.t IS NOT NULL               -- an unbounded row bound; the program's own probe covers it
+      AND prog.term @> p.t              -- '[)' semantics: the term's own upper bound isn't inside it
+      AND EXISTS (SELECT 1 FROM risk)
   )
-  SELECT p.t,
-         COALESCE((SELECT SUM(r.share_percentage) FROM risk r WHERE r.effective_range @> p.t), 0)
-  FROM probes p, prog
-  WHERE p.t IS NOT NULL                 -- an unbounded row bound; the program's own probe covers it
-    AND prog.term @> p.t                -- '[)' semantics: the term's own upper bound isn't inside it
-    AND EXISTS (SELECT 1 FROM risk)
-    AND COALESCE((SELECT SUM(r.share_percentage) FROM risk r WHERE r.effective_range @> p.t), 0)
-        NOT BETWEEN 99.99 AND 100.01
-  ORDER BY p.t
+  SELECT t, total, CASE WHEN total < 100 THEN 'under' ELSE 'over' END
+  FROM totals
+  WHERE total NOT BETWEEN 99.99 AND 100.01
+  ORDER BY t;
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION first_program_share_gap(p_program_id UUID)
+RETURNS TABLE (bad_instant TIMESTAMPTZ, total_share NUMERIC, direction TEXT) AS $$
+  SELECT bad_instant, total_share, direction
+  FROM program_share_gaps(p_program_id)
+  ORDER BY bad_instant
   LIMIT 1;
 $$ LANGUAGE sql STABLE;
+
+-- ADR 0021. Placed here rather than beside the other ADR 0021 objects further
+-- down because check_program_shares_sum_to_100() immediately below is its
+-- first reader, and a table should exist above the code that reads it even
+-- where plpgsql's run-time name resolution would forgive the reverse.
+--
+-- An open (unresolved) row here suppresses the under-100% branch of the share
+-- check for its whole program. The suppression is deliberately coarse -
+-- per-program, not per-stranded-window - and ADR 0021 section 2 argues why:
+-- matching a gap row to the exact interval it excuses would be a second
+-- temporal model layered on the first, and would have to be kept correct as
+-- the panel moves underneath it.
+--
+-- participant_id_removed is nullable on purpose. Every gap this ADR can
+-- currently open comes from remove_program_participant(), but a gap is a
+-- statement about a program's coverage, not about a removal, and a future
+-- reason to open one (a reinsurer failing mid-term, a treaty voided from
+-- inception) should not have to invent a participant row to point at.
+CREATE TABLE IF NOT EXISTS program_coverage_gaps (
+  gap_id                            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  program_id                        UUID NOT NULL REFERENCES insurance_programs(program_id) ON DELETE CASCADE,
+  participant_id_removed            UUID REFERENCES program_participants(participant_id),
+  removal_date                      TIMESTAMPTZ NOT NULL,
+  reason                            TEXT NOT NULL,
+  resolved                          BOOLEAN NOT NULL DEFAULT false,
+  resolved_at                       TIMESTAMPTZ,
+  resolution_note                   TEXT,
+  created_at                        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The share check asks exactly one question of this table on every write to
+-- program_participants: "are there unresolved rows for this program?"
+CREATE INDEX IF NOT EXISTS idx_program_coverage_gaps_program_resolved
+  ON program_coverage_gaps(program_id, resolved);
 
 CREATE OR REPLACE FUNCTION check_program_shares_sum_to_100()
 RETURNS TRIGGER AS $$
@@ -583,6 +651,7 @@ DECLARE
   v_term TSTZRANGE;
   v_outside RECORD;
   v_gap RECORD;
+  v_open_gaps INTEGER;
 BEGIN
   v_program_id := COALESCE(NEW.program_id, OLD.program_id);
 
@@ -611,12 +680,54 @@ BEGIN
       USING HINT = 'A participant cannot bear risk when the program is not in force. Either shorten the participant''s effective_range to fit the program term, or change the program term first.';
   END IF;
 
-  SELECT * INTO v_gap FROM first_program_share_gap(v_program_id);
+  -- ADR 0021 asks the two directions as two separate questions, earliest
+  -- first within each. Asking once for "the earliest bad instant" and then
+  -- branching on its direction would be wrong: on a panel that is under at
+  -- March and over at September, the March row is the only one such a query
+  -- returns, and suppressing it would carry the September overlap through
+  -- unexamined. Over-100% is never suppressible, so it is asked first and on
+  -- its own.
+  --
+  -- (The percent signs that used to sit against these numbers are gone. RAISE
+  -- scans its format left to right, so the old '%%%' resolved as a literal '%'
+  -- followed by a placeholder and printed "%60.00" - the sign on the wrong
+  -- side of the value. There is no ordering of those three characters that
+  -- yields "60.00%", so the wording carries the unit instead.)
+  SELECT * INTO v_gap FROM program_share_gaps(v_program_id)
+  WHERE direction = 'over'
+  ORDER BY bad_instant
+  LIMIT 1;
 
   IF FOUND THEN
-    RAISE EXCEPTION 'PROGRAM_SHARES_NOT_100_AT_INSTANT: program % risk-bearing participant shares sum to %%% as of %, must equal 100%%',
+    RAISE EXCEPTION 'PROGRAM_SHARES_NOT_100_AT_INSTANT: program % risk-bearing participant shares total % percent as of %, must equal 100',
       v_program_id, v_gap.total_share, v_gap.bad_instant
-      USING HINT = 'Under 100% means a gap (an instant where part of the risk is unplaced); over 100% usually means an old row was not closed when its replacement was added. This trigger is DEFERRABLE INITIALLY DEFERRED, so close the outgoing row and add the incoming one in the same transaction.';
+      USING HINT = 'Over 100 is an overlap - usually an old row that was not closed when its replacement was added - and is never permitted. An unresolved program_coverage_gaps row does NOT suppress this case; it only ever suppresses an under-100 gap. This trigger is DEFERRABLE INITIALLY DEFERRED, so close the outgoing row and add the incoming one in the same transaction.';
+  END IF;
+
+  SELECT * INTO v_gap FROM program_share_gaps(v_program_id)
+  WHERE direction = 'under'
+  ORDER BY bad_instant
+  LIMIT 1;
+
+  IF FOUND THEN
+    SELECT count(*) INTO v_open_gaps
+    FROM program_coverage_gaps
+    WHERE program_id = v_program_id AND NOT resolved;
+
+    IF v_open_gaps > 0 THEN
+      -- Suppressed, but not silent. The gap table records that someone
+      -- accepted an under-placed panel; a NOTICE records that the database
+      -- acted on that acceptance, and puts the instant and the total in the
+      -- Postgres log where a later "why did this program pay out short?"
+      -- has something to find. Costing one log line per suppressed write is
+      -- the cheapest available alternative to the state being invisible.
+      RAISE NOTICE 'PROGRAM_COVERAGE_GAP_OPEN: program % is under-placed (risk-bearing shares total % percent as of %); permitted because % unresolved program_coverage_gaps row(s) exist for it',
+        v_program_id, v_gap.total_share, v_gap.bad_instant, v_open_gaps;
+    ELSE
+      RAISE EXCEPTION 'PROGRAM_SHARES_NOT_100_AT_INSTANT: program % risk-bearing participant shares total % percent as of %, must equal 100',
+        v_program_id, v_gap.total_share, v_gap.bad_instant
+        USING HINT = 'Under 100 means part of the risk is unplaced at that instant. If this is a deliberate mid-term removal, use remove_program_participant() - it opens a program_coverage_gaps row, which suppresses this check for the program until resolve_program_coverage_gap() closes it. This trigger is DEFERRABLE INITIALLY DEFERRED, so close the outgoing row and add the incoming one in the same transaction.';
+    END IF;
   END IF;
 
   RETURN NULL;
@@ -759,6 +870,306 @@ BEGIN
   RETURN v_new_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- ============================================================================
+-- ADR 0021: mid-term participant removal, program-term protection, and
+-- bundled add-with-reallocation. Closes the three items ADR 0017 deferred.
+-- The program_coverage_gaps table itself is defined above, next to the share
+-- check that reads it.
+-- ============================================================================
+
+-- Removes a participant mid-term with no replacement - the case
+-- correct_program_participant() cannot express, because it always inserts a
+-- successor row and a removal has none.
+--
+-- The close-out half is character-for-character the same shape as
+-- correct_program_participant()'s: FOR UPDATE lock, transaction-local
+-- superseding flag, and the GREATEST()-based bound so that a removal_date at
+-- or before the row's own start empties the row rather than asking for an
+-- inverted range (ADR 0016 addendum 3's fix, reused rather than re-derived -
+-- writing `tstzrange(lower(v_old_range), p_removal_date)` here would
+-- reintroduce exactly the bug that addendum closed).
+--
+-- The gap row is inserted in the same transaction and that ordering is
+-- load-bearing: the share-sum trigger is DEFERRABLE INITIALLY DEFERRED and
+-- fires at commit, so by the time it looks for an unresolved gap the INSERT
+-- below is visible to it. A caller who closed the row in one transaction and
+-- recorded the gap in the next would have the first transaction rejected.
+CREATE OR REPLACE FUNCTION remove_program_participant(
+  p_participant_id UUID,
+  p_removal_date TIMESTAMPTZ,
+  p_reason TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_program_id UUID;
+  v_old_range TSTZRANGE;
+  v_gap_id UUID;
+BEGIN
+  SELECT program_id, effective_range INTO v_program_id, v_old_range
+  FROM program_participants
+  WHERE participant_id = p_participant_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'remove_program_participant: participant % does not exist', p_participant_id;
+  END IF;
+
+  IF p_removal_date IS NULL THEN
+    RAISE EXCEPTION 'PROGRAM_REMOVAL_DATE_REQUIRED: removing participant % requires a removal date', p_participant_id
+      USING HINT = 'The removal date is what closes the outgoing row''s effective_range; there is no defensible default for it.';
+  END IF;
+
+  -- A gap row whose reason is blank is a gap nobody can act on later, and the
+  -- whole mechanism rests on someone eventually acting on it.
+  IF p_reason IS NULL OR btrim(p_reason) = '' THEN
+    RAISE EXCEPTION 'PROGRAM_REMOVAL_REASON_REQUIRED: removing participant % requires a non-empty reason', p_participant_id
+      USING HINT = 'The reason is the only description of why this program is under-placed that resolve_program_coverage_gap() will ever show a reader.';
+  END IF;
+
+  PERFORM set_config('luxauto.superseding_participant', 'on', true);
+  UPDATE program_participants
+  SET effective_range = tstzrange(lower(v_old_range),
+                                  GREATEST(lower(v_old_range), p_removal_date))
+  WHERE participant_id = p_participant_id;
+  PERFORM set_config('luxauto.superseding_participant', 'off', true);
+
+  INSERT INTO program_coverage_gaps (program_id, participant_id_removed, removal_date, reason)
+  VALUES (v_program_id, p_participant_id, p_removal_date, p_reason)
+  RETURNING gap_id INTO v_gap_id;
+
+  RETURN v_gap_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Closes a gap, refusing while the panel it excuses is still under-placed.
+--
+-- The check is the point of the function. Without it, "resolved" would be a
+-- flag anyone could set on a still-broken program, and the consequence would
+-- land on whoever made the *next* unrelated write to that panel - they would
+-- get PROGRAM_SHARES_NOT_100_AT_INSTANT for a hole somebody else left, with
+-- no indication of where it came from. Raising here puts the failure in front
+-- of the person holding the context.
+--
+-- Only the share math is checked, not whether this is the program's last open
+-- gap: two removals can be recorded separately and closed by one panel
+-- rebuild, and the second resolve call should not fail merely because the
+-- first row is still open. Over-100% is deliberately not checked either - an
+-- overlap is a hard block on every write to the panel already, and it is not
+-- this gap's business.
+CREATE OR REPLACE FUNCTION resolve_program_coverage_gap(
+  p_gap_id UUID,
+  p_resolution_note TEXT
+) RETURNS VOID AS $$
+DECLARE
+  v_program_id UUID;
+  v_resolved BOOLEAN;
+  v_gap RECORD;
+BEGIN
+  SELECT program_id, resolved INTO v_program_id, v_resolved
+  FROM program_coverage_gaps
+  WHERE gap_id = p_gap_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'resolve_program_coverage_gap: gap % does not exist', p_gap_id;
+  END IF;
+
+  IF v_resolved THEN
+    RAISE EXCEPTION 'PROGRAM_COVERAGE_GAP_ALREADY_RESOLVED: gap % is already resolved', p_gap_id;
+  END IF;
+
+  SELECT * INTO v_gap FROM program_share_gaps(v_program_id)
+  WHERE direction = 'under'
+  ORDER BY bad_instant
+  LIMIT 1;
+
+  IF FOUND THEN
+    RAISE EXCEPTION 'PROGRAM_COVERAGE_GAP_STILL_UNPLACED: cannot resolve gap % - program % risk-bearing shares still total % percent as of %',
+      p_gap_id, v_program_id, v_gap.total_share, v_gap.bad_instant
+      USING HINT = 'Rebuild the panel to 100 percent at every instant of the program term first (add a replacement participant, or extend an existing one), then resolve the gap. Marking it resolved now would push the failure onto the next unrelated write to this program.';
+  END IF;
+
+  UPDATE program_coverage_gaps
+  SET resolved = true,
+      resolved_at = now(),
+      resolution_note = p_resolution_note
+  WHERE gap_id = p_gap_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- ADR 0017 named this as an open item and left it: the share check lives on
+-- program_participants and never fires for a write to insurance_programs, so
+-- shortening a program's term silently stranded its whole panel outside it.
+-- Reproduced against luxauto-pg before this trigger was written.
+--
+-- Hard block, no repair. Auto-truncating the participant rows to fit would be
+-- this schema editing capacity agreements to make a statement succeed, and
+-- auto-closing them would invent a removal date nobody chose. The caller
+-- closes or adjusts participation first - remove_program_participant() or
+-- correct_program_participant() - and then shortens the term.
+--
+-- Widening needs no special case and gets none: containment against a
+-- superset is satisfied by every row that was contained in the subset, so a
+-- widen simply finds nothing to complain about. Tested, not assumed.
+CREATE OR REPLACE FUNCTION check_program_term_contains_participants()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_offenders TEXT;
+  v_count INTEGER;
+BEGIN
+  SELECT count(*),
+         string_agg(format('%s (%s) effective %s',
+                           participant_name, participant_type, effective_range),
+                    '; ' ORDER BY participant_name)
+  INTO v_count, v_offenders
+  FROM program_participants
+  WHERE program_id = NEW.program_id
+    AND NOT (effective_range <@ NEW.effective_range);
+
+  IF v_count > 0 THEN
+    RAISE EXCEPTION 'PROGRAM_TERM_STRANDS_PARTICIPANT: changing program % term from % to % would leave % participant row(s) outside it: %',
+      NEW.program_id, OLD.effective_range, NEW.effective_range, v_count, v_offenders
+      USING HINT = 'A participant cannot bear risk when the program is not in force. Close or adjust the participant rows first - remove_program_participant() for a departure, correct_program_participant() for a shortened participation - then change the program term.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- WHEN clause rather than an early RETURN inside the function: a program's
+-- name or estimated premium changing is not this trigger's business, and the
+-- condition belongs where the reader looks for it.
+CREATE OR REPLACE TRIGGER insurance_programs_term_check
+  BEFORE UPDATE ON insurance_programs
+  FOR EACH ROW
+  WHEN (NEW.effective_range IS DISTINCT FROM OLD.effective_range)
+  EXECUTE FUNCTION check_program_term_contains_participants();
+
+-- Adds a participant and restates the shares of existing ones in a single
+-- call, so the deferred share check judges the finished panel once instead of
+-- rejecting each intermediate state.
+--
+-- **Every target share is an explicit input.** No proportional scaling, no
+-- equal split, no residual-to-the-largest-participant rule. This project ships
+-- undecided business formulas as mechanism and refuses to guess the numbers -
+-- the same treatment profit_commission_formula got in ADR 0007 (free text
+-- pending sign-off) and short-rate cancellation got in ADR 0018 (a factor
+-- table that starts empty and raises rather than assuming a curve). How a
+-- panel dilutes to make room for a new reinsurer is a negotiated commercial
+-- outcome, not arithmetic this schema can derive.
+--
+-- Parallel arrays rather than a composite type: this schema has never defined
+-- a composite (every CREATE TYPE in it is an enum), and one row shape used by
+-- one function is a thin reason to introduce the first. The lengths are
+-- checked, which is the only thing the composite would have bought.
+--
+-- On reusing correct_program_participant() rather than adding a share-only
+-- variant: its signature *is* awkward for a share change - a direct caller
+-- must resupply type, name, commission and formula or silently null them, and
+-- it rejects a null name or type outright (PROGRAM_PARTICIPANT_IDENTITY_REQUIRED).
+-- But this function has already read the outgoing row to find its end date, so
+-- forwarding those four columns is free here, and a second supersession path
+-- would be a second place for the append-only discipline to drift. Reused.
+--
+-- The adjusted rows take their new share from the instant the incoming
+-- participant starts, and keep whatever end date they already had. That is a
+-- mechanism choice, not an invented number: "add a participant and adjust the
+-- others" only has one coherent changeover instant, and moving anyone's end
+-- date would be a second, unrequested decision.
+CREATE OR REPLACE FUNCTION add_program_participant_with_reallocation(
+  p_program_id UUID,
+  p_participant_type participant_type_t,
+  p_participant_name TEXT,
+  p_share_percentage NUMERIC,
+  p_commission_rate NUMERIC,
+  p_profit_commission_formula TEXT,
+  p_effective_range TSTZRANGE,
+  p_adjust_participant_ids UUID[] DEFAULT '{}',
+  p_adjust_new_shares NUMERIC[] DEFAULT '{}'
+) RETURNS UUID AS $$
+DECLARE
+  v_new_id UUID;
+  v_n INTEGER;
+  v_i INTEGER;
+  v_pid UUID;
+  v_share NUMERIC;
+  v_old RECORD;
+  v_start TIMESTAMPTZ;
+BEGIN
+  IF p_adjust_participant_ids IS NULL OR p_adjust_new_shares IS NULL THEN
+    RAISE EXCEPTION 'PROGRAM_REALLOCATION_MALFORMED: pass empty arrays, not NULL, when no existing participant is being adjusted';
+  END IF;
+
+  -- array_length of an empty array is NULL, not 0, so both sides are
+  -- coalesced before they are compared.
+  v_n := COALESCE(array_length(p_adjust_participant_ids, 1), 0);
+  IF v_n <> COALESCE(array_length(p_adjust_new_shares, 1), 0) THEN
+    RAISE EXCEPTION 'PROGRAM_REALLOCATION_MALFORMED: % participant id(s) but % share(s) - each adjusted participant needs exactly one target share',
+      v_n, COALESCE(array_length(p_adjust_new_shares, 1), 0);
+  END IF;
+
+  IF p_effective_range IS NULL OR isempty(p_effective_range) OR lower(p_effective_range) IS NULL THEN
+    RAISE EXCEPTION 'PROGRAM_REALLOCATION_MALFORMED: the incoming participant needs an effective_range with a bounded start - it is the instant every adjusted share changes at';
+  END IF;
+  v_start := lower(p_effective_range);
+
+  FOR v_i IN 1 .. v_n LOOP
+    v_pid := p_adjust_participant_ids[v_i];
+    v_share := p_adjust_new_shares[v_i];
+
+    SELECT program_id, participant_type, participant_name, commission_rate,
+           profit_commission_formula, effective_range
+    INTO v_old
+    FROM program_participants
+    WHERE participant_id = v_pid;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'add_program_participant_with_reallocation: participant % does not exist', v_pid;
+    END IF;
+
+    IF v_old.program_id <> p_program_id THEN
+      RAISE EXCEPTION 'PROGRAM_REALLOCATION_WRONG_PROGRAM: participant % belongs to program %, not %',
+        v_pid, v_old.program_id, p_program_id;
+    END IF;
+
+    -- Without this the tstzrange() below would be asked for an inverted range
+    -- and fail with a range-bounds error naming neither participant.
+    IF upper(v_old.effective_range) IS NOT NULL AND upper(v_old.effective_range) <= v_start THEN
+      RAISE EXCEPTION 'PROGRAM_REALLOCATION_ALREADY_ENDED: participant % (%) ends at %, at or before the incoming participant starts (%) - there is no remaining period to reallocate',
+        v_old.participant_name, v_pid, upper(v_old.effective_range), v_start;
+    END IF;
+
+    PERFORM correct_program_participant(
+      v_pid,
+      tstzrange(v_start, upper(v_old.effective_range)),
+      v_old.participant_type,
+      v_old.participant_name,
+      v_share,
+      v_old.commission_rate,
+      v_old.profit_commission_formula
+    );
+  END LOOP;
+
+  INSERT INTO program_participants (
+    program_id, participant_type, participant_name, share_percentage,
+    commission_rate, profit_commission_formula, effective_range
+  )
+  VALUES (
+    p_program_id, p_participant_type, p_participant_name, p_share_percentage,
+    p_commission_rate, p_profit_commission_formula, p_effective_range
+  )
+  RETURNING participant_id INTO v_new_id;
+
+  RETURN v_new_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- No GRANTs for any of the above, and none for program_coverage_gaps. ADR
+-- 0017 withheld them from program_participants on the grounds that a grant
+-- with no consumer is only extra reachable surface, and nothing has changed:
+-- there is still no Odoo model over either table. Gaps are opened and
+-- resolved through psql by whoever is doing the panel work, exactly as
+-- participant corrections are today. Named as an open item in ADR 0021.
 
 -- ============================================================================
 -- QUOTES
