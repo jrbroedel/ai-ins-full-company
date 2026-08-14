@@ -1,0 +1,38 @@
+# Applies and verifies the Postgres schema on every push to main (ADR 0020).
+#
+# Deliberately independent of deploy-vm.yml: the two are not chained, so a
+# commit touching both schema and module code starts both with no ordering
+# guarantee between them. That is an accepted, named tradeoff in ADR 0020, not
+# an oversight - do not add a `needs:` here without revisiting that decision.
+name: schema-apply
+
+on:
+  push:
+    branches: [main]
+
+# Least privilege for the automatic GITHUB_TOKEN: this job only ever reads the
+# repo. The script's own database credentials do not come from here - they are
+# fetched at run time from Key Vault via the VM's managed identity (ADR 0009).
+permissions:
+  contents: read
+
+# Serializes this workflow against itself so two rapid pushes can't apply the
+# schema concurrently. This does NOT couple it to deploy-vm.yml, which uses a
+# separate group and is free to run at the same time.
+concurrency:
+  group: schema-apply
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    # The luxauto-odoo label pins this to the intended host rather than "any
+    # self-hosted runner this repo can see," should a second one ever exist.
+    runs-on: [self-hosted, linux, luxauto-odoo]
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Apply and verify schema
+        run: scripts/apply-and-verify-schema.sh

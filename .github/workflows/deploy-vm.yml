@@ -1,0 +1,40 @@
+# Pulls, upgrades the first-party Odoo modules, restarts Odoo and smoke-tests
+# it on every push to main (ADR 0020).
+#
+# Deliberately independent of schema-apply.yml: this job can start before the
+# schema workflow has finished verifying, so a commit that adds a column and
+# the model field reading it may deploy against the old schema and fail its
+# smoke test. ADR 0020 accepts that failure mode explicitly and defers the fix
+# - do not add a `needs:` here without revisiting that decision.
+name: deploy-vm
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Serializes this workflow against itself. This one matters more than the
+# schema side: deploy-vm.sh stops the Odoo service, upgrades modules and starts
+# it again, so two overlapping runs would fight over the service. Separate
+# group from schema-apply, which stays free to run concurrently.
+concurrency:
+  group: deploy-vm
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, luxauto-odoo]
+    timeout-minutes: 20
+
+    steps:
+      # Needed for scripts/deploy-vm.sh and its scripts/lib/smoke_test.py
+      # payload. Note this checkout is NOT what gets deployed: the script pulls
+      # /opt/odoo-custom-addons/luxauto independently, which is the clone Odoo
+      # actually loads addons from.
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to VM and smoke test
+        run: scripts/deploy-vm.sh
