@@ -52,6 +52,7 @@ sample-data/                     Populated test/reference data (synthetic applic
 referral-matrices/               Hard-stop and manual-review routing logic
 docs/reference-materials/        Source research the build is based on (insurance industry primer, the Lloyd's/energy MGA manual used as a structural template, MGA software options research)
 docs/decisions/                  Architecture decision records — what was chosen, why, and what alternatives were rejected
+docs/runbooks/                   Operational procedures (e.g. rebuilding the luxauto-odoo VM from scratch)
 docs/sample-renderings/          Rendered output examples (e.g. PDF application form)
 infra/bicep/                     Bicep IaC reproducing the provisioned Azure infrastructure (see ADR 0008)
 ```
