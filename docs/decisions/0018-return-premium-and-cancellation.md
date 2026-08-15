@@ -95,7 +95,7 @@ The only caller in the repo, the Odoo cancel wizard, is updated in the same comm
 - The ADR 0015 baseline moves: +2 tables, +3 enum types, +7 functions, +2 triggers.
 - `short_rate_factors` is empty and every short-rate cancellation fails until it is loaded from filed sources. That is the intended state, not an incomplete build.
 - ~~`luxauto_settlement_view` and `luxauto_premium_waterfall_view` are unchanged, so a cancellation's return premium does not yet appear in the settlement report - exactly the position ADR 0014 left `calculate_endorsement_waterfall()` in, and the same follow-on (a settlement-report extension that consumes both) still owns it. Flagged rather than quietly widened here.~~ **Closed by ADR 0013's addendum**, which added both the endorsement and return-premium legs to that view.
-- There is no Odoo read-side model or view over `policy_cancellations`. The wizard writes; nothing reads it back in the UI yet. Same deliberate split ADR 0016 made when it added correction functions without a correction UI.
+- ~~There is no Odoo read-side model or view over `policy_cancellations`. The wizard writes; nothing reads it back in the UI yet. Same deliberate split ADR 0016 made when it added correction functions without a correction UI.~~ **Closed by the second addendum below**, which adds `luxauto_policy_cancellation_view` and `luxauto.policy.cancellation`.
 - **Adjacent limitation found and left alone:** `correct_policy_vehicle()`/`correct_policy_driver()`/`correct_policy_endorsement()`/`correct_program_participant()` all fail with a raw `range lower bound must be less than or equal to range upper bound` if asked to correct a row to a start *earlier* than the row being superseded - confirmed live, not inferred. This ADR's own correction is immune (it empties instead), and fixing the other four is outside this ADR's scope, but it is a real gap in four shipped functions and should not be discovered a second time by accident.
 - ~~Endorsements whose `effective_range` extends past a cancellation are not closed out - only vehicles and drivers are, which is what this ADR's scope named. A settlement report reading endorsements `as_of` a date after cancellation would still see one in force. Named here as an open item rather than fixed by extending scope mid-build.~~ **Investigated and closed as not-a-defect** - see the addendum below. The stale range is descriptive only, and truncating it would break the refund recompute a cancellation correction performs.
 - Reinstatement, natural expiry and nonrenewal all remain unbuilt and unclaimed.
@@ -142,3 +142,56 @@ Closing endorsements safely would mean preserving each row's original earning pe
 - An endorsement row on a cancelled policy still shows a range extending past the policy's coverage end. That is expected, and the policy row is where coverage is read from.
 - The refund arithmetic keeps working through corrections in both directions, which is the property that would have been lost.
 - The open item this addendum replaces is closed as **investigated, not a defect**. If a future consumer ever needs "which endorsements were in force at instant T", it should intersect the endorsement range with the policy's own `effective_range` rather than trusting the endorsement range alone - one line at the point of use, and no data destroyed.
+
+---
+
+# Addendum: the Odoo read side, and the test suite this ADR never had (2026-08-14)
+
+**Status:** Decided; implemented
+**Amends:** the consequence that read "There is no Odoo read-side model or view over `policy_cancellations`. The wizard writes; nothing reads it back in the UI yet."
+**Also closes:** the same item where ADR 0013's addendum and ADR 0019 name it as deferred, and ADR 0022's note that ADR 0018 had no suite in `tests/`.
+
+## 1. `luxauto_policy_cancellation_view`, following the existing pattern rather than a new one
+
+**Decision: one read-only SQL view and one `_auto = False` Odoo model, built exactly like `luxauto_policy_vehicle_view`/`luxauto.policy.vehicle`. No filtering, no write path.**
+
+There was nothing to redesign here. A cancellation is uniquely keyed by `cancellation_id` and fans out to nothing, which is the same shape as `policy_vehicles` - so it takes the same single-column hashed id, not the composite hash the waterfall and settlement views need. The model gets the same `init()` guard that refuses to install against a database where the view is missing, the same `readonly=True` on every field, and the same read-only entry in `ir.model.access.csv`. `_rec_name` is `policy_id`: a cancellation reads as "the cancellation of policy X", and `cancellation_id` is a UUID nobody recognises. `policy_number` would read better still, but the vehicle and driver views deliberately do not join back to `policies` for it, and matching that was worth more than a nicer label.
+
+**Every row is exposed, superseded ones included.** That is the convention every read-side view here already follows, and it is the right one for this table specifically: a corrected cancellation leaves the original row emptied and inserts a replacement (section 6), and both are real history. No "current cancellation" selection logic exists anywhere in this codebase and this is not the place to invent it.
+
+**Two derived columns are the one addition, and they exist because of a genuine problem rather than for convenience.** Odoo has no native range field type, so `effective_range` cannot be mapped onto the model - the same limitation `luxauto_policy_view` already documents. On `policy_vehicles` that costs nothing. Here it would: the range is what distinguishes a live cancellation from a superseded one, so a list showing both would put two different return premiums for the same policy side by side with nothing to tell them apart - in the UI, on a number somebody gets paid. The view therefore also selects `lower(effective_range) AS cancelled_at` and `isempty(effective_range) AS superseded`. `lower()` of an empty range is NULL, so a superseded row shows no cancellation date at all, which is exactly what section 6 says about it: it applied for zero time. The raw `effective_range` stays in the view for anything reading it by SQL.
+
+**The ADR 0015 baseline moves by one view and nothing else** - no table, type, function, trigger or `SET NOT NULL` column. The `GRANT SELECT` is not a category the verifier tracks; it checks that declared objects exist, not who may read them.
+
+Verified on the VM rather than assumed: the module upgrade ran clean, and the menu item, action, list view, form view and the list's own `web_search_read` were then exercised over real XML-RPC as a disposable non-admin user - the path a browser takes, with ACLs and view-arch validation applied, not the `odoo shell` superuser bypass. Every declared field was forced into a real `SELECT`, plus an ordered read and a grouped read, so a field mapped to a column that does not exist would fail now rather than the first time a cancellation is written. `check_access_rights` confirms read yes, write/create/unlink no.
+
+## 2. `tests/0018_return_premium_and_cancellation.sql`
+
+ADR 0022 built the harness and listed this ADR's missing suite as outstanding. Eight cases, following the 0017/0021 conventions exactly (one transaction rolled back, one self-unwinding `DO` block per case, rejection cases asserting on the error message rather than on the mere fact of failure).
+
+| Case | What it pins down |
+|---|---|
+| T1 | `cancel_policy()` end to end: status, truncated term, both snapshots closed, the cancellation row, `-27,500.00` on a known example, the audit event, and the refund reaching the panel through `calculate_cancellation_waterfall()` |
+| T2 | Section 1's negative `premium_delta`: the waterfall is the exact mirror image of the positive case, and a negative endorsement splits and reconstructs |
+| T3 | `correct_policy_endorsement()` on a negative-delta endorsement, with its id resolved by a subquery scanning its own table (the ADR 0016 addendum 2 trap) |
+| T4 | An earlier-date cancellation correction: the old row emptied rather than closed, the refund recomputed against the **original** term, coverage and snapshots following, and the `GREATEST()` case where a row starting after the corrected date closes to its own start |
+| T5 | The first addendum's measurement, committed |
+| T6 | `SHORT_RATE_TABLE_NOT_CONFIGURED`, and that nothing at all was written when it fires |
+| T7 | ADR 0012's three-argument `cancel_policy()` refusing instead of guessing an initiator |
+| T8 | A cancellation date outside the term refused |
+
+Two things about how these were written are worth recording, because both changed the suite:
+
+**T5 is the point of the exercise.** The first addendum proved by hand that closing endorsement ranges at cancellation would introduce a 2,996.28 error, and then that number lived only in prose. T5 computes the counterfactual in SQL and asserts the real answer differs from it by the expected amount, so anyone "tidying up" the stale range gets a failing test rather than a wrong refund. The figures are re-derived on this suite's own fixture (100/day base, 20/day endorsement, a 2,658.33 gap) rather than copied from the addendum, whose case used a slightly different endorsement start.
+
+**Every assertion was mutation-tested, and that found a real defect in the suite.** Each expected value was deliberately corrupted and the suite re-run to confirm it failed. Fifteen mutations ran; fourteen were caught and one was not - pointing an assertion at a VIN that does not exist made it *pass*, because `NULL <> value` is NULL rather than true, so any subquery returning no row silently satisfies the check. Several assertions were that shape, which means a regression that deleted a row instead of moving it would have gone unreported. Every comparison that can see a missing row is now `IS DISTINCT FROM`, re-verified with ten further mutations including four deliberate vacuity probes, all caught. A test that cannot fail is worse than no test, and the only way to know which kind you have is to break it on purpose.
+
+Timestamps carry explicit `+00` offsets throughout. These cases assert refunds to the cent, and a bare date would be read in the session's timezone, where a DST boundary makes an epoch difference an hour short of a whole number of days.
+
+## Consequences
+
+- A cancellation is now readable in Odoo, including its refund, its provenance and whether it was superseded. The cancel wizard remains the only write path; this view has none and is not getting one.
+- The ADR 0015 baseline moves: +1 view. No other count changes.
+- `scripts/lib/smoke_test.py` covers the new model, so a future deploy that breaks it fails the deploy rather than the first person to open the menu.
+- ADR 0018's behaviour is now regression-covered, including the two things it only *confirmed* (negative premium deltas) and the one it only *measured by hand* (the endorsement-not-closed refund arithmetic). Neither has to be re-derived from prose again.
+- Still unbuilt and still unclaimed: reinstatement, and a UI for `correct_policy_cancellation()` - the wizard writes cancellations, not corrections, and this view reads them back without offering to fix one. Same deliberate split as before.

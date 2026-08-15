@@ -3,7 +3,7 @@
 **Status:** Decided; implemented
 **Date:** 2026-08-13
 **Follows from:** ADR 0010 (`policies.status`, `policy_status_t`, `policy_events`), ADR 0012 (`cancel_policy()`, `SECURITY DEFINER` gateway pattern), ADR 0015 (versioned operational scripts, apply-and-verify), ADR 0018 (cancellation: reason codes, atomicity standard, the empty-table-plus-loud-failure treatment for filed numbers), ADR 0016 addendum 2 and 3 (correction-function mechanics: the same-table-subquery trap and the earlier-date supersession fix)
-**Not in scope:** renewal itself - see section 5. Also untouched: the commission formula (ADR 0007), ADR 0017's deferred items, and ADR 0018's flagged loose ends (settlement view, an Odoo view over `policy_cancellations`, endorsement closeout at cancellation, reinstatement).
+**Not in scope:** renewal itself - see section 5. Also untouched: the commission formula (ADR 0007), ADR 0017's deferred items, and ADR 0018's flagged loose ends (settlement view, ~~an Odoo view over `policy_cancellations`~~ - **closed by ADR 0018's second addendum** - endorsement closeout at cancellation, reinstatement).
 
 ## What this ADR decides
 

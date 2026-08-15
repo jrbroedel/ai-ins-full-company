@@ -50,6 +50,13 @@ import psycopg2
 # check_program_term_contains_participants. Same objects, same names, new
 # signatures, so all six categories stay where ADR 0021 left them. Confirmed
 # by running the parser, not assumed.
+#
+# ADR 0018's addendum moves exactly one count: +1 view
+# (luxauto_policy_cancellation_view), the read side over policy_cancellations
+# that ADR 0018 named as an open item. It adds no table, type, function,
+# trigger or SET NOT NULL column - a view and a GRANT are the whole schema
+# change, and the GRANT is not a category this parser tracks (it checks that
+# declared objects exist, not who may read them).
 # This is the acceptance test for the parser itself - if the parser's counts don't
 # match this, that's a parser bug to fix, not a schema surprise, and the
 # parser is not trusted against a live database until it does. Updated by
@@ -60,7 +67,7 @@ BASELINE = {
     "tables": 29,
     "types": 19,
     "functions": 36,
-    "views": 6,
+    "views": 7,
     "triggers": 21,
     "not_null_columns": 6,
 }

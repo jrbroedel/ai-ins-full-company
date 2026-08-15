@@ -77,4 +77,4 @@ A pure `term_change` endorsement carries no `premium_delta` and contributes no s
 - The `id` hash now includes the source transaction's own UUID and its type, since a policy/participant pair can now legitimately appear on three rows. Same composite-hash convention, wider input.
 - New columns are appended after the original ones rather than placed where they read best: `CREATE OR REPLACE VIEW` cannot reorder or rename existing columns, and dropping the view to tidy the order would drop its grants on every apply.
 - No new database objects - the view count, function count and every other ADR 0015 baseline number are unchanged.
-- Still out of scope and still deferred: an Odoo read-side view over `policy_cancellations`, reinstatement, and the reversing-entry question above.
+- Still out of scope and still deferred: ~~an Odoo read-side view over `policy_cancellations`~~ (**closed by ADR 0018's second addendum**), reinstatement, and the reversing-entry question above.

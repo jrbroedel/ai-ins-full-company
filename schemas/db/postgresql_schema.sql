@@ -3226,6 +3226,45 @@ SELECT
   pd.at_fault_accidents_last_5yr
 FROM policy_drivers pd;
 
+-- Policy Cancellation view (ADR 0018 addendum): the read side ADR 0018 left
+-- out. Same single-column hash as the vehicle/driver views above and for the
+-- same reason - a cancellation is uniquely keyed by cancellation_id with no
+-- fan-out, so no composite hash is needed.
+--
+-- No filtering, deliberately: like every other read-side view here this
+-- returns ALL rows, superseded ones included. A corrected cancellation leaves
+-- the original row emptied and inserts a replacement (ADR 0018 section 6), so
+-- both appear. "Which one is in force" is not decided here - the row itself
+-- says so, which is what the two derived columns below are for.
+--
+-- cancelled_at and superseded are derived rather than stored: Odoo has no
+-- native range field type, so effective_range is unmappable on the model
+-- (same as on luxauto_policy_view), and without these two a superseded
+-- cancellation would be indistinguishable in the UI from the live one - two
+-- rows carrying different return premiums for the same policy with nothing to
+-- tell them apart. lower() of an empty range is NULL, so a superseded row
+-- shows no cancellation date at all, which is exactly the claim ADR 0018
+-- section 6 makes about it: it applied for zero time.
+CREATE OR REPLACE VIEW luxauto_policy_cancellation_view AS
+SELECT
+  ('x' || substr(md5(c.cancellation_id::text), 1, 8))::bit(32)::int AS id,
+  c.cancellation_id,
+  c.policy_id,
+  c.effective_range,
+  lower(c.effective_range) AS cancelled_at,
+  isempty(c.effective_range) AS superseded,
+  c.cancellation_type,
+  c.reason_code,
+  c.refund_method,
+  c.short_rate_factor,
+  c.short_rate_basis,
+  c.unearned_premium,
+  c.return_premium,
+  c.notes,
+  c.performed_by,
+  c.created_at
+FROM policy_cancellations c;
+
 -- Premium/Waterfall view: quotes + program_participants, one row per
 -- participant per quote - the id is hashed from a composite of quote_id and
 -- participant_id, since a single quote fans out to multiple rows here. The
@@ -3383,6 +3422,9 @@ GRANT SELECT ON luxauto_insured_view TO odoo;
 GRANT SELECT ON luxauto_policy_view TO odoo;
 GRANT SELECT ON luxauto_policy_vehicle_view TO odoo;
 GRANT SELECT ON luxauto_policy_driver_view TO odoo;
+-- ADR 0018 addendum. Read-only, like the rest: the cancel wizard still writes
+-- through cancel_policy(), and nothing reaches policy_cancellations this way.
+GRANT SELECT ON luxauto_policy_cancellation_view TO odoo;
 GRANT SELECT ON luxauto_premium_waterfall_view TO odoo;
 GRANT SELECT ON luxauto_settlement_view TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID) TO odoo;

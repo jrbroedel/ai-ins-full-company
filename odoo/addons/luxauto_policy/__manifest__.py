@@ -1,18 +1,26 @@
 {
     'name': 'Luxury Auto Policy',
     'version': '19.0.1.0.0',
-    'summary': 'Read-only Insured/Policy/Vehicle/Driver/Waterfall/Settlement views over the pipeline database (ADR 0010/0013/0016)',
+    'summary': 'Read-only Insured/Policy/Vehicle/Driver/Cancellation/Waterfall/Settlement views over the pipeline database (ADR 0010/0013/0016/0018)',
     'description': """
 Luxury Auto Policy
 ===================
 
 Read-only Odoo models backed directly by the luxauto_insured_view,
 luxauto_policy_view, luxauto_policy_vehicle_view, luxauto_policy_driver_view,
-luxauto_premium_waterfall_view, and luxauto_settlement_view SQL views defined
-in schemas/db/postgresql_schema.sql (ADR 0006's _auto=False pattern, ADR
+luxauto_policy_cancellation_view, luxauto_premium_waterfall_view, and
+luxauto_settlement_view SQL views defined in
+schemas/db/postgresql_schema.sql (ADR 0006's _auto=False pattern, ADR
 0010's scope, ADR 0013's settlement report, ADR 0016's structural policy
-ownership). The pipeline's UUID-keyed tables remain the system of record;
-these models never write to them.
+ownership, ADR 0018's addendum for the cancellation read side). The
+pipeline's UUID-keyed tables remain the system of record; these models never
+write to them.
+
+luxauto.policy.cancellation shows every cancellation row, superseded ones
+included, exactly as the vehicle and driver views show every snapshot row. A
+corrected cancellation leaves the original emptied and inserts a replacement
+(ADR 0018 section 6); the Superseded column is how the two are told apart.
+The cancel wizard remains the only write path.
 
 A bound policy owns its own snapshot of vehicles and drivers, taken at bind
 time (ADR 0016) - luxauto.policy.vehicle/luxauto.policy.driver show that
@@ -45,6 +53,7 @@ wizard, rather than writing to the pipeline tables directly.
         'views/luxauto_policy_views.xml',
         'views/luxauto_policy_vehicle_views.xml',
         'views/luxauto_policy_driver_views.xml',
+        'views/luxauto_policy_cancellation_views.xml',
         'views/luxauto_premium_waterfall_views.xml',
         'views/luxauto_settlement_views.xml',
         'views/luxauto_bind_wizard_views.xml',

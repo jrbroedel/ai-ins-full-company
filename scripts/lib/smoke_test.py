@@ -17,7 +17,7 @@ URL = 'https://mga.ironcliffvertex.com'
 DB = 'luxauto'
 MODELS = [
     'luxauto.insured', 'luxauto.policy', 'luxauto.policy.vehicle', 'luxauto.policy.driver',
-    'luxauto.premium.waterfall', 'luxauto.settlement',
+    'luxauto.policy.cancellation', 'luxauto.premium.waterfall', 'luxauto.settlement',
 ]
 LOGIN = f'deploy-smoke-test-{secrets.token_hex(4)}@luxauto.local'
 PASSWORD = secrets.token_urlsafe(16)

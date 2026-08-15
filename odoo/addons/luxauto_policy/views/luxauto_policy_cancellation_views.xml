@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_luxauto_policy_cancellation_list" model="ir.ui.view">
+        <field name="name">luxauto.policy.cancellation.list</field>
+        <field name="model">luxauto.policy.cancellation</field>
+        <field name="arch" type="xml">
+            <list create="false" edit="false" delete="false" import="false">
+                <field name="policy_id"/>
+                <field name="cancelled_at"/>
+                <field name="cancellation_type"/>
+                <field name="reason_code"/>
+                <field name="refund_method"/>
+                <field name="return_premium"/>
+                <field name="superseded"/>
+                <field name="performed_by"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_luxauto_policy_cancellation_form" model="ir.ui.view">
+        <field name="name">luxauto.policy.cancellation.form</field>
+        <field name="model">luxauto.policy.cancellation</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false" delete="false">
+                <sheet>
+                    <group>
+                        <group string="Cancellation">
+                            <field name="policy_id"/>
+                            <field name="cancelled_at"/>
+                            <field name="cancellation_type"/>
+                            <field name="reason_code"/>
+                            <field name="superseded"/>
+                        </group>
+                        <group string="Refund">
+                            <field name="refund_method"/>
+                            <field name="unearned_premium"/>
+                            <field name="return_premium"/>
+                            <!-- Both null unless refund_method is short_rate; the
+                                 CHECK constraint on policy_cancellations makes that
+                                 an invariant, not a convention. -->
+                            <field name="short_rate_factor"/>
+                            <field name="short_rate_basis"/>
+                        </group>
+                    </group>
+                    <group string="Audit">
+                        <field name="cancellation_id"/>
+                        <field name="performed_by"/>
+                        <field name="created_at"/>
+                    </group>
+                    <group string="Notes">
+                        <field name="notes" nolabel="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_luxauto_policy_cancellation" model="ir.actions.act_window">
+        <field name="name">Policy Cancellations</field>
+        <field name="res_model">luxauto.policy.cancellation</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

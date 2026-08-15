@@ -33,6 +33,15 @@
               action="action_luxauto_policy_driver"
               sequence="24"/>
 
+    <!-- Grouped with the other read-only policy-side views rather than next to
+         the cancel wizard: this reads cancellations back, it does not perform
+         one (ADR 0018 addendum). -->
+    <menuitem id="menu_luxauto_policy_cancellation"
+              name="Policy Cancellations"
+              parent="menu_luxauto_root"
+              action="action_luxauto_policy_cancellation"
+              sequence="26"/>
+
     <menuitem id="menu_luxauto_premium_waterfall"
               name="Premium Waterfall"
               parent="menu_luxauto_root"
