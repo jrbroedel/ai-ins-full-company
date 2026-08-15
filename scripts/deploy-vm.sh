@@ -145,7 +145,7 @@ echo "=== Smoke test: XML-RPC as a disposable user against all luxauto.* models 
 SMOKE_OUTPUT=$(sudo -u odoo "$DEPLOY_CTL" smoketest 2>&1) || true
 # LUXAUTO_DEPLOY_CTL= is the wrapper announcing itself: it keeps the pinned path
 # visible in the deploy log, so a reader can see it ran rather than infer it.
-echo "$SMOKE_OUTPUT" | grep -E "^LUXAUTO_DEPLOY_CTL=|SMOKE_TEST_MODEL=" || true
+echo "$SMOKE_OUTPUT" | grep -E "^LUXAUTO_DEPLOY_CTL=|SMOKE_TEST_MODEL=|SMOKE_TEST_CHECK=" || true
 RESULT_LINE=$(echo "$SMOKE_OUTPUT" | grep "^SMOKE_TEST_RESULT=" || echo "SMOKE_TEST_RESULT=FAIL_NO_OUTPUT")
 echo "$RESULT_LINE"
 

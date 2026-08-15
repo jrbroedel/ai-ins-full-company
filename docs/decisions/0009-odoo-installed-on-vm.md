@@ -5,7 +5,7 @@
 
 ## Decision
 
-Installed Odoo 19.0 Community on a dedicated Azure VM (`luxauto-odoo`, provisioned per the VM-hosting side of ADR 0002), connected it to the already-running `luxauto-pg` Postgres server, and installed the OCA `fs_storage`/`fs_attachment` modules that ADR 0003 named as the Azure Blob integration path. This ADR records what was actually built and five deviations from the "just install the package" plan, each of which would silently break a from-scratch reproduction if skipped.
+Installed Odoo 19.0 Community on a dedicated Azure VM (`luxauto-odoo`, provisioned per the VM-hosting side of ADR 0002), connected it to the already-running `luxauto-pg` Postgres server, and installed the OCA `fs_storage`/`fs_attachment` modules that ADR 0003 named as the Azure Blob integration path. This ADR records what was actually built and seven deviations from the "just install the package" plan, each of which would silently break a from-scratch reproduction if skipped. (Deviations 6 and 7 were appended later the same day, with the TLS and `fs_storage` work; this sentence said "five" until 2026-08-15.)
 
 ## What was built
 
@@ -117,7 +117,50 @@ Getting this working required:
    ```
    The section name format itself required reading source rather than guessing: `<model _name with dots replaced by underscores>.<value of the field named in _server_env_section_name_field>`. `fs_storage` overrides that field to `"code"` rather than the mixin's default `"name"`, so the section is `fs_storage.azure_blob_documents` (matching the record's `code`), not `fs_storage.Azure Blob - documents`.
 
-**Action item for the Bicep/install-script path:** build this `server_environment_files` package (with `running_env` set appropriately per deployment target) as a first-class part of provisioning, not a manual post-install fix — same category of note as Deviation 4's OCA dependency gap.
+**Action item for the Bicep/install-script path:** build this `server_environment_files` package (with `running_env` set appropriately per deployment target) as a first-class part of provisioning, not a manual post-install fix — same category of note as Deviation 4's OCA dependency gap. ~~Outstanding.~~ **Closed 2026-08-15 — see the addendum below.** The package is now version-controlled at `odoo/addons/server_environment_files/`, so a `git clone` carries it and no post-install step is needed.
+
+---
+
+### Addendum to Deviation 7: the package is now in version control, and its silent failure is now loud (2026-08-15)
+
+`docs/runbooks/vm-rebuild.md`'s Appendix C recorded that this package lived at `/opt/odoo-custom-addons/server-env/server_environment_files` — a directory this project created **inside a clone of a third-party repository** — and was untracked there, so a `git clean -fdx` or a re-clone of `server-env` would delete it with no visible symptom. That was accurate. It has been fixed, and investigating it first changed what the right fix was.
+
+**Investigated before deciding, not assumed:**
+
+- **Nothing in it is sensitive.** The package is three files: an empty `__init__.py`, `production/fs_storage.conf`, and a `__pycache__`. The `.conf` contains exactly one key — `use_as_default_for_attachments = true`. The Azure Blob credentials are **not** here: `account_name` and `account_key` live in the `luxauto` database, in `fs_storage.server_env_defaults` (verified by reading the JSON keys directly). Version-controlling this file therefore publishes no secret. This was the load-bearing question — the fix would have been different had it come out the other way.
+- **It was not gitignored upstream; it was never meant to be there at all.** `git check-ignore -v` in the OCA clone exits non-zero (not ignored), and upstream `OCA/server-env` tracks nothing by that name. So the state was not "upstream deliberately excludes it" but "we put a first-party file in someone else's working tree." That makes the correct fix relocation, not `git add` in a clone we do not own.
+- **The import is namespace-based, so relocation is possible at all.** `server_env.py` does `from odoo.addons import server_environment_files`, then takes `os.path.dirname(...)`. Because that resolves through the `odoo.addons` namespace, the package works from **any** `addons_path` entry — including this repo's own `odoo/addons/`. Deviation 7's original constraint (it cannot be its own top-level `addons_path` entry) still holds and is unchanged; it simply never required the OCA clone specifically.
+
+**The failure taxonomy, established by reading `server_env.py` and then reproducing all three live** — this is the part that had never been written down:
+
+| What goes missing | What Odoo does | Loud? |
+|---|---|---|
+| The whole `server_environment_files` package | `ImportError` caught, logged at **INFO**, `_dir = None`, config silently ignored | **No** |
+| `production/fs_storage.conf` only | `_listconf()` returns a shorter list, field falls back to its Python default `False` — no log at all | **No** |
+| The `production/` directory, package still present | `raise Exception("Provided server environment does not exist...")` at import — Odoo refuses to start | Yes |
+
+Two of the three are silent, and the two silent ones are precisely the ones a `git clean` or a botched edit produces.
+
+**One correction to how this was previously described, including in the runbook.** The silent fallback does *not* send attachments to the database. `fs_attachment`'s `_storage()` falls through to stock Odoo's `super()._storage()`, which reads the `ir_attachment.location` config parameter — **not set on this database** (verified: no such row in `ir_config_parameter`) — so the answer is `'file'`, the **local filestore on the VM's own disk** at `/var/lib/odoo/.local/share/Odoo/filestore/luxauto`. Reproduced live: with the package moved aside, `_storage()` returns `'file'`. That is worse than the database fallback everyone assumed, because the filestore is exactly the state a VM rebuild destroys — silently degrading to Blob-less storage would put new attachments on the one disk that is not backed up by anything.
+
+**What was built:**
+
+1. **The package moved into this repository** at `odoo/addons/server_environment_files/`, with a `README.md` stating plainly that credentials must not be added to it now that it is version-controlled and this repo is public, and naming the two correct channels if a future value genuinely needs to be secret (`SERVER_ENV_CONFIG`/`SERVER_ENV_CONFIG_SECRET` on the systemd unit, or the existing Key Vault path). It has no `__manifest__.py`, so `deploy-vm.sh` and the deploy wrapper's module scan skip it — checked, not assumed.
+2. **The copy in the OCA clone was deleted.** Keeping both would have been worse than either: `addons_path` lists `server-env` before this repo's addons directory, so the OCA copy would win and the version-controlled one would sit there looking authoritative while doing nothing.
+3. **`scripts/lib/smoke_test.py` now asserts attachment storage**, via `env['ir.attachment']._storage()` — the same resolver `_file_write()` actually calls, rather than re-reading the config file and hoping it means what it says. It emits `SMOKE_TEST_CHECK=attachment_storage RESULT=...` and forces `SMOKE_TEST_RESULT=FAIL`, which fails the deploy and therefore the push. `deploy-vm.sh`'s output filter was widened to surface `SMOKE_TEST_CHECK=` lines on success too, not only in the failure dump.
+
+**Verified by reproducing the failure before trusting the fix**, the same discipline the test suites use — and note that `odoo shell` re-imports `server_environment` in a fresh process, which is both how the real smoke test runs and why none of this required restarting the production service:
+
+| Check | Result |
+|---|---|
+| Check passes in the healthy state | `SMOKE_TEST_CHECK=attachment_storage RESULT=PASS` |
+| Whole package removed | INFO log only; `_storage()` → `'file'`; check **FAILs**, `SMOKE_TEST_RESULT=FAIL` |
+| `fs_storage.conf` removed | no log at all; `_storage()` → `'file'`; check **FAILs** |
+| `production/` removed | `Exception: Provided server environment does not exist...` — refuses to start, as documented |
+| Repo copy alone drives the config | with the OCA copy removed, `_dir` = `/opt/odoo-custom-addons/luxauto/odoo/addons/server_environment_files`, `use_as_default_for_attachments` still `True`, `_storage()` → `azure_blob_documents` |
+| Restored state | check passes clean again |
+
+**What this does not fix.** The check runs at deploy time, not continuously. Between deploys, something could delete the config and the only symptom would still be new attachments landing on local disk until the next push. A periodic check (the ADR 0019 timer is the obvious host for one) is a reasonable follow-up and is not done here. The check also does not verify that Blob is *reachable* — only that Odoo intends to use it; ADR 0009's original three-way `fsspec` verification remains the thing that proved reachability, and nothing re-runs it.
 
 ## Consequences / not yet done
 

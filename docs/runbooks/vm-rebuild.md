@@ -60,8 +60,12 @@ Every step below is tagged with where the information needed to reproduce it act
 | **[HOST]** | Host state / tribal knowledge. Exists **only** on the running VM. If the VM is gone and this runbook is wrong, the information is gone. These are the steps that justify the document. |
 | **[EXT]** | External to Azure and to this repo (GitHub, Cloudflare, Let's Encrypt). |
 
-Counting them, because the ratio is the point: of the 17 steps below, **4 are [VC]**,
-**5 are [AZ]**, **6 are [HOST]**, and **2 are [EXT]**.
+Counting them, because the ratio is the point: of the 17 steps below, **5 are [VC]**,
+**5 are [AZ]**, **5 are [HOST]**, and **2 are [EXT]**.
+
+*(Step 13 moved from [HOST] to [VC] on 2026-08-15 — see ADR 0009's Deviation 7 addendum. It
+is the only step whose category has ever changed, and moving one is the shape of progress
+this document is meant to drive.)*
 
 ---
 
@@ -110,10 +114,12 @@ sudo tar czf ~/luxauto-host-state.tgz \
   /etc/nginx/sites-available/odoo \
   /etc/sudoers.d/10-ghrunner-deploy \
   /usr/local/sbin/luxauto-odoo-deploy-ctl \
-  /opt/odoo-custom-addons/server-env/server_environment_files \
   /etc/letsencrypt \
   /var/lib/odoo/.local/share/Odoo/filestore
 ```
+
+`server_environment_files` used to be on this list and no longer is — it is version-controlled
+as of 2026-08-15 (step 13).
 
 That tarball contains the `odoo` Postgres role password and the Odoo master password (both in
 `odoo.conf`) and the TLS private key. Treat it as a secret: move it off the host over `scp`,
@@ -599,44 +605,59 @@ has never been done.
 
 ---
 
-## Step 13 — `server_environment_files` **[HOST]** ⚠
+## Step 13 — `server_environment_files` **[VC]**
 
-ADR 0009 Deviation 7. Small, easy to skip, and **silently** wrong if skipped.
+ADR 0009 Deviation 7, and its 2026-08-15 addendum. **This step used to be the most dangerous
+one in this runbook — host-only, easy to skip, and silent when wrong. It is now carried by
+step 8's `git clone` and needs no action.** The history is kept because the failure mode it
+guards against is still worth understanding.
 
-```bash
-sudo -u odoo mkdir -p /opt/odoo-custom-addons/server-env/server_environment_files/production
-sudo -u odoo touch /opt/odoo-custom-addons/server-env/server_environment_files/__init__.py
-sudo -u odoo tee /opt/odoo-custom-addons/server-env/server_environment_files/production/fs_storage.conf >/dev/null <<'EOF'
-[fs_storage.azure_blob_documents]
-use_as_default_for_attachments = true
-EOF
-```
+The package lives at `odoo/addons/server_environment_files/` in this repository, so the
+clone from step 8 already contains it at
+`/opt/odoo-custom-addons/luxauto/odoo/addons/server_environment_files/`. Nothing to create.
 
-Every detail here is load-bearing and was established in ADR 0009 by reading source, not guessing:
+Every detail is still load-bearing, and was established by reading source rather than guessing:
 
-- The directory must sit **inside** an existing `addons_path` entry — here, inside the
-  `server-env` clone. It cannot be its own `addons_path` entry: Odoo rejects any addons
-  directory whose children are not recognisable modules, and silently skips the whole entry.
-- `production` matches `running_env = production` in `odoo.conf` (step 9).
+- It is imported as `from odoo.addons import server_environment_files`, through the
+  `odoo.addons` namespace — so it works from **any** `addons_path` entry, which is what made
+  relocating it into this repo possible. It still cannot be its own top-level `addons_path`
+  entry.
+- `production/` matches `running_env = production` in `odoo.conf` (step 9). **Without that
+  key, this package does nothing** — the two are a pair.
 - The suffix must be `.conf`, not `.cfg` — `server_env.py`'s `_listconf()` filters on it.
 - The section name is `fs_storage.azure_blob_documents` — `<model name, dots to underscores>.<the
   record's `code`>`, because `fs_storage` overrides `_server_env_section_name_field` to `"code"`.
   Verified live: the record's `code` is `azure_blob_documents`.
+- It has no `__manifest__.py` and is not a module. The deploy wrapper's module scan
+  (`odoo/addons/*/__manifest__.py`) skips it — checked, not assumed.
 
-**Verified live, confirming Deviation 7 is still true of this install:** `fs_storage` has no
-`use_as_default_for_attachments` column in Postgres (`information_schema` returns 0 rows for
-it). There is no database row to fall back on — the config file is the only source, and
-without it the field reverts to `False` with no error and new attachments quietly stop going
-to Blob.
+**Verified live: `fs_storage` has no `use_as_default_for_attachments` column in Postgres**
+(`information_schema` returns 0 rows for it). There is no database row to fall back on. The
+config file is the only source.
 
-> **⚠ This directory is untracked inside a third-party clone, which is worse than merely
-> being host state.** `git status` in `/opt/odoo-custom-addons/server-env` reports it as
-> `?? server_environment_files/` — untracked, and not ignored. It lives inside a clone of
-> **someone else's repository**. A routine `git clean -fdx` in that clone, or re-cloning
-> `server-env` to pick up upstream changes, **deletes this config**, and the only symptom is
-> that attachments quietly start going to the database instead of Blob Storage. Nothing
-> fails, nothing logs an error, and no smoke test covers it. Re-check this file's existence
-> after any maintenance on the `server-env` clone.
+> **Do not recreate this directory in the OCA `server-env` clone.** That is where it used to
+> live, and the copy there has been deleted deliberately. `addons_path` lists `server-env`
+> *before* this repo's addons directory, so a stray copy there would win — and the
+> version-controlled one would sit there looking authoritative while doing nothing.
+
+**The failure modes, reproduced live rather than reasoned about** — worth knowing because
+two of the three are silent:
+
+| What goes missing | What happens |
+|---|---|
+| The whole package | `ImportError`, logged at **INFO** only, config ignored — **silent** |
+| `production/fs_storage.conf` | field falls back to `False`, **no log at all** — **silent** |
+| `production/` directory | `Exception: Provided server environment does not exist...` — Odoo refuses to start |
+
+In both silent cases `ir.attachment._storage()` returns `'file'` — **the local filestore on
+the VM's own disk** (step 14), *not* the database. That is the worse of the two possible
+fallbacks here: new attachments would land on the one piece of storage a VM rebuild destroys.
+
+**This is now checked at deploy time.** `scripts/lib/smoke_test.py` asserts
+`env['ir.attachment']._storage() == 'azure_blob_documents'` and fails the whole deploy if not,
+emitting `SMOKE_TEST_CHECK=attachment_storage RESULT=...`. Confirm that line reads `PASS` in
+step 17b. The check runs per deploy, not continuously — between deploys this could still
+regress unnoticed.
 
 ---
 
@@ -841,7 +862,7 @@ automation re-checks:
 | Test suites | `./scripts/run-tests.sh` | pass |
 | Smoke test | `./scripts/deploy-vm.sh` | `SMOKE_TEST_RESULT=PASS` |
 | sudo grants exact | `sudo -l -U ghrunner` | the seven entries in 16b, no wildcard |
-| Blob default active | see step 13 | `fs_storage.conf` present, `running_env = production` set |
+| **Blob storage active** | the `SMOKE_TEST_CHECK=attachment_storage` line from 17b | **`RESULT=PASS`** (step 13) |
 | **Full CI path** | push a trivial commit to `main` | both workflows green |
 
 That last row is the only check that exercises the runner, the workflows, the sudoers grant,
@@ -884,7 +905,9 @@ Every one of these is a first-time-ever operation on a rebuild:
    captured first.
 6. **Reconstructing the nginx config** and surviving certbot's rewrite of it.
 7. **Installing and registering the runner from scratch**, including labels.
-8. **Creating `server_environment_files`** — and its failure mode is silent.
+8. ~~Creating `server_environment_files`.~~ **No longer applicable** — it is version-controlled
+   as of 2026-08-15 and arrives with step 8's clone. Its silent failure mode is now caught by
+   the smoke test, and that check was verified by reproducing all three failure modes live.
 9. **Creating the wrapper and sudoers file** from Appendices A and B. These are transcriptions.
    A transcription error in the sudoers file breaks CI loudly; one in the wrapper could break
    it quietly.
@@ -1058,9 +1081,16 @@ None of these were fixed here; each is a separate, deliberate decision.
 1. **Odoo is installed from a rolling nightly channel and is not version-pinned.** Running
    build `19.0.20260809`. No ADR mentions this. The largest un-reproducibility in the rebuild
    path (step 6).
-2. **`server_environment_files` is untracked inside a third-party clone.** `git status` in
-   `/opt/odoo-custom-addons/server-env` reports `?? server_environment_files/`. A `git clean`
-   or re-clone destroys it, and the failure is silent (step 13).
+2. ~~**`server_environment_files` is untracked inside a third-party clone.**~~ **FIXED
+   2026-08-15 — no longer true.** Investigated, found to contain no secrets (the Blob
+   credentials live in the database, not in it) and to be untracked simply because it had
+   been created inside someone else's clone, not because upstream excludes it. It is now
+   version-controlled at `odoo/addons/server_environment_files/`, the copy in the OCA clone
+   has been deleted, and `smoke_test.py` now fails the deploy if attachment storage is not
+   resolving to Blob. Step 13 is rewritten accordingly and is now **[VC]**. See ADR 0009's
+   Deviation 7 addendum. One correction that came out of it: the silent fallback goes to the
+   **local filestore**, not the database, which is worse for a rebuild than previously stated
+   here — see step 14.
 3. **Odoo binds `0.0.0.0:8069`/`:8072`, not loopback.** ADR 0009 describes the nginx proxy
    *target* as `127.0.0.1:8069`, which is accurate but easy to misread as the bind address.
    Only the NSG prevents direct access, `ufw` is inactive, and the NSG is not in version
