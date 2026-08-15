@@ -73,7 +73,7 @@ BEGIN
       RAISE EXCEPTION '0017-T2 FAILED: expected 3 rows after supersession (append-only), got %', v_rows;
     END IF;
     IF (SELECT upper(effective_range) FROM program_participants WHERE participant_id = v_old)
-       <> '2026-07-01'::timestamptz THEN
+       IS DISTINCT FROM '2026-07-01'::timestamptz THEN
       RAISE EXCEPTION '0017-T2 FAILED: the superseded row was not closed at the successor start';
     END IF;
     RAISE EXCEPTION 'ROLLBACK_CASE';

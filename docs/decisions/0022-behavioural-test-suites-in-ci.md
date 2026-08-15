@@ -113,3 +113,70 @@ Behaviour after the refactor was confirmed against a capture taken before it: wi
 - **Coverage is only what ADR 0017 and ADR 0021 decided.** ADRs 0010, 0013, 0014, 0016, 0018 and 0019 all made behavioural decisions with no suite here. Backfilling them is worth doing and is not done; this ADR establishes where they would go.
 - **Nothing covers the Odoo module**, the referral matrices, or the rating tables. This is a database test harness, not a project-wide one.
 - **A suite can only test what a transaction can reach.** `expire_policies()` runs from a systemd timer (ADR 0019) and the deploy smoke test runs under `deploy-vm.sh`; neither is exercised here.
+
+---
+
+# Addendum: `IS DISTINCT FROM` is the harness's comparison operator (2026-08-15)
+
+**Status:** Decided; implemented
+**Amends:** section 2's account of how a suite is written, which said assertions must raise but not which operator they must raise *on*.
+**Follows from:** ADR 0018's second addendum, whose mutation testing found this defect in the suite it was writing. That fix landed only in `tests/0018_return_premium_and_cancellation.sql`; the three earlier suites predated the finding and had never been audited against it.
+
+## The rule
+
+**Any comparison against a variable that could be NULL - because the query feeding it can return zero rows, or because the value itself can be NULL - must use `IS DISTINCT FROM` / `IS NOT DISTINCT FROM`, never `<>` / `=`.**
+
+`NULL <> 'anything'` is NULL, not true, and `IF` treats NULL as false. So an assertion whose variable went NULL does not fail - it silently succeeds. A `SELECT ... INTO` that matches no row leaves its target NULL and raises nothing, which is the common way in. This is not a style preference: it is the difference between a test and a test-shaped comment.
+
+Two NULL sources matter here and only the first is obvious:
+
+- **The row is gone.** A `SELECT INTO` or scalar subquery that matches nothing. Every one of these suites asserts against rows a function was supposed to have written or moved, so "no row" is frequently the exact regression being tested for.
+- **The row is there and the value is NULL.** `upper(effective_range)` on an unbounded range is NULL. Three assertions of the form *"the superseded row was closed at the successor start"* compared `upper(...)` against a timestamp - and a row left **open-ended**, which is precisely the failure they exist to catch, produces NULL and passed them. The most valuable case in this audit was the one where the row existed.
+
+## What was audited, and what was deliberately left alone
+
+Every `<>`, `!=`, `=` and `LIKE` comparison in the three pre-existing suites was traced back to what feeds it. Five were converted. The rest were left as they are, and that is a finding rather than an omission - converting mechanically would have erased the signal that says which comparisons carry real NULL risk.
+
+**Converted (5):**
+
+| Site | Why it was vulnerable |
+|---|---|
+| `0017-T2` superseded row closed at successor start | `upper()` subquery: NULL if the row is deleted, and NULL if the row is left open - both are the regression under test |
+| `0021-T2` removed row closed at the removal date | same shape |
+| `0021-T10` outgoing row closed at the changeover | same shape |
+| `0021-T10` capacity provider at 50 from the changeover | `SELECT INTO` filtered on `lower(effective_range) = <changeover>`; a reallocation writing the row at the wrong start returns zero rows |
+| `0021add-A10` probing an override did not mutate the stored term | `SELECT INTO` on `insurance_programs`; if the probe deleted the row - a way of "touching" it - the assertion went blank |
+
+**Left as `<>` / `=`, with the reason each is genuinely NULL-safe:**
+
+- **The `SQLERRM <> 'ROLLBACK_CASE'` success-unwind sentinel (20 sites).** Checked against the server rather than assumed, on PostgreSQL 16.14: inside `EXCEPTION WHEN OTHERS`, `SQLERRM` is never NULL. `RAISE EXCEPTION ''` yields `''` (empty, not NULL, and `'' <> 'ROLLBACK_CASE'` is true, so the sentinel still behaves); a NULL interpolated into the format string yields the literal `'<NULL>'`; `RAISE ... USING MESSAGE = NULL` is rejected by Postgres itself with *"RAISE statement option cannot be null"*, so a NULL `SQLERRM` cannot be constructed; and a `RAISE` carrying no message at all falls back to the SQLSTATE. These are safe and should stay as they are.
+- **`v_err NOT LIKE '%TOKEN%'` on caught errors (20 comparisons across 18 assertions - two of them check the token and a number in one `IF`).** `v_err` is assigned from `SQLERRM` inside the handler, so it is non-NULL by the point above - but only if the handler ran, which is what the preceding `IF NOT v_ok THEN RAISE` guarantees. All 18 were checked programmatically for that guard rather than by eye; all 18 have it.
+- **Anything fed by `count(*)` (11 sites).** An aggregate query always returns exactly one row, and `count(*)` over zero rows is `0`. Confirmed live, not assumed: `SELECT count(*), min(x) INTO n, m` over an empty set returns `n = 0` and `m = NULL` in the same statement - the count is safe and the `min()` in the very same `SELECT` is not, which is worth knowing before trusting an aggregate on sight.
+- **`v_gaps`/`v_when`/`v_reason` in the addendum suite, where `v_when` comes from `min(removal_date)`.** `min()` over zero rows *is* NULL, so these look vulnerable and are not: each is preceded by an `IF v_gaps <> 1 THEN RAISE` on a count over the same rows with a weaker-or-equal predicate, so the case has already failed before the NULL-capable variable is examined, and `removal_date`/`reason` are `NOT NULL` columns. Proven by removing the gap rows the widen was supposed to create: the case fails at the `v_gaps` guard, as it should. **This safety is non-local** - it lives in the ordering of two statements, not in the comparison. Anyone reordering or deleting that guard has to revisit the comparisons below it, or convert them.
+- **`IF NOT EXISTS (...)`** - `EXISTS` returns true or false and never NULL.
+
+## The fix was proven, not applied
+
+Same obligation ADR 0018's addendum set: a claim that something is now safe is worth nothing until the unsafe version is shown to break.
+
+All five conversions were mutation-tested - the full set rather than a sample, because five is small enough that sampling would only have introduced doubt about the ones skipped. Six probes, each run twice: once against the file with `<>` restored, once against the converted file.
+
+| Probe | with `<>` | with `IS DISTINCT FROM` |
+|---|---|---|
+| `0017-T2` participant id pointed at a nonexistent row | silent pass | fails in `0017-T2` |
+| `0017-T2` row left open-ended (`upper()` → NULL) | silent pass | fails in `0017-T2` |
+| `0021-T2` participant id pointed at a nonexistent row | silent pass | fails in `0021-T2` |
+| `0021-T10` share lookup dated at a start that never existed | silent pass | fails in `0021-T10` |
+| `0021-T10` outgoing row left open-ended | silent pass | fails in `0021-T10` |
+| `0021add-A10` stored-term lookup pointed at a nonexistent program | silent pass | fails in `0021add-A10` |
+
+Six for six: every one of these assertions was inert before this change and is live after it. The mutations were never written to the tracked files - each was applied to a scratch copy - and the committed diff is five operators and nothing else.
+
+After reverting every probe, `scripts/run-tests.sh` reports 4/4 suites and 46 cases passing (12 + 8 + 16 + 10), and all twelve tables the suites touch hold zero rows.
+
+## Consequences
+
+- The harness has a stated comparison rule, which section 2 previously left to whoever was writing the file. A new suite that uses `<>` against a `SELECT INTO` target is now wrong by this ADR, not merely unlucky.
+- Five assertions across three suites that could not fail now can. None of them was failing; the risk was entirely in the future, which is exactly when a regression test is supposed to earn its keep.
+- The claim in ADR 0022's original text that the backfilled suites "were run against the current schema and pass" was true and is now worth more, because passing has been shown to be a fact about the assertions rather than about their operators.
+- **Mutation testing is the reason both of these defects were found**, in two consecutive sessions, in files written by someone who knew the rule by the second one. Neither was visible by reading. This is now the second ADR to record it, and it is the practice worth keeping, not the operator.

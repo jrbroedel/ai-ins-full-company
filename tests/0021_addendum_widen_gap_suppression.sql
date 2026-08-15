@@ -393,7 +393,7 @@ BEGIN
     IF v_hypo = 0 THEN
       RAISE EXCEPTION '0021add-A10 FAILED: the hypothetical wider term should report holes';
     END IF;
-    IF v_stored <> tstzrange('2026-01-01','2027-01-01','[)') THEN
+    IF v_stored IS DISTINCT FROM tstzrange('2026-01-01','2027-01-01','[)') THEN
       RAISE EXCEPTION '0021add-A10 FAILED: probing with an override mutated the stored term';
     END IF;
     RAISE EXCEPTION 'ROLLBACK_CASE';

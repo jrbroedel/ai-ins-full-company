@@ -80,7 +80,7 @@ BEGIN
       RAISE EXCEPTION '0021-T2 FAILED: the gap row does not point at the removed participant';
     END IF;
     IF (SELECT upper(effective_range) FROM program_participants WHERE participant_id = v_re)
-       <> '2026-07-01'::timestamptz THEN
+       IS DISTINCT FROM '2026-07-01'::timestamptz THEN
       RAISE EXCEPTION '0021-T2 FAILED: the removed row was not closed at the removal date';
     END IF;
     IF EXISTS (SELECT 1 FROM program_participants
@@ -359,11 +359,11 @@ BEGIN
     SELECT share_percentage INTO v_share FROM program_participants
      WHERE program_id = p AND participant_name = 'Fronting Co'
        AND lower(effective_range) = '2026-07-01'::timestamptz;
-    IF v_share <> 50 THEN
+    IF v_share IS DISTINCT FROM 50 THEN
       RAISE EXCEPTION '0021-T10 FAILED: expected the capacity provider at 50 from the changeover, got %', v_share;
     END IF;
     IF (SELECT upper(effective_range) FROM program_participants WHERE participant_id = v_cap)
-       <> '2026-07-01'::timestamptz THEN
+       IS DISTINCT FROM '2026-07-01'::timestamptz THEN
       RAISE EXCEPTION '0021-T10 FAILED: the outgoing row was not closed at the changeover';
     END IF;
     RAISE EXCEPTION 'ROLLBACK_CASE';
