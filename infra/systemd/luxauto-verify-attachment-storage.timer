@@ -1,0 +1,41 @@
+# ADR 0009 Deviation 7, second addendum.
+#
+# Daily, not hourly - and deliberately not by imitation of the ADR 0019 timer
+# next to it, which is hourly for a reason that does not apply here.
+#
+# expire-policies is hourly because it moves a status field whose correctness
+# is time-dependent: a policy whose term ended is wrong from that instant
+# onward, and every hour of delay is an hour of visibly wrong data. Nothing
+# about attachment storage changes on its own. It is a configuration property
+# that regresses only when something acts on the system - a bad deploy (already
+# covered by smoke_test.py on every push), a VM rebuild, a rotated storage key,
+# a container or network policy change, a hand edit. Those arrive days or weeks
+# apart, not minutes.
+#
+# The decisive argument is that no alerting exists on this project (checked:
+# no SMTP server on the Odoo instance, no webhook, no OnFailure= handler
+# anywhere). A failed run is recorded in the journal and nowhere else, so the
+# time to NOTICE is set by when a human next looks - not by how often this
+# runs. Going hourly would multiply the cost by 24 and improve the time to
+# notice by nothing at all. Daily bounds the undetected window to ~24h, which
+# is already far better than the previous bound of "until somebody pushes."
+#
+# Each run writes, reads twice and deletes a real object in the production
+# container. That is cheap but not free, and it is the reason not to run it
+# more often than the failure rate justifies.
+#
+# Persistent=true so a VM that was down or deallocated runs the check on the
+# next boot instead of silently skipping a day - the same reasoning as the
+# ADR 0019 timer, and it matters more here because a restored VM is exactly
+# one of the scenarios this check exists to catch.
+[Unit]
+Description=Daily attachment storage health check (ADR 0009 Deviation 7)
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=900
+Persistent=true
+Unit=luxauto-verify-attachment-storage.service
+
+[Install]
+WantedBy=timers.target

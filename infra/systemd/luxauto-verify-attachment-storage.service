@@ -1,0 +1,17 @@
+# ADR 0009 Deviation 7, second addendum. Installed on luxauto-odoo; see
+# infra/systemd/README.md.
+[Unit]
+Description=Luxury Auto MGA - attachment storage health check (ADR 0009 Deviation 7)
+After=network-online.target odoo.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Runs as odoo for the same reasons expire-policies does: it needs to read
+# /etc/odoo/odoo.conf (0640 odoo:odoo) and to run `odoo shell`. It needs no
+# Key Vault round-trip and no admin Postgres role - the Azure Blob credentials
+# come from the fs_storage record in the luxauto database, and the check writes
+# only a synthetic attachment it deletes again in the same transaction.
+User=odoo
+Group=odoo
+ExecStart=/opt/odoo-custom-addons/luxauto/scripts/verify-attachment-storage.sh

@@ -160,7 +160,55 @@ Two of the three are silent, and the two silent ones are precisely the ones a `g
 | Repo copy alone drives the config | with the OCA copy removed, `_dir` = `/opt/odoo-custom-addons/luxauto/odoo/addons/server_environment_files`, `use_as_default_for_attachments` still `True`, `_storage()` → `azure_blob_documents` |
 | Restored state | check passes clean again |
 
-**What this does not fix.** The check runs at deploy time, not continuously. Between deploys, something could delete the config and the only symptom would still be new attachments landing on local disk until the next push. A periodic check (the ADR 0019 timer is the obvious host for one) is a reasonable follow-up and is not done here. The check also does not verify that Blob is *reachable* — only that Odoo intends to use it; ADR 0009's original three-way `fsspec` verification remains the thing that proved reachability, and nothing re-runs it.
+**What this does not fix.** The check runs at deploy time, not continuously. Between deploys, something could delete the config and the only symptom would still be new attachments landing on local disk until the next push. A periodic check (the ADR 0019 timer is the obvious host for one) is a reasonable follow-up and is not done here. The check also does not verify that Blob is *reachable* — only that Odoo intends to use it; ADR 0009's original three-way `fsspec` verification remains the thing that proved reachability, and nothing re-runs it. **Both of these are closed by the second addendum below.**
+
+---
+
+### Second addendum to Deviation 7: a standing check that proves reachability, not just intent (2026-08-15)
+
+The addendum above named two gaps and left them open: the check ran **only on deploy**, and it proved only **intent** (`ir.attachment._storage()` resolving to `azure_blob_documents`), never that Blob would accept a write. Both are now closed, by a timer rather than by extending the deploy path.
+
+**Why a timer and not a bigger deploy check.** The failure modes that matter here do not coincide with deploys. A rotated storage-account key, a deleted or renamed container, a changed network rule on the storage account, a hand-edited config, a restored VM — none of these involve a push, so a deploy-time check can miss them for as long as nobody happens to deploy. `smoke_test.py` keeps the intent assertion because it is nearly free there and it fails a bad deploy at the moment it is made; the standing check is what covers the rest of the time.
+
+**What was built:**
+
+- `scripts/verify-attachment-storage.sh`, following `scripts/expire-policies.sh`'s shape — same header-comment discipline, same `set -euo pipefail`, same env-override convention, same "run as `odoo`, read the password from the config file that user already owns, no Key Vault round-trip" privilege model. Verified rather than assumed to be the right privilege level: the Blob credentials come from the `fs_storage` record in the `luxauto` database, not from Key Vault, so this check needs neither the managed identity nor the admin Postgres role. It needs only to read `/etc/odoo/odoo.conf` (0640 `odoo:odoo`) and to run `odoo shell`.
+- `scripts/lib/verify_attachment_storage.py`, run through `odoo shell` — the same execution pattern as `smoke_test.py`, for consistency.
+- `infra/systemd/luxauto-verify-attachment-storage.{service,timer}`, matching the ADR 0019 pair's structure, installed by the procedure in `infra/systemd/README.md`.
+
+**The two checks are independent and both always run**, because "intent is wrong" and "Blob is unreachable" have different causes and different fixes, and a report that hides one behind the other is worse than two lines. The reachability probe forces the attachment onto the expected storage via `storage_location` in the context, so it tests Blob even when intent has already failed and a default-routed attachment would have gone to local disk. Exit codes are distinct — `1` intent, `2` reachability, `3` both, `4` could not run — so `systemctl status` is legible without opening the journal.
+
+The reachability check reproduces ADR 0009's original three-way verification rather than re-reading config: create a real `ir.attachment` through the ORM and confirm `fs_filename` is populated and `db_datas` empty (the bytes left the database); read it back through the ORM; read the same object again through `fsspec` directly at the path parsed from `store_fname`, bypassing Odoo entirely; then delete it and confirm it is gone.
+
+**Daily, and the reasoning is not the one ADR 0019 used.** ADR 0019 chose hourly because policy status is time-dependent — a policy whose term ended is *wrong* from that instant, and every hour of delay is an hour of visibly wrong data. Nothing about attachment storage degrades on its own; it regresses only when something acts on the system, and those events arrive days or weeks apart. The decisive argument is the alerting gap below: since a failure is recorded in the journal and nowhere else, the time to *notice* is set by when a human next looks, not by how often the check runs. Hourly would multiply the cost — each run writes, reads twice and deletes a real object in the production container — by 24 and improve time-to-notice by nothing. Daily bounds the undetected window at ~24h, against a previous bound of "until somebody pushes." `Persistent=true` so a VM that was down or deallocated catches up on the next boot, which matters more here than for policy expiry because a restored VM is one of the scenarios this check exists to catch.
+
+**What the first run found, which is why this was tested rather than trusted.** The check failed on its first run against a perfectly healthy system, asserting that the probe object was still in the container after `unlink()`. That was the check being wrong, not the system — and it had already left an object in the production container, which was removed by hand. **Odoo does not delete Blob objects synchronously.** `ir.attachment.unlink()` → `_file_delete` → `fs_attachment._storage_file_delete` → `_fs_mark_for_gc`: it *marks* the object for a later garbage-collection pass and returns. So any probe that relies on `unlink()` to tidy up leaves its object in the container until the GC happens to run. The check now deletes through `fsspec` explicitly, which is both the honest cleanup and a stronger assertion — it exercises a real Blob *delete*, so the round-trip covers write, read and delete rather than only the first two. Cleanup is three-layered: the explicit delete on the success path, a `finally` that removes the object if any assertion returned early (reporting on `VERIFY_CLEANUP=` if that fails), and a transaction that is rolled back rather than committed so the `ir.attachment` row never lands even on a hard kill. Probe objects are named `luxauto-storage-healthcheck-<timestamp>-<token>.bin` so anything ever stranded is identifiable at a glance.
+
+**Verified by reproducing every failure mode before trusting the fix.** The reproductions use `SERVER_ENV_CONFIG`, which `server_env.py` loads *last* and which therefore overrides the config files for one process only — so no live config, no file, and no database row was modified to produce any of these:
+
+| Scenario | Result |
+|---|---|
+| Healthy system | `intent=PASS reachability=PASS`, exit **0**; container and database confirmed clean afterwards |
+| Container missing (`directory_path` → nonexistent) | `reachability=FAIL: ResourceNotFoundError: The specified container does not exist`, intent still PASS, exit **2** |
+| Blob no longer the default (`use_as_default_for_attachments=false`) | `intent=FAIL` naming `'file'` and the config file to check, reachability still PASS, exit **1** |
+| Rotated/invalid storage key **and** not default | `intent=FAIL` and `reachability=FAIL: ClientAuthenticationError: Server failed to authenticate the request`, exit **3** |
+| After every failure run | no probe object in the container, no `ir_attachment` row — checked explicitly, not assumed |
+| Timer actually fires | see below — proven by observation, not by `is-enabled` |
+
+The intent-failure reproduction was re-run against this standalone check rather than assumed to transfer from `smoke_test.py`'s earlier reproduction; it produces the same `'file'` fallback and the same diagnosis, through a different code path.
+
+## What this still does NOT solve — nobody is notified
+
+**There is no alerting on this project, and this addendum does not add any.** Checked before deciding, not assumed: there is no outgoing mail server configured in Odoo (`ir_mail_server` is empty), no webhook, no Slack integration, no `OnFailure=` handler on any unit, and nothing resembling alerting anywhere in the repository.
+
+So the honest description of what a failure does today: **`luxauto-verify-attachment-storage.service` exits non-zero, systemd records the failure, and the message sits in the journal on `luxauto-odoo` until a human runs `systemctl status` or `journalctl -u luxauto-verify-attachment-storage.service`. No one is told.** A regression is detected within ~24 hours and *surfaced* only when somebody looks — which, on a project with no on-call and no dashboard, could be much longer.
+
+That is a real reduction in exposure and it is not the same as monitoring. This addendum deliberately does not build alerting: choosing a channel (email via an SMTP relay, an Azure Monitor action group, a webhook) is a larger decision with its own credential-handling and cost consequences, and it belongs in its own ADR rather than being smuggled in behind a health check. **The obvious next step, named and not taken here:** a `OnFailure=` unit pointing at whatever notification transport that future ADR picks — the systemd shape for it is already in place and costs one line per unit once there is somewhere to send to.
+
+Two smaller residuals, stated rather than left to be discovered:
+
+- **The check proves the container is writable, not that existing attachments are intact.** It writes and reads its own probe object; it does not audit the 0 attachments currently routed to Blob (all 206 are `image/*`, `text/css` or `application/javascript`, which `force_db_for_default_attachment_rules` deliberately keeps in the database). A silent corruption of stored objects would not be caught.
+- **A ~24h window remains** between a regression and its detection, plus however long until someone reads the journal. Shortening the first half is a one-word change to the timer; shortening the second half requires the alerting decision above.
 
 ## Consequences / not yet done
 
