@@ -51,7 +51,7 @@ Investigation before implementation found the thing that would have broken this 
 
 What the grant does still bound is root. `ghrunner` cannot start, stop, mask or edit any unit other than `odoo`, and cannot read `/etc/shadow` - both verified, not assumed.
 
-**Deferred hardening item:** the wildcard can be removed by making `deploy-vm.sh` call a root-owned, fixed-path wrapper that hardcodes the config, database and smoke-test payload, with sudoers pinned to the wrapper. That is a change to an ADR 0015 artifact and is left for a deliberate task rather than smuggled in here.
+~~**Deferred hardening item:** the wildcard can be removed by making `deploy-vm.sh` call a root-owned, fixed-path wrapper that hardcodes the config, database and smoke-test payload, with sudoers pinned to the wrapper. That is a change to an ADR 0015 artifact and is left for a deliberate task rather than smuggled in here.~~ **Done - see the addendum below.** The wrapper exists, the wildcard is gone, and the addendum is explicit about which half of the threat it closes and which half it structurally cannot.
 
 ## 4. What this exposes, stated plainly
 
@@ -86,6 +86,81 @@ This closes the one dependency that the two workflows have on host state outside
 - ADR 0012's deferral of "which CI/CD tool" is closed by circumstance rather than by comparison: the scripts' dependence on this host's managed identity and local Odoo service made a host-bound runner the only option that does not reintroduce stored secrets.
 - Push access to `main` is now a production-access boundary. It should be treated as one when branch protection or collaborator access is next considered.
 - A second runner would convert the section 2 ordering hazard from arbitrary serialization into real parallelism. Do not add one for throughput without first chaining the workflows.
-- The `/usr/bin/odoo *` sudoers wildcard remains outstanding as a named hardening item (section 3), as does the workflow chaining in section 2. Both are recorded as accepted-and-deferred, which is the same treatment ADR 0011 and ADR 0012 gave the gaps ADR 0015 eventually closed.
+- ~~The `/usr/bin/odoo *` sudoers wildcard remains outstanding as a named hardening item (section 3)~~ **closed by the addendum below**, which replaced it with two exact-match entries against a root-owned wrapper. The workflow chaining in section 2 remains outstanding, recorded as accepted-and-deferred, which is the same treatment ADR 0011 and ADR 0012 gave the gaps ADR 0015 eventually closed.
 - The runner survives a host reboot without intervention (section 5), so no manual step is needed to restore CI after a restart or a patch cycle. An Azure-side deallocate/start was not tested.
 - Odoo is restarted on every push to `main` that reaches the deploy workflow, including documentation-only commits - `deploy-vm.sh` upgrades all first-party modules unconditionally by ADR 0015's own design. Path filtering was considered and not added, on the grounds that a deploy that only ever runs on "relevant" paths is a second thing that has to be right about which files imply a change, which is the failure mode ADR 0015 section 3 explicitly avoided when it chose to upgrade every module every deploy.
+
+---
+
+# Addendum: the `/usr/bin/odoo *` wildcard is closed, and exactly half the threat with it (2026-08-15)
+
+**Status:** Decided; implemented
+**Amends:** section 3's deferred hardening item and the Consequences line that carried it.
+**Not in scope:** the section 2 workflow-chaining hazard, and the five other sudoers rules (`systemctl` ×3, `git` ×2), which section 3 already scoped correctly.
+
+## What replaced it
+
+`ghrunner`'s `(odoo) NOPASSWD: /usr/bin/odoo *` is gone. In its place, two exact-match entries against a new root-owned script at `/usr/local/sbin/luxauto-odoo-deploy-ctl` (mode 0755, `root:root`), **deliberately outside the git clone**:
+
+```
+(odoo) NOPASSWD: /usr/local/sbin/luxauto-odoo-deploy-ctl upgrade,
+                 /usr/local/sbin/luxauto-odoo-deploy-ctl smoketest
+```
+
+The wrapper takes exactly one of two literal words and passes nothing through. `upgrade` recomputes the module list itself from `$CLONE_DIR/odoo/addons/*/__manifest__.py` and runs the upgrade against a hardcoded clone path, config and database. `smoketest` pipes exactly `$CLONE_DIR/scripts/lib/smoke_test.py` into `odoo shell` against the same hardcoded config and database. Any other argument, or none, exits 2 with a usage message.
+
+Provisioned by hand as `azureuser`, the same way ADR 0020 provisioned the original sudoers file. Nothing in CI, and nothing running from the clone, creates or edits either file - a workflow able to write them would hand back precisely the privilege they remove.
+
+**No setuid, and that was checked rather than assumed.** Linux ignores the setuid bit on `#!` scripts entirely, so it was never available; it is also unnecessary, because sudo's `(odoo)` target already performs the transition exactly as it did for the old rule. The load-bearing property is not the invocation shape but the ownership: the wrapper is unwritable by `ghrunner` **and** by `odoo` - both verified, not inferred from the mode bits.
+
+## What this actually narrows - and the hole that turned out to be worse than recorded
+
+Section 3 argued the wildcard was "not a meaningful widening" because `odoo shell` already executes an arbitrary Python payload. That reasoning was sound for the threat it considered - a malicious commit - and it obscured a second one.
+
+**The smoke-test payload was being read from `ghrunner`'s own workspace.** `deploy-vm.sh` piped `$SCRIPT_DIR/lib/smoke_test.py`, and under CI `SCRIPT_DIR` is the Actions checkout at `/opt/actions-runner/_work/.../scripts/lib/`, owned `ghrunner:ghrunner` and writable by it. So anything executing as `ghrunner` - a future workflow step, a runner-software vulnerability, anything at all - could write that file and pipe arbitrary Python into `odoo shell` as the `odoo` user **without touching the repository**. That is not the push-to-main boundary section 4 accepted; it is a separate path that did not require repo access, and it is the one this addendum closes.
+
+After the change, `ghrunner` cannot invoke `/usr/bin/odoo` at all, cannot choose the database or config, and cannot choose the payload: the wrapper performs the redirection itself, so whatever the caller has on stdin is discarded, and the payload is resolved inside the clone, which `ghrunner` cannot write (it is not in the `odoo` group - checked).
+
+## What this does NOT narrow, stated plainly
+
+**Push access to `main` is still code execution as the `odoo` user.** That is section 4's boundary, it is unchanged, and it is not a gap this addendum failed to close:
+
+- `upgrade` loads module code out of the clone. A commit adding an addon directory gets that module's Python executed by `odoo -u`.
+- `smoketest` executes the repository's own `smoke_test.py`, live, on purpose.
+
+**Freezing a copy of the smoke test inside the wrapper would close that second path and is deliberately not done.** The frozen copy would then have to be updated by hand every time the smoke test grows - and it grows: `luxauto.policy.cancellation` was added to it two commits ago. Nothing would fail loudly when someone forgot, so the privileged path would quietly stop covering new models while continuing to report `SMOKE_TEST_RESULT=PASS`. A smoke test that silently tests less than it claims is a worse outcome than the residual it would buy, given that push-to-main already grants the same access by a shorter route.
+
+So the honest summary is: **this narrows what a compromised `ghrunner` runtime can do, and does not narrow what a malicious commit can do.** The sudoers rule is genuinely tighter, not merely narrower-looking - which is the distinction section 3 said it refused to blur, applied in the other direction now that a wrapper makes the tighter rule real.
+
+## Changes to `deploy-vm.sh`
+
+Two invocations changed and nothing else in the control flow. Three consequences of that were worth handling rather than leaving implicit:
+
+- **`ODOO_CONF`, `ODOO_DB`, `ODOO_BIN` and `LUXAUTO_MODULES` now refuse instead of being ignored.** They are pinned in the wrapper, so honouring them is impossible - and silently ignoring `LUXAUTO_MODULES` would upgrade every module against production while telling the operator it had limited the scope. The script exits 1 naming the wrapper. `LUXAUTO_ADDONS_CLONE` still works; it feeds the git calls, which are pinned separately and unchanged.
+- **The module scan stayed in `deploy-vm.sh` as a preflight**, duplicating the wrapper's. The duplication buys ordering: the empty-list refusal fires *before* `systemctl stop odoo`, so a bad clone does not take the service down on the way to an upgrade that was never going to run. The wrapper echoes the list it actually used, so the two disagreeing would be visible rather than silent.
+- **The smoke-test payload now comes from the clone, not from the caller's checkout.** In CI these are the same commit. For a by-hand run from a working copy they are not: `scripts/deploy-vm.sh` run from `~/ai-ins-full-company` now smoke-tests the clone's copy. That is the correct source - it is the code Odoo actually loaded - but it is a behaviour change worth knowing before someone debugs a local edit that appears not to take effect.
+
+## Verified, not assumed
+
+Reproduce-before-trust, the same discipline the test suites use:
+
+| Check | Result |
+|---|---|
+| Wildcard present before the change | `sudo -l -U ghrunner` listed `/usr/bin/odoo *` |
+| Wildcard gone after | `sudo -l -U ghrunner` lists exactly the two wrapper entries; the five `systemctl`/`git` rules unchanged |
+| `ghrunner` can still reach `odoo shell` | **No** - `sudo -u odoo /usr/bin/odoo shell --config … -d luxauto` as `ghrunner` returns `sudo: a password is required`, and the account is password-locked with no TTY in CI |
+| `ghrunner` can reach `/usr/bin/odoo` at all | **No** - `--version` and `-d luxauto --stop-after-init` both refused |
+| Wrapper reachable only in its two forms | `upgrade` and `smoketest` authorised; `restart`, no-argument, `smoketest --db-filter=x`, and `(root)` instead of `(odoo)` all refused by sudo |
+| Wrapper's own validation | `restart`, empty, and `smoketest extra` each exit 2 with the usage message - two independent layers, sudoers and the script |
+| Wrapper is tamper-proof | not writable by `ghrunner` or by `odoo`; `/usr/local/sbin` is `root:root 0755` |
+| Sudoers file is valid | `visudo -c -f` on the candidate before installing, and a full `visudo -c` after |
+| Real deploy end to end | run through the wrapper; both `LUXAUTO_DEPLOY_CTL=upgrade …` and `LUXAUTO_DEPLOY_CTL=smoketest …` banners appear in the output, and all seven models pass |
+
+The `LUXAUTO_DEPLOY_CTL=` banner exists for that last row specifically: it prints the pinned database, config and (for `upgrade`) the module list the wrapper actually computed, so a future reader of a deploy log can see the pinned path ran rather than inferring it from a sudoers file they would have to go and read.
+
+## Consequences
+
+- The `/usr/bin/odoo *` wildcard is closed. Section 3's deferred item is done; section 2's chaining hazard is not, and remains the outstanding item from this ADR.
+- **The deploy now depends on host state that is not in version control.** `/usr/local/sbin/luxauto-odoo-deploy-ctl` exists only on this VM, like the runner installation and the sudoers file. A rebuilt host needs it provisioned before `deploy-vm.sh` can run, and `sudo` will refuse loudly rather than fall back if it is missing. That is the price of the wrapper being outside the repo, which is the entire mechanism - but it is a real new dependency and belongs on the list of things this host carries that a `git clone` does not.
+- `deploy-vm.yml`'s checkout step still carries a comment describing "its `scripts/lib/smoke_test.py` payload", which is now inaccurate - the payload comes from the clone. **It is deliberately not fixed here:** this host's credential lacks the `workflow` scope (section 4), so nothing on this VM can modify `.github/workflows/`. Correcting the comment needs a commit from outside, which is exactly the control section 4 chose to keep.
+- Anyone adding a third privileged Odoo operation to the deploy must add a third literal subcommand to the wrapper and a third sudoers line. That friction is intentional: it is what stops the wildcard growing back one convenience at a time.
