@@ -63,9 +63,11 @@ Every step below is tagged with where the information needed to reproduce it act
 Counting them, because the ratio is the point: of the 17 steps below, **5 are [VC]**,
 **5 are [AZ]**, **5 are [HOST]**, and **2 are [EXT]**.
 
-*(Step 13 moved from [HOST] to [VC] on 2026-08-15 — see ADR 0009's Deviation 7 addendum. It
-is the only step whose category has ever changed, and moving one is the shape of progress
-this document is meant to drive.)*
+*(Two steps have changed category, which is the shape of progress this document is meant to
+drive. Step 13 moved [HOST] → [VC] on 2026-08-15 (ADR 0009's Deviation 7 addendum). Step 6's
+Odoo install moved [HOST] → [AZ] on 2026-08-16 when the exact `.deb` was vendored to Blob
+(ADR 0009's Deviation 1 addendum); the rest of that step — the package list, the post-install
+fixes — is still [HOST], so it carries both tags.)*
 
 ---
 
@@ -120,6 +122,14 @@ sudo tar czf ~/luxauto-host-state.tgz \
 
 `server_environment_files` used to be on this list and no longer is — it is version-controlled
 as of 2026-08-15 (step 13).
+
+The running Odoo `.deb` is also worth grabbing if it is still in the apt cache, as a second
+copy independent of the vendored one in Blob — this is exactly where the vendored artifact
+came from:
+
+```bash
+sudo cp /var/cache/apt/archives/odoo_*.deb ~/    # 221MB for 19.0.20260809
+```
 
 That tarball contains the `odoo` Postgres role password and the Odoo master password (both in
 `odoo.conf`) and the TLS private key. Treat it as a secret: move it off the host over `scp`,
@@ -309,7 +319,7 @@ VNet — fix that (step 4) before continuing. Nothing later in this runbook can 
 
 ---
 
-## Step 6 — Base packages and the Odoo install **[HOST]**
+## Step 6 — Base packages and the Odoo install **[AZ]** / **[HOST]**
 
 Ubuntu 24.04, not 22.04 — ADR 0009 Deviation 1. The Odoo 19 `.deb` names Noble as the only
 supported base. Start on 24.04; do not repeat the delete-and-recreate cycle that ADR 0009 paid for.
@@ -318,23 +328,90 @@ supported base. Start on 24.04; do not repeat the delete-and-recreate cycle that
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl gnupg nginx python3-pip
 
-# Odoo 19 nightly repo - the apt source verified on the live host
+# Odoo 19 apt source - kept configured for dependency resolution and future
+# deliberate upgrades, even though the install below does NOT come from it.
 curl -fsSL https://nightly.odoo.com/odoo.key | sudo gpg --dearmor \
   -o /usr/share/keyrings/odoo-archive-keyring.gpg
 echo "deb [signed-by=/usr/share/keyrings/odoo-archive-keyring.gpg] https://nightly.odoo.com/19.0/nightly/deb/ ./" \
   | sudo tee /etc/apt/sources.list.d/odoo.list
 sudo apt-get update
-sudo apt-get install -y odoo
 ```
 
-> **Deviation 1a — the Odoo version is not pinned, and a rebuild will not reproduce it.**
-> The running host has `odoo 19.0.**20260809**` — a dated nightly build. The apt source is
-> the rolling `19.0/nightly` channel, so a rebuild today installs whatever nightly is current,
-> **not** the build this system was tested against. No ADR records this. It is the single
-> largest un-reproducibility in the whole rebuild path, it is not fixable by writing it down,
-> and the honest options are: accept it and let step 17's smoke test catch the difference, or
-> pin the version (`apt-get install odoo=19.0.20260809`) if that build is still served — which
-> nightly channels do not guarantee.
+**Install the vendored build, not whatever the channel currently serves** — see the box
+below for why this is the only durable option. The `.deb` lives in the `infra-artifacts`
+container of the existing `luxautosa91a2e1` storage account (ADR 0008's account, a container
+separate from `documents`):
+
+```bash
+# Credentials via this VM's managed identity + Key Vault - the ADR 0009 pattern.
+# Requires step 3 to be done first.
+TOKEN=$(curl -s -H "Metadata:true" \
+  "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2019-08-01&resource=https%3A%2F%2Fvault.azure.net" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+ACCOUNT=$(curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://luxauto-kv-90a311.vault.azure.net/secrets/storage-account-name?api-version=7.4" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])")
+KEY=$(curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://luxauto-kv-90a311.vault.azure.net/secrets/storage-account-key?api-version=7.4" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])")
+
+python3 - "$ACCOUNT" "$KEY" <<'PY'
+import sys, hashlib
+from azure.storage.blob import BlobServiceClient
+acct, key = sys.argv[1], sys.argv[2]
+cc = BlobServiceClient(f"https://{acct}.blob.core.windows.net",
+                       credential=key).get_container_client("infra-artifacts")
+data = cc.download_blob("odoo/odoo_19.0.20260809_all.deb").readall()
+open("/tmp/odoo_19.0.20260809_all.deb", "wb").write(data)
+print("sha256", hashlib.sha256(data).hexdigest())
+PY
+
+# MUST print ff0299061691d689a7fe30596e5024bdc67d05e7ed6fa48331578d3588863be5
+sha256sum /tmp/odoo_19.0.20260809_all.deb
+
+sudo apt-get install -y /tmp/odoo_19.0.20260809_all.deb
+sudo apt-mark hold odoo
+```
+
+`apt-get install ./file.deb` (not `dpkg -i`) so apt resolves the package's dependencies from
+the Ubuntu archive normally. The `apt-mark hold` is what stops a later routine
+`apt-get upgrade` from undoing the pin.
+
+> **Deviation 1a — the Odoo build is not reproducible from upstream. Vendored as of
+> 2026-08-16; see ADR 0009's addendum to Deviation 1 for the full investigation.**
+>
+> The running host has `odoo 19.0.20260809`, a dated nightly. Three things were checked
+> before choosing the fix, and each ruled out an option that looks reasonable:
+>
+> - **There is no stable channel to switch to.** `nightly.odoo.com` publishes only
+>   `<series>/nightly/` for *every* series, 7.0 through master; `19.0/releases/` is a 404.
+>   This is not a pre-release channel this project picked — it is Odoo's only apt channel.
+> - **`apt-get install odoo=19.0.20260809` cannot work.** The repo's `Packages` index holds
+>   exactly **one** `odoo` entry (today `19.0.20260816`). A version-qualified install can only
+>   resolve what the index lists, so it fails outright. The earlier version of this runbook
+>   suggested this as an option; it was wrong.
+> - **Upstream prunes the artifact on a schedule.** The `.deb` is still there today, but
+>   enumerating both the 19.0 and 18.0 directories shows the same pattern: dailies for
+>   roughly the last 3–4 months, then **one build per month** kept indefinitely. `20260809`
+>   is not a month boundary, so on this pattern it disappears around **late Nov–mid Dec
+>   2026**. Fetching from upstream at rebuild time is a fix with a silent expiry date.
+>   (Inferred from directory listings — Odoo publishes no retention policy.)
+>
+> So the artifact is vendored to Blob, verified byte-identical to both the VM's apt cache and
+> a fresh upstream download (`sha256 ff0299…3be5`), and verified retrievable by downloading
+> it back and re-hashing.
+>
+> **`apt-mark hold` is applied on the live host but does not solve this step.** A hold stops
+> an installed package from moving; it does nothing for a fresh install. It was worth applying
+> for its own reason: `apt-get -s upgrade` confirmed a routine patch run would have moved the
+> live host to `20260816` silently. (unattended-upgrades never would have — the Odoo repo
+> publishes no `Origin`, so it matches no `Allowed-Origins` pattern and gets a `-32768` pin.)
+>
+> **Residual risk, honestly:** one blob, one Standard_LRS account, one region, not replicated
+> or versioned — this protects against upstream pruning and VM loss, not against loss of the
+> resource group. And **only this build is vendored**: every future deliberate Odoo upgrade
+> must vendor its artifact too, or this gap reopens one upgrade later. Nothing enforces that
+> but this sentence.
 
 **Immediately after install, before ever starting Odoo** — ADR 0009 Deviation 2. The `.deb`
 pulls in `postgresql-16` and initialises a local cluster nobody wants:
@@ -899,8 +976,10 @@ Every one of these is a first-time-ever operation on a rebuild:
    for the current identity. Never repeated.
 3. **The NSG rule set.** Never captured. Not in any template or document. Currently
    verified-working only by black-box probing from the host.
-4. **Installing Odoo from the nightly repo.** Guaranteed to install a *different build*
-   than the one running (step 6).
+4. **Installing Odoo from the vendored `.deb`.** No longer guaranteed to install a
+   *different* build — the exact artifact is vendored and checksum-verified (step 6) — but
+   installing from it, and the `apt-get install ./file.deb` dependency resolution around it,
+   has never been exercised on a fresh host.
 5. **Reconstructing `odoo.conf`**, including a `db_password` that must be reset if not
    captured first.
 6. **Reconstructing the nginx config** and surviving certbot's rewrite of it.
@@ -1078,9 +1157,16 @@ ghrunner ALL=(odoo) NOPASSWD: LUXAUTO_GIT, LUXAUTO_ODOO_BIN
 Recorded rather than silently corrected, per the instruction that produced this document.
 None of these were fixed here; each is a separate, deliberate decision.
 
-1. **Odoo is installed from a rolling nightly channel and is not version-pinned.** Running
-   build `19.0.20260809`. No ADR mentions this. The largest un-reproducibility in the rebuild
-   path (step 6).
+1. ~~**Odoo is installed from a rolling nightly channel and is not version-pinned.**~~
+   **MITIGATED 2026-08-16.** Investigation found there is no stable channel to switch to
+   (`nightly.odoo.com` runs only nightly channels, for every series), that
+   `apt-get install odoo=<version>` cannot work because the index lists exactly one version,
+   and that upstream prunes non-month-boundary `.deb`s after ~3–4 months — so `20260809`
+   would have vanished around late 2026. The artifact is now vendored to the `infra-artifacts`
+   container of the existing storage account, checksum-verified against upstream and verified
+   retrievable, and step 6 installs from it. `apt-mark hold odoo` was applied separately for
+   live drift. **Not fully closed:** one un-replicated blob, and each future Odoo upgrade must
+   vendor its own artifact or the gap reopens. See ADR 0009's addendum to Deviation 1.
 2. ~~**`server_environment_files` is untracked inside a third-party clone.**~~ **FIXED
    2026-08-15 — no longer true.** Investigated, found to contain no secrets (the Blob
    credentials live in the database, not in it) and to be untracked simply because it had

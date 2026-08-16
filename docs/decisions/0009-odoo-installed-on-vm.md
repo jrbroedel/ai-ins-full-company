@@ -26,6 +26,47 @@ Installed Odoo 19.0 Community on a dedicated Azure VM (`luxauto-odoo`, provision
 
 The VM was first created on Ubuntu 22.04 (the only alias this `az` CLI version's local cache had, since the sandbox building this couldn't refresh the alias doc over the network). Odoo's own packaged-installer docs are explicit: the 19.0 `.deb` "currently supports Ubuntu Noble (24.04LTS)" — no other distribution is named as supported. Rather than risk dependency mismatches on an unsupported base, the VM was deleted and recreated on `Canonical:ubuntu-24_04-lts:server:latest` before installing anything. Cost: one throwaway VM creation cycle. If reproducing this from scratch, start on 24.04 directly.
 
+### Addendum to Deviation 1: the build is not reproducible from upstream, and the vendored copy is the fix (2026-08-16)
+
+The table above records "installed from the official `nightly.odoo.com/19.0` apt repo" as a fact and never examined it as a choice. `docs/runbooks/vm-rebuild.md` step 6 later called the consequence out — the running host has `19.0.20260809`, a dated nightly, from a rolling channel, so a rebuild installs whatever is current instead — and named it the largest un-reproducibility in the whole rebuild path. This addendum closes it, and investigating first changed what the fix had to be.
+
+**There is no stable channel to switch to.** Not "not yet, because 19.0 is early" — `nightly.odoo.com` publishes only `<series>/nightly/` for **every** series it carries, 7.0 through 19.0 and master. `19.0/releases/` is a 404. The nightly channel is not a pre-release channel this project happened to pick; it is the only apt channel Odoo operates, and it is the one Odoo's own install documentation points at. Switching channels is not an available option, so the question was only how to make a specific build reproducible.
+
+**`apt-get install odoo=19.0.20260809` cannot work, which is why the runbook's own suggested fix was wrong.** The repo's `Packages` index contains exactly **one** `odoo` entry — today, `19.0.20260816`. Verified directly against the fetched index, not inferred. A version-qualified install can only resolve versions the index lists, so this fails immediately on a rebuild with "Version '19.0.20260809' for 'odoo' was not found." The runbook offered this as an option with the caveat "if that build is still served"; the caveat was too generous, because the build being *present as a file* and being *installable by version* are different things and only the first is ever true here.
+
+**`apt-mark hold` solves a different problem, and it turned out to be a real one anyway.** A hold prevents an installed package from moving on a live host; it has no effect on a fresh install, which is the rebuild scenario. But checking what it would actually guard against found something worth acting on independently:
+
+- **unattended-upgrades already cannot touch Odoo.** The Odoo repo publishes no `Origin`, `Label` or `Suite` in its `Release` file, so it matches none of the four `Allowed-Origins` patterns. A `--dry-run --debug` shows it applying a `-32768` pin to that index and adjusting the candidate back to `odoo=19.0.20260809`. Automatic drift was never a live risk.
+- **A human running `apt-get upgrade` was.** Simulated before changing anything: `apt-get -s upgrade` listed `Inst odoo [19.0.20260809] (19.0.20260816 nightly.odoo.com)`. Routine patching would have moved Odoo forward seven days onto an untested build, silently. `apt-mark hold odoo` was applied and re-simulated: `The following packages have been kept back: odoo`. That is a genuine fix for the live-drift problem and is **not** a fix for the rebuild problem — recorded as two separate things rather than one that reads like both.
+
+**The retention policy is the finding that settled it.** The `.deb` for `19.0.20260809` *is* still on nightly.odoo.com today, so "just fetch it from upstream at rebuild time" looks workable. Enumerating the directory shows it is not, in a way with a predictable expiry:
+
+| | 19.0 | 18.0 |
+|---|---|---|
+| builds with `.dsc`/`.changes` metadata retained | 312 | 687 |
+| builds with the `.deb` artifact retained | ~110 | 131 |
+
+The surviving `.deb`s follow the same shape in both series, which is what makes this a policy rather than a coincidence: **every day for roughly the last 3–4 months, then one build per month kept indefinitely.** 18.0's older survivors are `20241001`, `20241101`, `20241201`, `20250101`… — month boundaries only. `19.0.20260809` is **not** a month-boundary build, so on this pattern it is pruned once it falls out of the daily window, somewhere around **late November to mid-December 2026**. Odoo publishes no retention policy that I could find, so this is inferred from two independent directory listings rather than read from documentation — stated as inference, with the evidence, rather than as fact.
+
+That is the whole argument against pinning by URL: it is a fix with a silent expiry date, which is worse than no fix, because it would look correct in the runbook right up until the first rebuild that needed it.
+
+**Decision: vendor the artifact.** The exact `.deb` was already sitting in the VM's own apt cache at `/var/cache/apt/archives/odoo_19.0.20260809_all.deb` (221 MB) — an immediately available copy independent of upstream retention entirely. It was cross-checked against a fresh download from nightly.odoo.com and the two are **byte-identical** (`sha256 ff0299…3be5`), so the vendored copy is provably what Odoo published and not something locally mutated. `dpkg -V odoo` reports no discrepancies apart from `/etc/odoo/odoo.conf`, which is a conffile this project deliberately edits — so the running install also matches the package.
+
+**Stored in a new `infra-artifacts` container in the existing `luxautosa91a2e1` storage account, not in `documents`.** The storage account is the one ADR 0008 provisioned and ADR 0009 already uses, so this introduces no new storage mechanism. A separate container rather than a path inside `documents` because `documents` is bound to the `fs.storage` record as Odoo's attachment backend: Odoo enumerates it, writes into it, and the attachment health check lists it. **Checked rather than assumed: the `fs_attachment` garbage collector works from an explicit `fs.file.gc` table of marked filenames and would not delete a foreign object**, so this is a separation-of-lifecycle decision — infrastructure artifact versus application data — not a data-loss risk. `documents` was confirmed untouched afterwards.
+
+Alongside the `.deb` is `odoo_19.0.20260809_all.deb.manifest.json` recording the version, sha256, size, upstream URL, vendoring date and why it exists, so the artifact explains itself to whoever finds it without this ADR in hand.
+
+**Verified by retrieval, not by upload succeeding:** the blob was downloaded back and re-hashed — 230,750,058 bytes, `sha256 ff0299…3be5`, matching both the local cache and upstream, and matching the manifest's own recorded hash.
+
+**Nothing about the live install changed except the hold**, but it was re-tested anyway on the principle that a version-adjacent change is exactly where a silent break would hide: Odoo restarted cleanly, `deploy-vm.sh` ran the module upgrade and all seven models passed, the attachment-storage smoke check passed, and the standalone `luxauto-verify-attachment-storage.service` returned `Result=success` with both its intent and fsspec-reachability checks passing — so ADR 0009's Blob assumptions still hold.
+
+**What this does not solve, stated plainly:**
+
+- **The vendored copy is one blob in one storage account in one region.** It is not replicated, versioned or backed up; the account is Standard_LRS (ADR 0008). If the resource group is lost, the artifact is lost along with the VM and the database — this protects against upstream pruning and against VM loss, not against subscription-level loss.
+- **It is a floor, not a pin.** Nothing forces a rebuild to *use* it. The runbook now installs from the vendored `.deb` by default, but an operator following habit rather than the document still gets whatever nightly is current.
+- **Only this one build is vendored.** Every future deliberate Odoo upgrade needs its artifact vendored too, or this gap silently reopens one upgrade later. That step is now in the runbook; nothing enforces it.
+- **The apt source is unchanged**, deliberately. The repo stays configured so that dependency resolution and any future intentional upgrade still work normally; the hold is what makes the difference between "available" and "applied."
+
 ## Deviation 2: the Odoo `.deb` package installs a local PostgreSQL server as a side effect
 
 `apt-get install odoo` pulled in `postgresql-16` and initialized a local cluster — unwanted, since the whole point of ADR 0001/0002 was an externally-managed Azure Postgres Flexible Server. This happens regardless of `odoo.conf` pointing elsewhere; it's a package dependency, not a runtime choice. Fixed by stopping and disabling (not removing — no strong reason to, and removing risks apt dependency resolution surprises) the local `postgresql` service immediately after install, before ever starting Odoo itself.
