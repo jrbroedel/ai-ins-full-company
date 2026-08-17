@@ -120,3 +120,35 @@ What *was* verified, which is real but is not deployment:
 **The remaining step, and it is the one that matters:** deploy into a new disposable resource group, confirm it comes up with no collisions and outputs that resolve, then delete the group and confirm from `az group list` that it is gone. Until someone with Contributor on the subscription runs that, this is an untested template — better-reasoned than the one it replaces, and unproven in exactly the same way. The commands are in `infra/bicep/README.md`; note the Key Vault has soft-delete enabled, so a full teardown needs `az keyvault purge` as well as the group delete.
 
 **This does not make the VM reproducible.** The data layer is now expressible as IaC; the VM, its NIC, its public IP, its NSG, the managed identity and the Key Vault role assignment are not, and remain prose in `vm-rebuild.md`. That gap is unchanged by this addendum and should not be read as narrowed by it.
+
+---
+
+# Addendum: the template is now deployed and torn down, closing the open item above (2026-08-17)
+
+**Status:** Verified. This closes the "What is still unproven" section of the 2026-08-16 addendum, whose "remaining step" was exactly this deploy-and-teardown. That section is left standing as the accurate record of what was true on 2026-08-16; this addendum supersedes its "not deployed" status rather than editing it away.
+
+The 2026-08-16 addendum ended by naming the one thing it could not do — deploy the template into a disposable resource group, confirm it, then tear it down with no residue — and explained why (the host had no `az` CLI and its managed identity had no ARM write). That was run on 2026-08-17 from `joshua@broedel.net`'s account, confirmed **Owner at subscription scope** via `az role assignment list` before starting.
+
+**Rehearsed before deploying.** `az deployment group validate` and `az deployment group what-if` were both run first and came back clean; the what-if showed **exactly 9 resources, all Create, nothing else touched** — so production was confirmed outside the blast radius before anything was created.
+
+**Deployed.** `az deployment group create` into a fresh, disposable `luxauto-test-rg` with `baseName='luxauto-test'`: provisioning state **Succeeded**, 12m57s, all 9 resources created (VNet with both subnets, private DNS zone + link, Postgres flexible server + extensions config, storage account + blob service + `documents` container, Key Vault).
+
+**The two naming fixes were confirmed in a real deploy, not just in compiled output** — which is the thing the 2026-08-16 verification explicitly could not reach:
+
+- **Region abbreviation (`eastus2` → `eus2`):** the `privateDnsZoneName` and `vnetName` outputs both showed the abbreviated form (`luxauto-test-eus2…`).
+- **Hyphen-stripping for a hyphenated `baseName`:** the `storageAccountName` output was `luxautotestsaq2h2upfo` — hyphen gone, inside the 24-char limit.
+
+**Live checks against the running resources, not just deployment output:**
+
+| Check | Result |
+|---|---|
+| Postgres network privacy | `publicNetworkAccess: Disabled`, state `Ready`, correct delegated subnet and DNS-zone link |
+| `azure.extensions` actually applied | server parameter reads `UUID-OSSP,BTREE_GIST` (Deviation 2's fix, live) |
+| Both subnets present | `10.20.1.0/24` (pg) and `10.20.3.0/24` (app) with correct prefixes |
+| Storage lockdown | `allowBlobPublicAccess: false`, `minimumTlsVersion: TLS1_2` |
+
+**Torn down completely, verified rather than assumed.** `az group delete --yes`, then `az group exists` returning **false** (not trusted from the delete's exit code). The Key Vault's soft-delete was handled separately: confirmed present via `az keyvault list-deleted`, purged via `az keyvault purge`, confirmed gone via a second `list-deleted` returning empty. Final sweep: `az group list` showed only `luxauto-rg` remaining, and `az resource list` filtered for `test` in the name returned nothing anywhere.
+
+**What this proves, and what it does not.** It proves the template deploys cleanly and tears down completely under the parameters actually used — `baseName='luxauto-test'`, default region and SKU. It does **not** prove every parameter combination works, and nothing here should be read as broader coverage than that single run. The template needed **no code changes** — it deployed exactly as written; this is a status update, not a fix.
+
+**Still unchanged:** the VM layer remains outside IaC, exactly as the 2026-08-16 addendum's closing paragraph states. A working data-layer template does not narrow that gap.

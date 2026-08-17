@@ -75,14 +75,29 @@ soft-delete enabled, so the name stays reserved until purged (`az keyvault purge
   (ADR 0009's Deviation 1 addendum). A parallel environment should install from that real
   artifact rather than get an empty container of its own.
 
-## Status: compiles, never deployed
+## Status: deployed clean and torn down completely (2026-08-17)
 
-`bicep build` and `bicep lint` both pass, the required-parameter behaviour was verified against
-the compiled ARM, and the derived names were checked against Azure's length and character rules
-at the `maxLength` boundary. **No deployment and no what-if has ever been run** — see ADR 0008's
-addendum for why (the host this was written on has no `az` CLI and its managed identity has no
-ARM permissions). A template that has never been deployed is unproven, and this one says so
-rather than implying otherwise.
+`bicep build` and `bicep lint` pass, the required-parameter behaviour was verified against the
+compiled ARM, and the derived names were checked against Azure's length and character rules at
+the `maxLength` boundary — and, as of 2026-08-17, **this template has been deployed against the
+live subscription and torn down again, with zero residue and zero production impact.**
+
+`az deployment group validate` and `what-if` were run first (what-if showed exactly 9 resources,
+all Create, nothing else touched), then `az deployment group create` into a fresh
+`luxauto-test-rg` with `baseName='luxauto-test'`: provisioning state Succeeded, all 9 resources
+created. Live checks against the running resources — not just deployment output — confirmed
+Postgres `publicNetworkAccess: Disabled` with the correct delegated subnet and DNS-zone link,
+`azure.extensions` actually reading `UUID-OSSP,BTREE_GIST` on the server, both subnets present
+at `10.20.1.0/24` and `10.20.3.0/24`, and the storage account with `allowBlobPublicAccess: false`
+and `minimumTlsVersion: TLS1_2`. The outputs showed the abbreviated region form
+(`luxauto-test-eus2…`) and the hyphen-stripped storage name (`luxautotestsaq2h2upfo`), confirming
+those two naming fixes in a real deploy rather than only in compiled output. Teardown was
+`az group delete` confirmed by `az group exists` returning false, plus `az keyvault purge` for
+the soft-deleted vault confirmed gone by a follow-up `list-deleted`; a final `az group list` left
+only production. See ADR 0008's 2026-08-17 addendum.
+
+This proves the template under the parameters actually used — `baseName='luxauto-test'`, default
+region and SKU. It does not separately exercise every parameter combination.
 
 ## Known constraints baked into the defaults
 

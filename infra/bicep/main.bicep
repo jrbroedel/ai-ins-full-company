@@ -38,8 +38,16 @@
 //   read this file as covering it. docs/runbooks/vm-rebuild.md step 2 is the
 //   only description of the VM, and it is prose, not a template.
 //
-// STATUS: never deployed. Compiles clean (`bicep build`), but no deployment or
-//   what-if has been run against any subscription - see ADR 0008's addendum.
+// STATUS: deployed and torn down successfully 2026-08-17. Deployed with
+//   baseName='luxauto-test' into a fresh disposable resource group, provisioning
+//   state Succeeded, all 9 resources created. Live checks (not just deploy
+//   output) confirmed: Postgres publicNetworkAccess Disabled with the delegated
+//   subnet and DNS-zone link in place; azure.extensions actually
+//   "UUID-OSSP,BTREE_GIST" on the server; both subnets present at 10.20.1.0/24
+//   and 10.20.3.0/24; storage account allowBlobPublicAccess false and
+//   minimumTlsVersion TLS1_2. Then fully torn down with zero residue. See ADR
+//   0008's 2026-08-17 addendum. Proven for these parameters (baseName above,
+//   default region/SKU); other parameter combinations are not separately tested.
 //
 // DEPLOY - into a NEW, EMPTY resource group, never luxauto-rg:
 //   az group create --name luxauto-test-rg --location eastus2
