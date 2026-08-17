@@ -1522,15 +1522,31 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
 -- whose vehicles/drivers are missing the identity fields the snapshot
 -- tables' exclusion constraints key on (BIND_BLOCKED_MISSING_VEHICLE_VIN /
 -- BIND_BLOCKED_MISSING_DRIVER_IDENTITY). Signature still unchanged.
+-- ADR 0024: bind_policy() gains an optional inception date. NULL preserves the
+-- original behaviour exactly (term starts at now()); a supplied date backdates
+-- the whole term, which is what lets a reinstatement bound as new business close
+-- the coverage gap (see reinstate_policy() below). This is the general
+-- term-selection hook bind_policy() always flagged as an open item, not the
+-- reinstatement-specific prior-policy reference ADR 0023 kept out of it.
+--
+-- A defaulted parameter OVERLOADS rather than replaces (Postgres keys functions
+-- on their argument list), so the old three-argument bind_policy(quote, number,
+-- by) call would become ambiguous between the two forms. The three-argument
+-- form is DROPped first - the same idiom ADR 0021's addendum used for
+-- program_share_gaps - so there is exactly one bind_policy() and existing
+-- three-argument callers bind at now() through the default, unchanged.
+DROP FUNCTION IF EXISTS bind_policy(UUID, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION bind_policy(
   p_quote_id UUID,
   p_policy_number TEXT,
-  p_performed_by TEXT
+  p_performed_by TEXT,
+  p_inception_date TIMESTAMPTZ DEFAULT NULL
 ) RETURNS UUID AS $$
 DECLARE
   v_quote_status TEXT;
   v_application_id UUID;
   v_policy_id UUID;
+  v_inception TIMESTAMPTZ;
   v_effective_range TSTZRANGE;
   v_blocking_count INTEGER;
 BEGIN
@@ -1584,12 +1600,15 @@ BEGIN
       USING HINT = 'Referral matrix DH-04 (DH04_INSUFFICIENT_DATA_FOR_RISK_COMPUTATION) routes an application with missing driver identity fields to INFORMATION_REQUEST. Supply the driver''s name and date of birth on the application, then bind.';
   END IF;
 
-  -- effective_range: neither ADR 0010 nor this task specified where a
-  -- proposed policy term comes from (quotes don't carry one). Defaults to a
-  -- standard one-year term starting at bind time - a reasonable placeholder,
-  -- not a considered decision; a real term-selection mechanism is an open
-  -- item for whoever builds the actual bind UI/flow.
-  v_effective_range := tstzrange(now(), now() + interval '1 year');
+  -- effective_range: a standard one-year term. Inception defaults to now()
+  -- (the ADR 0010 behaviour); a supplied p_inception_date backdates it - ADR
+  -- 0024's backdated reinstatement pins it to the gap start. The vehicle/driver
+  -- snapshots below inherit the same term through this variable. Premium is
+  -- untouched either way: it is the quote's full annual written premium and
+  -- nothing here prorates it, so a backdated term is charged the full year, not
+  -- a stub for the remaining days.
+  v_inception := COALESCE(p_inception_date, now());
+  v_effective_range := tstzrange(v_inception, v_inception + interval '1 year');
 
   INSERT INTO policies (policy_id, quote_id, policy_number, effective_range, status)
   VALUES (uuid_generate_v4(), p_quote_id, p_policy_number, v_effective_range, 'active')
@@ -1651,7 +1670,11 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 -- every non-reinstatement bind stays untouched. Widening bind_policy() to carry
 -- an optional prior-policy reference is exactly the overload trap ADR 0021's
 -- addendum documented for program_share_gaps - one function quietly doing two
--- jobs - and is avoided for the same reason.
+-- jobs - and is avoided for the same reason. (ADR 0024 later gives bind_policy()
+-- an optional inception DATE - a general term-selection hook, the open item it
+-- always flagged - so the backdated-reinstatement wrapper can pin inception to
+-- the gap start. That is a different thing from threading a prior-policy
+-- reference: the linkage stays here and in that wrapper, not in bind_policy().)
 --
 -- The link is set once. reinstated_from_policy_id is a single immutable fact
 -- ("this policy reinstated that one"), not a corrected temporal one, so this
@@ -2871,6 +2894,188 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ============================================================================
+-- REINSTATEMENT, BACKDATED-AS-NEW-BUSINESS (ADR 0024)
+-- Business-confirmed mechanism: a reinstatement is ALWAYS new business - a new
+-- policy bound through the ordinary ADR 0023 path (bind_policy +
+-- link_reinstated_policy) - with its inception BACKDATED to the gap start (the
+-- prior policy's cancellation effective date) so coverage is continuous, at
+-- FULL annual premium with no proration. The original cancelled policy and its
+-- term never survive; there is no gap-only charge.
+--
+-- This SUPERSEDES the gap-only design first built under ADR 0024 (reverse the
+-- same cancellation, charge only the gap days on the surviving policy). That
+-- design was proposed, built and tested, then REJECTED on business review: a
+-- policy on risk for only 10-14 days against a $1M+ limit is a risk/premium
+-- mismatch the carrier will not take. See ADR 0024 for the full rejected-design
+-- record and why it isn't what shipped.
+--
+-- Backdating is offered only within 14 days of the cancellation effective date.
+-- Past 14 days there is no backdating: it is ordinary new business at today's
+-- inception, which plain bind_policy + link_reinstated_policy already handle
+-- with no new code. So reinstate_policy() is the <=14-day backdated case ONLY,
+-- and rejects a stale request rather than silently binding at a different
+-- inception than it was asked for.
+-- ============================================================================
+
+-- Append-only audit of every backdated reinstatement. It records the LINK-AND-
+-- ATTESTATION event - which new policy reinstated which prior one, off which
+-- cancellation, on whose signed no-known-loss attestation - NOT a charge: the
+-- premium is the new policy's own full annual premium, carried on its
+-- policies/quote rows like any other new business. The signed attestation
+-- DOCUMENT itself lives in the underwriting document store (a DMS/file-taxonomy
+-- concern, not a schema one); this row holds the reference/pointer to it plus
+-- the audit facts the database is responsible for. Same append-only discipline
+-- as policy_events/program_coverage_gaps, and no supersession hatch: a
+-- reinstatement is a point event, never "corrected" into another one. cancellation_id
+-- is UNIQUE - a cancellation is reinstated at most once.
+CREATE TABLE IF NOT EXISTS policy_reinstatements (
+  reinstatement_id      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  new_policy_id         UUID NOT NULL REFERENCES policies(policy_id),
+  prior_policy_id       UUID NOT NULL REFERENCES policies(policy_id),
+  cancellation_id       UUID NOT NULL UNIQUE REFERENCES policy_cancellations(cancellation_id),
+  -- The prior policy's cancellation effective date: the date coverage lapsed,
+  -- and the new policy's backdated inception (they are the same instant, which
+  -- is the whole point - zero gap).
+  gap_start             TIMESTAMPTZ NOT NULL,
+  -- Pointer to the signed no-known-loss attestation in the underwriting doc
+  -- store; required for every backdated reinstatement.
+  attestation_reference TEXT NOT NULL,
+  performed_by          TEXT NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- A reinstatement links two DIFFERENT policies (new succeeds prior), mirroring
+  -- policies_no_self_reinstatement.
+  CONSTRAINT policy_reinstatements_distinct_ck CHECK (new_policy_id <> prior_policy_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_policy_reinstatements_new ON policy_reinstatements(new_policy_id);
+CREATE INDEX IF NOT EXISTS idx_policy_reinstatements_prior ON policy_reinstatements(prior_policy_id);
+
+-- Pure append-only, no escape hatch: there is no supersession shape to permit.
+CREATE OR REPLACE FUNCTION reject_policy_reinstatements_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'policy_reinstatements is append-only: % is not permitted', TG_OP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER policy_reinstatements_no_update
+  BEFORE UPDATE ON policy_reinstatements
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_reinstatements_mutation();
+
+CREATE OR REPLACE TRIGGER policy_reinstatements_no_delete
+  BEFORE DELETE ON policy_reinstatements
+  FOR EACH ROW EXECUTE FUNCTION reject_policy_reinstatements_mutation();
+
+-- The reinstatement wrapper: one atomic transaction that binds the returning
+-- customer's already-issued quote as NEW business backdated to the gap start,
+-- links the new policy to the prior cancelled one, and records the audit row.
+--
+-- A thin wrapper over the existing primitives (bind_policy, link_reinstated_policy)
+-- rather than a widened bind_policy(): the reinstatement-specific preconditions
+-- - the 14-day window, the required attestation, one-reinstatement-per-cancellation
+-- - live here, and the common bind path stays a general primitive. Same
+-- separation ADR 0023 chose, avoiding the overload trap ADR 0021's addendum
+-- documented.
+--
+-- Takes the SOURCE cancellation, not a policy_id: that row carries the gap start
+-- (its effective-range lower bound, the date coverage lapsed) and the prior
+-- policy (its policy_id). p_quote_id is the returning customer's fresh, issued
+-- quote - reinstatement is new business, re-keyed through a fresh application
+-- exactly like ADR 0023's path. Returns the NEW policy's id.
+CREATE OR REPLACE FUNCTION reinstate_policy(
+  p_quote_id UUID,
+  p_cancellation_id UUID,
+  p_policy_number TEXT,
+  p_attestation_reference TEXT,
+  p_performed_by TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_cx_range TSTZRANGE;
+  v_prior_policy_id UUID;
+  v_gap_start TIMESTAMPTZ;
+  v_new_policy_id UUID;
+BEGIN
+  -- Lock the source cancellation. Its gap start and prior policy drive the rest,
+  -- and the lock makes a concurrent second reinstatement of the same cancellation
+  -- block here rather than race the one-per-cancellation check below.
+  SELECT policy_id, effective_range INTO v_prior_policy_id, v_cx_range
+  FROM policy_cancellations
+  WHERE cancellation_id = p_cancellation_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'REINSTATEMENT_CANCELLATION_NOT_FOUND: cancellation % does not exist', p_cancellation_id
+      USING HINT = 'Pass the cancellation_id of the policy being reinstated - the row whose effective range starts at the date coverage lapsed.';
+  END IF;
+
+  -- A superseded/voided cancellation (emptied by a correction) has a NULL gap
+  -- start and is not the one in force; reinstating off it would backdate to a
+  -- date nobody actually cancelled at.
+  IF isempty(v_cx_range) THEN
+    RAISE EXCEPTION 'REINSTATEMENT_CANCELLATION_NOT_IN_FORCE: cancellation % has an empty effective_range - it was superseded by a correction, so it is not the cancellation in force', p_cancellation_id
+      USING HINT = 'Reinstate off the cancellation actually in force for the policy (the one with a non-empty effective_range).';
+  END IF;
+
+  -- One reinstatement per cancellation. Checked explicitly for a clear message;
+  -- the UNIQUE(cancellation_id) on policy_reinstatements is the backstop against
+  -- a raw insert.
+  IF EXISTS (SELECT 1 FROM policy_reinstatements WHERE cancellation_id = p_cancellation_id) THEN
+    RAISE EXCEPTION 'REINSTATEMENT_ALREADY_EXISTS: cancellation % has already been reinstated', p_cancellation_id
+      USING HINT = 'A cancellation is reinstated at most once. If the reinstating policy is itself wrong, that is a fresh cancellation on the new policy, not a second reinstatement of this one.';
+  END IF;
+
+  -- Attestation required unconditionally - the signed no-known/unreported-loss
+  -- confirmation that makes backdated coverage safe, with no elapsed-time
+  -- carve-outs. Same required-reason-code discipline cancel_policy() applies.
+  IF p_attestation_reference IS NULL OR btrim(p_attestation_reference) = '' THEN
+    RAISE EXCEPTION 'REINSTATEMENT_ATTESTATION_REQUIRED: reinstating cancellation % requires a no-known-loss attestation reference', p_cancellation_id
+      USING HINT = 'Record the reference/pointer of the signed no-known-loss attestation held in the underwriting document store. It is required for every backdated reinstatement.';
+  END IF;
+
+  v_gap_start := lower(v_cx_range);
+
+  -- The 14-day backdating window, measured from the date coverage lapsed to now.
+  -- Past it there is no backdating: that is ordinary new business at today's
+  -- inception (plain bind_policy + link_reinstated_policy), which this wrapper
+  -- deliberately does NOT silently do - it rejects, rather than binding at an
+  -- inception other than the gap start it was asked for.
+  IF now() - v_gap_start > interval '14 days' THEN
+    RAISE EXCEPTION 'REINSTATEMENT_WINDOW_EXPIRED: coverage lapsed at % (over 14 days ago), past the backdating window', v_gap_start
+      USING HINT = 'Backdated reinstatement is available only within 14 days of the cancellation effective date. Past that, bind ordinary new business at today''s inception (bind_policy + link_reinstated_policy) - that is not a backdated reinstatement and does not go through this function.';
+  END IF;
+
+  -- Bind the issued quote as new business, inception pinned to the gap start so
+  -- coverage is continuous. Full annual premium, no proration - bind_policy
+  -- carries the quote's premium unchanged for a backdated term.
+  v_new_policy_id := bind_policy(p_quote_id, p_policy_number, p_performed_by, v_gap_start);
+
+  -- Link the new policy to the prior cancelled one. Unchanged from ADR 0023: it
+  -- enforces that the prior policy is cancelled and that the link is set once.
+  -- If the prior policy is not cancelled this RAISEs and the whole wrapper rolls
+  -- back - nothing partial survives.
+  PERFORM link_reinstated_policy(v_new_policy_id, v_prior_policy_id, p_performed_by);
+
+  INSERT INTO policy_reinstatements (
+    new_policy_id, prior_policy_id, cancellation_id, gap_start, attestation_reference, performed_by
+  )
+  VALUES (
+    v_new_policy_id, v_prior_policy_id, p_cancellation_id, v_gap_start, p_attestation_reference, p_performed_by
+  );
+
+  -- link_reinstated_policy() already logs the linkage on both policies; this adds
+  -- the reinstatement-specific facts (backdated inception, attestation) on the
+  -- new policy.
+  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+  VALUES (v_new_policy_id, 'reinstated', p_performed_by,
+          format('backdated reinstatement of cancelled policy %s: inception %s (gap start), full annual premium, attestation %s',
+                 v_prior_policy_id, v_gap_start, p_attestation_reference));
+
+  RETURN v_new_policy_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- ============================================================================
 -- NONRENEWAL AND EXPIRATION (ADR 0019)
 -- The two remaining ways a policy stops, after ADR 0018's cancellation.
 -- policy_status_t has carried 'expired' and 'nonrenewed' since ADR 0010 and
@@ -3574,9 +3779,14 @@ GRANT SELECT ON luxauto_settlement_view TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID) TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID, NUMERIC, TIMESTAMPTZ) TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_endorsement_waterfall(UUID) TO odoo;
-GRANT EXECUTE ON FUNCTION bind_policy(UUID, TEXT, TEXT) TO odoo;
+-- ADR 0024 widened this to a four-argument form (optional inception date); the
+-- three-argument grant is gone with the three-argument function.
+GRANT EXECUTE ON FUNCTION bind_policy(UUID, TEXT, TEXT, TIMESTAMPTZ) TO odoo;
 -- ADR 0023: the reinstatement-linking step the Odoo wizard calls after bind.
 GRANT EXECUTE ON FUNCTION link_reinstated_policy(UUID, UUID, TEXT) TO odoo;
+-- ADR 0024: the backdated reinstatement wrapper the Odoo reinstatement wizard
+-- calls (binds new business at the gap start, links, records the attestation).
+GRANT EXECUTE ON FUNCTION reinstate_policy(UUID, UUID, TEXT, TEXT, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION cancel_policy(UUID, TEXT, TEXT) TO odoo;
 -- ADR 0018. The three-argument cancel_policy above still needs its grant: it
 -- is reachable and raises CANCELLATION_TYPE_REQUIRED, which is the diagnosis

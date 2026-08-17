@@ -67,6 +67,20 @@ import psycopg2
 # view, trigger or SET NOT NULL column; luxauto_policy_view gains a column but
 # is the same CREATE OR REPLACE VIEW, so the view count is unchanged.
 #
+# ADR 0024's backdated reinstatement-as-new-business moves three counts: +1 table
+# (policy_reinstatements, the append-only link-and-attestation audit), +2 functions
+# (reinstate_policy, reject_policy_reinstatements_mutation), +2 triggers (the two
+# append-only ones on that table). bind_policy gains an optional inception-date
+# parameter, which needs a DROP of the three-argument form before the CREATE (a
+# defaulted parameter overloads rather than replaces, same as ADR 0021's addendum)
+# - but it is the SAME one object, same name, so the function count moves only by
+# the two genuinely new functions, not by three. The added UNIQUE/CHECK constraints
+# and the new 'reinstated' event-type string are not categories this parser tracks;
+# they are covered by tests/0024. No new type, view or SET NOT NULL column.
+# (This supersedes the earlier, rejected gap-only ADR 0024 build; that version
+# happened to move the same three counts, but for different objects - it is not
+# what shipped. See docs/decisions/0024 for the rejected-design record.)
+#
 # This is the acceptance test for the parser itself - if the parser's counts don't
 # match this, that's a parser bug to fix, not a schema surprise, and the
 # parser is not trusted against a live database until it does. Updated by
@@ -74,11 +88,11 @@ import psycopg2
 # automatically, but this snapshot is a fact about the file's current state,
 # not something the parser can derive about itself.
 BASELINE = {
-    "tables": 29,
+    "tables": 30,
     "types": 19,
-    "functions": 37,
+    "functions": 39,
     "views": 7,
-    "triggers": 21,
+    "triggers": 23,
     "not_null_columns": 6,
 }
 
