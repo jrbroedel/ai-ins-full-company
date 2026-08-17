@@ -30,6 +30,12 @@
                         <group string="Policy">
                             <field name="policy_number"/>
                             <field name="policy_status"/>
+                            <!-- ADR 0023: only shown when this policy reinstated a
+                                 prior cancelled one (>14-day path). Hidden for the
+                                 ordinary policy with no predecessor, the same way
+                                 the cancel button hides on a non-active policy. -->
+                            <field name="reinstated_from_policy_id" string="Reinstated From (prior policy)"
+                                   invisible="not reinstated_from_policy_id"/>
                         </group>
                         <group string="Quote">
                             <field name="quote_id"/>

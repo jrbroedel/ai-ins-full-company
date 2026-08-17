@@ -1311,12 +1311,52 @@ CREATE TABLE IF NOT EXISTS policies (
   policy_number                     TEXT,
   effective_range                   TSTZRANGE NOT NULL,
   status                            policy_status_t NOT NULL DEFAULT 'active',
+  -- ADR 0023: the ">14-day" reinstatement path. A policy reinstated more than
+  -- 14 days after a prior policy's cancellation is genuine NEW business (a
+  -- permanent coverage gap means it is not a reversal), bound through the
+  -- ordinary flow - so it is a normal policies row that additionally points
+  -- back at the cancelled policy it succeeds, for traceability. Nullable
+  -- (most policies have no predecessor) and set once, by link_reinstated_policy()
+  -- after bind - NOT the append-only correction machinery used for
+  -- endorsements/participants, because "which policy this one reinstated" is a
+  -- single immutable fact, not a corrected temporal one. The self-reference
+  -- CHECK is a cheap guard against the most obvious linking mistake; it does
+  -- NOT (and cannot) prove the target is really a predecessor - that is
+  -- link_reinstated_policy()'s job.
+  reinstated_from_policy_id         UUID REFERENCES policies(policy_id),
   created_at                        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at                        TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at                        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT policies_no_self_reinstatement
+    CHECK (reinstated_from_policy_id IS NULL OR reinstated_from_policy_id <> policy_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_policies_quote ON policies(quote_id);
 CREATE INDEX IF NOT EXISTS idx_policies_status ON policies(status);
+
+-- ADR 0023, idempotent apply against an already-created policies table (the
+-- CREATE TABLE IF NOT EXISTS above is a no-op there, so the new column and
+-- CHECK have to be added by ALTER too - same fresh-apply-plus-existing-DB
+-- pattern as no_overlapping_program_participants). ADD COLUMN IF NOT EXISTS is
+-- idempotent on its own; the CHECK is guarded by a pg_constraint lookup because
+-- ADD CONSTRAINT is not. This MUST run before idx_policies_reinstated_from
+-- below: on an existing database the column does not exist until this ALTER
+-- adds it, and an index over a not-yet-existing column would fail there (it
+-- did, on the first apply to the live server - fixed by this ordering).
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS reinstated_from_policy_id UUID REFERENCES policies(policy_id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'policies_no_self_reinstatement'
+      AND conrelid = 'policies'::regclass
+  ) THEN
+    ALTER TABLE policies
+      ADD CONSTRAINT policies_no_self_reinstatement
+      CHECK (reinstated_from_policy_id IS NULL OR reinstated_from_policy_id <> policy_id);
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_policies_reinstated_from ON policies(reinstated_from_policy_id);
 
 -- ============================================================================
 -- POLICY EVENTS (ADR 0010)
@@ -1600,6 +1640,102 @@ BEGIN
   VALUES (v_policy_id, 'bound', p_performed_by);
 
   RETURN v_policy_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Links a freshly-bound policy back to the cancelled policy it reinstates
+-- (ADR 0023, the ">14-day" path). Deliberately a SEPARATE step called AFTER a
+-- normal bind_policy(), not a widened bind_policy() signature: the >14-day
+-- reinstatement runs through the ordinary application -> quote -> bind flow
+-- exactly like any other new business, so every existing bind call site and
+-- every non-reinstatement bind stays untouched. Widening bind_policy() to carry
+-- an optional prior-policy reference is exactly the overload trap ADR 0021's
+-- addendum documented for program_share_gaps - one function quietly doing two
+-- jobs - and is avoided for the same reason.
+--
+-- The link is set once. reinstated_from_policy_id is a single immutable fact
+-- ("this policy reinstated that one"), not a corrected temporal one, so this
+-- rejects a second call rather than overwriting - no append-only correction
+-- machinery, by design (ADR 0023).
+--
+-- NOT enforced here, deliberately: that both policies belong to the same
+-- insured. A >14-day reinstatement is new business, so the returning customer
+-- is re-keyed through a fresh application, and this schema does not resolve
+-- applicant identity across separate application chains - two applications by
+-- the same real person get two applicant_ids (there is no natural key or dedup
+-- on applicants). A hard "same applicant_id" check would therefore REJECT the
+-- ordinary, correct case this path exists for. Whether the operator picked the
+-- right predecessor is a human judgement best confirmed at the UI (the Odoo
+-- wizard shows the prior policy's insured for the operator to eyeball), not a
+-- SQL invariant that would be wrong as often as right. See ADR 0023 section 3.
+CREATE OR REPLACE FUNCTION link_reinstated_policy(
+  p_new_policy_id UUID,
+  p_prior_policy_id UUID,
+  p_performed_by TEXT
+) RETURNS VOID AS $$
+DECLARE
+  v_existing_link UUID;
+  v_prior_status policy_status_t;
+BEGIN
+  IF p_new_policy_id = p_prior_policy_id THEN
+    RAISE EXCEPTION 'REINSTATEMENT_SELF_REFERENCE: a policy cannot reinstate itself (%)', p_new_policy_id;
+  END IF;
+
+  -- The new policy: must exist, and must not already carry a link. Locked so a
+  -- concurrent second call blocks here rather than racing the set-once check.
+  SELECT reinstated_from_policy_id INTO v_existing_link
+  FROM policies
+  WHERE policy_id = p_new_policy_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'link_reinstated_policy: policy % does not exist', p_new_policy_id;
+  END IF;
+
+  IF v_existing_link IS NOT NULL THEN
+    RAISE EXCEPTION 'REINSTATEMENT_ALREADY_LINKED: policy % is already linked to prior policy % and the link is set-once',
+      p_new_policy_id, v_existing_link
+      USING HINT = 'The reinstated_from link is immutable. If it was set to the wrong predecessor, that is a data-repair question for a DBA, not a second call to this function.';
+  END IF;
+
+  -- The prior policy: must exist, and must be cancelled. policies.status is a
+  -- plain mutable column (cancel_policy() sets it with a direct UPDATE; there
+  -- is no policies-history/correction table), so reading it straight off the
+  -- row IS the current status - confirmed against the schema before relying on
+  -- it, because this project has been burned by mis-reading "the current row"
+  -- on tables that DO carry correction history.
+  SELECT status INTO v_prior_status
+  FROM policies
+  WHERE policy_id = p_prior_policy_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'link_reinstated_policy: prior policy % does not exist', p_prior_policy_id;
+  END IF;
+
+  IF v_prior_status <> 'cancelled' THEN
+    RAISE EXCEPTION 'REINSTATEMENT_PRIOR_NOT_CANCELLED: prior policy % is % , not cancelled - only a cancelled policy can be reinstated',
+      p_prior_policy_id, v_prior_status
+      USING HINT = 'A >14-day reinstatement succeeds a CANCELLED policy. An active, expired or nonrenewed policy is not a reinstatement target.';
+  END IF;
+
+  -- updated_at is maintained by the policies_updated_at BEFORE UPDATE trigger,
+  -- so it is not set here - the same way cancel_policy() leaves it to the trigger.
+  UPDATE policies
+  SET reinstated_from_policy_id = p_prior_policy_id
+  WHERE policy_id = p_new_policy_id;
+
+  -- A row on BOTH policies so the relationship is visible from either side's
+  -- own event history, not just the new policy's. event_type follows the
+  -- existing verb-in-past-tense convention ('bound', 'cancelled',
+  -- 'cancellation_corrected'); notes name the counterpart policy in each
+  -- direction the way cancel_policy()'s notes carry their context.
+  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+  VALUES (p_new_policy_id, 'reinstatement_linked', p_performed_by,
+          format('reinstates cancelled policy %s (>14-day path, new business)', p_prior_policy_id));
+
+  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+  VALUES (p_prior_policy_id, 'reinstatement_linked', p_performed_by,
+          format('reinstated by new policy %s (>14-day path, new business)', p_new_policy_id));
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
@@ -3185,7 +3321,15 @@ SELECT
   q.status AS quote_status,
   ap.application_id,
   ap.garaging_state,
-  ap.status AS application_status
+  ap.status AS application_status,
+  -- ADR 0023: if this policy reinstated a prior cancelled one (>14-day path),
+  -- expose the predecessor so Odoo shows the link without a SQL round-trip.
+  -- Null for the ordinary policy with no predecessor. Same read-side exposure
+  -- pattern as every other column here - a plain passthrough, no new mechanism.
+  -- Appended at the END of the select list on purpose: CREATE OR REPLACE VIEW
+  -- can only add columns after the existing ones, never insert mid-list, so
+  -- putting it here is what lets this re-apply cleanly over the live view.
+  p.reinstated_from_policy_id
 FROM policies p
 JOIN quotes q ON q.quote_id = p.quote_id
 JOIN applications ap ON ap.application_id = q.application_id;
@@ -3431,6 +3575,8 @@ GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID) TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID, NUMERIC, TIMESTAMPTZ) TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_endorsement_waterfall(UUID) TO odoo;
 GRANT EXECUTE ON FUNCTION bind_policy(UUID, TEXT, TEXT) TO odoo;
+-- ADR 0023: the reinstatement-linking step the Odoo wizard calls after bind.
+GRANT EXECUTE ON FUNCTION link_reinstated_policy(UUID, UUID, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION cancel_policy(UUID, TEXT, TEXT) TO odoo;
 -- ADR 0018. The three-argument cancel_policy above still needs its grant: it
 -- is reachable and raises CANCELLATION_TYPE_REQUIRED, which is the diagnosis

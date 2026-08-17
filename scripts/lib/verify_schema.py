@@ -57,6 +57,16 @@ import psycopg2
 # trigger or SET NOT NULL column - a view and a GRANT are the whole schema
 # change, and the GRANT is not a category this parser tracks (it checks that
 # declared objects exist, not who may read them).
+#
+# ADR 0023's ">14-day" reinstatement moves exactly one count: +1 function
+# (link_reinstated_policy). It adds a nullable reinstated_from_policy_id column
+# and a policies_no_self_reinstatement CHECK to policies, but this parser tracks
+# neither added columns nor CHECK constraints - only SET NOT NULL columns and
+# object existence - so those are covered by the behavioural suite (tests/0023)
+# and the policies table's own existence check, not here. No new table, type,
+# view, trigger or SET NOT NULL column; luxauto_policy_view gains a column but
+# is the same CREATE OR REPLACE VIEW, so the view count is unchanged.
+#
 # This is the acceptance test for the parser itself - if the parser's counts don't
 # match this, that's a parser bug to fix, not a schema surprise, and the
 # parser is not trusted against a live database until it does. Updated by
@@ -66,7 +76,7 @@ import psycopg2
 BASELINE = {
     "tables": 29,
     "types": 19,
-    "functions": 36,
+    "functions": 37,
     "views": 7,
     "triggers": 21,
     "not_null_columns": 6,

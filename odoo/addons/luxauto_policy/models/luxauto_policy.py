@@ -22,6 +22,13 @@ class LuxautoPolicy(models.Model):
     application_id = fields.Char(string='Application ID', readonly=True)
     garaging_state = fields.Char(string='Garaging State', readonly=True)
     application_status = fields.Char(string='Application Status', readonly=True)
+    # ADR 0023: the prior cancelled policy this one reinstated (>14-day path),
+    # or empty for the ordinary policy with no predecessor. A UUID, mapped as
+    # Char like policy_id/quote_id above rather than a real m2o - the model is
+    # _auto=False over a view, so there is no relational column for Odoo to key
+    # a many2one against, and every other id here is a plain Char for the same
+    # reason.
+    reinstated_from_policy_id = fields.Char(string='Reinstated From Policy', readonly=True)
 
     def init(self):
         # See luxauto_insured.py's init() for why this doesn't (re)create the view.
