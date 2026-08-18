@@ -28,10 +28,24 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 DO $$ BEGIN
-  CREATE TYPE vehicle_category_t AS ENUM ('production_luxury', 'exotic', 'classic_collector', 'modified_performance');
+  CREATE TYPE vehicle_category_t AS ENUM ('production_luxury', 'exotic', 'classic_collector', 'modified_performance',
+                                          'pre_war_vintage', 'restomod_coachbuilt');
 EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
+-- ADR 0027: two categories (pre-war/vintage, restomod/coachbuilt) added to an
+-- enum that already exists on live. On a fresh apply the CREATE TYPE above
+-- carries all six; on an existing database the CREATE TYPE raises
+-- duplicate_object (caught) and the two values arrive by ALTER instead.
+-- ALTER TYPE ... ADD VALUE IF NOT EXISTS is idempotent, and because this file is
+-- applied with psql autocommitting each statement (no wrapping BEGIN), it commits
+-- immediately - so the PostgreSQL rule that a new enum value cannot be USED in
+-- the same transaction that added it never bites here (nothing in this file uses
+-- the values; data does, in later, separate transactions). Appended at the end,
+-- so the existing four keep their sort order. NOTE: this is record-and-validate
+-- only - no rating/pricing logic exists for these two yet (ADR 0027).
+ALTER TYPE vehicle_category_t ADD VALUE IF NOT EXISTS 'pre_war_vintage';
+ALTER TYPE vehicle_category_t ADD VALUE IF NOT EXISTS 'restomod_coachbuilt';
 DO $$ BEGIN
   CREATE TYPE primary_use_t AS ENUM ('pleasure', 'commute', 'business', 'show_display');
 EXCEPTION

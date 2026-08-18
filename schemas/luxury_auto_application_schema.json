@@ -49,7 +49,7 @@
         "model": "string",
         "trim": "string",
         "vin": "string",
-        "vehicle_category": "enum[production_luxury, exotic, classic_collector, modified_performance]",
+        "vehicle_category": "enum[production_luxury, exotic, classic_collector, modified_performance, pre_war_vintage, restomod_coachbuilt]",
         "purchase_price": "number",
         "current_appraised_value": "number",
         "appraisal_date": "date",
