@@ -420,6 +420,222 @@ CREATE OR REPLACE TRIGGER decision_log_no_delete
   FOR EACH ROW EXECUTE FUNCTION reject_decision_log_mutation();
 
 -- ============================================================================
+-- REFERRAL ENGINE (ADR 0026)
+-- The first referral-matrix evaluation logic. The data model it reads
+-- (applications, vehicles, claims_history, person_violations,
+-- state_rating_table_versions), the append-only decision_log it writes, and the
+-- referral_action_t taxonomy all already exist (ADR 0005); only the evaluation
+-- was missing.
+--
+-- Scope: exactly the four confirmed-and-queued rules AL-01, CP-02, DH-01, PC-03.
+-- The other 11 rules in luxury_auto_referral_matrix.json (VV-01..04, DH-02..04,
+-- AL-02, CP-01/CP-03, PC-01/02/04) are OUT OF SCOPE for this ADR and are future
+-- work - each will be its own evaluate_<rule>() called from the orchestrator.
+--
+-- Shape (per the design proposal): one small function per rule, each writing
+-- exactly one decision_log row (fired or not, reason_code always set - the
+-- unredacted-audit requirement in decision_log's own comment), plus a thin
+-- orchestrator that composes them and returns the most-severe action. Small
+-- purpose-built functions over a monolith, the same idiom as reinstate_policy /
+-- link_reinstated_policy / cancel_policy.
+--
+-- p_decided_by defaults to 'system' so each rule is callable as evaluate_xx(id)
+-- while still satisfying decision_log.decided_by (NOT NULL); the pipeline or an
+-- underwriter can override it.
+--
+-- Two documented assumptions, both confirmed for build:
+--  * "agreed value" == current_appraised_value throughout (there is no distinct
+--    agreed-value dollar column today; AL-01 severity and CP-02 both use it).
+--  * AL-01's per-claim denominator is MAX(current_appraised_value) across the
+--    application's vehicles (claims_history has no vehicle link).
+-- ============================================================================
+
+-- AL-01: adverse loss history. 2+ at-fault claims in the 5 years before the
+-- application date, OR any single claim whose paid_amount is >= 30% of the
+-- priciest vehicle's appraised value. Claims with a NULL paid_amount are skipped
+-- in the severity limb (nothing to compare) but still counted in the frequency
+-- limb if at-fault.
+CREATE OR REPLACE FUNCTION evaluate_al01(p_application_id UUID, p_decided_by TEXT DEFAULT 'system')
+RETURNS referral_action_t AS $$
+DECLARE
+  v_ref TIMESTAMPTZ;
+  v_fault_count INT;
+  v_max_value NUMERIC;
+  v_severe BOOLEAN;
+  v_fired BOOLEAN;
+  v_action referral_action_t;
+BEGIN
+  SELECT COALESCE(submitted_at, now()) INTO v_ref
+  FROM applications WHERE application_id = p_application_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'evaluate_al01: application % does not exist', p_application_id;
+  END IF;
+
+  SELECT count(*) INTO v_fault_count
+  FROM claims_history c
+  WHERE c.application_id = p_application_id
+    AND c.at_fault
+    AND c.claim_date >= (v_ref - interval '5 years')::date;
+
+  SELECT max(current_appraised_value) INTO v_max_value
+  FROM vehicles WHERE application_id = p_application_id;
+
+  v_severe := EXISTS (
+    SELECT 1 FROM claims_history c
+    WHERE c.application_id = p_application_id
+      AND c.paid_amount IS NOT NULL
+      AND v_max_value IS NOT NULL
+      AND c.paid_amount >= 0.30 * v_max_value
+  );
+
+  v_fired := (v_fault_count >= 2) OR v_severe;
+  v_action := CASE WHEN v_fired THEN 'MANUAL_REVIEW_REQUIRED'::referral_action_t
+                   ELSE 'AUTO_PROCEED'::referral_action_t END;
+
+  INSERT INTO decision_log (application_id, rule_id, reason_code, action_taken, fired, decided_by, notes)
+  VALUES (p_application_id, 'AL-01', 'AL01_ADVERSE_LOSS_HISTORY', v_action, v_fired, p_decided_by,
+          format('at_fault_claims_5yr=%s, max_vehicle_value=%s, severe_single_claim=%s',
+                 v_fault_count, v_max_value, v_severe));
+  RETURN v_action;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- CP-02: aggregate TIV authority cap. Combined appraised value across all
+-- vehicles on the application STRICTLY over $2,000,000 (a working default,
+-- revisitable against real binding authority - see ADR 0026). At or under does
+-- not fire.
+CREATE OR REPLACE FUNCTION evaluate_cp02(p_application_id UUID, p_decided_by TEXT DEFAULT 'system')
+RETURNS referral_action_t AS $$
+DECLARE
+  v_tiv NUMERIC;
+  v_fired BOOLEAN;
+  v_action referral_action_t;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM applications WHERE application_id = p_application_id) THEN
+    RAISE EXCEPTION 'evaluate_cp02: application % does not exist', p_application_id;
+  END IF;
+
+  SELECT COALESCE(SUM(current_appraised_value), 0) INTO v_tiv
+  FROM vehicles WHERE application_id = p_application_id;
+
+  v_fired := v_tiv > 2000000;
+  v_action := CASE WHEN v_fired THEN 'MANUAL_REVIEW_SENIOR'::referral_action_t
+                   ELSE 'AUTO_PROCEED'::referral_action_t END;
+
+  INSERT INTO decision_log (application_id, rule_id, reason_code, action_taken, fired, decided_by, notes)
+  VALUES (p_application_id, 'CP-02', 'CP02_AUTHORITY_LIMIT_EXCEEDED', v_action, v_fired, p_decided_by,
+          format('aggregate_tiv=%s, cap=2000000', v_tiv));
+  RETURN v_action;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- DH-01: DUI conviction within 5 years. Spans the applicant and every additional
+-- driver (person_violations is application-scoped: subject_driver_id NULL is the
+-- applicant, otherwise an additional driver). DUI ONLY - reckless driving is
+-- deliberately NOT included pending a business answer (ADR 0026); a
+-- reckless_driving-only record must not fire. Convictions only (the threshold is
+-- "conviction"). Look-back measured from the application date.
+CREATE OR REPLACE FUNCTION evaluate_dh01(p_application_id UUID, p_decided_by TEXT DEFAULT 'system')
+RETURNS referral_action_t AS $$
+DECLARE
+  v_ref TIMESTAMPTZ;
+  v_fired BOOLEAN;
+  v_action referral_action_t;
+BEGIN
+  SELECT COALESCE(submitted_at, now()) INTO v_ref
+  FROM applications WHERE application_id = p_application_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'evaluate_dh01: application % does not exist', p_application_id;
+  END IF;
+
+  v_fired := EXISTS (
+    SELECT 1 FROM person_violations pv
+    WHERE pv.application_id = p_application_id
+      AND pv.violation_type = 'DUI'
+      AND pv.conviction
+      AND pv.violation_date >= (v_ref - interval '5 years')::date
+  );
+  v_action := CASE WHEN v_fired THEN 'MANUAL_REVIEW_SENIOR'::referral_action_t
+                   ELSE 'AUTO_PROCEED'::referral_action_t END;
+
+  INSERT INTO decision_log (application_id, rule_id, reason_code, action_taken, fired, decided_by, notes)
+  VALUES (p_application_id, 'DH-01', 'DH01_DUI_WITHIN_LOOKBACK', v_action, v_fired, p_decided_by,
+          format('dui_conviction_within_5yr=%s (DUI only; reckless driving excluded pending confirmation)', v_fired));
+  RETURN v_action;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- PC-03: out-of-licensed-territory. The application's garaging_state has no
+-- state_rating_table_versions record active at now(). Routes to
+-- MANUAL_REVIEW_REQUIRED (confirmed decision; the matrix JSON was corrected to
+-- match): a missing record usually means the compliance data has not been built
+-- out yet, not that the MGA is unlicensed, so a human confirms rather than a
+-- decline being recommended. NOTE: state_rating_table_versions is empty today,
+-- so this fires on EVERY application until states are onboarded - expected.
+CREATE OR REPLACE FUNCTION evaluate_pc03(p_application_id UUID, p_decided_by TEXT DEFAULT 'system')
+RETURNS referral_action_t AS $$
+DECLARE
+  v_state CHAR(2);
+  v_fired BOOLEAN;
+  v_action referral_action_t;
+BEGIN
+  SELECT garaging_state INTO v_state
+  FROM applications WHERE application_id = p_application_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'evaluate_pc03: application % does not exist', p_application_id;
+  END IF;
+
+  v_fired := NOT EXISTS (
+    SELECT 1 FROM state_rating_table_versions s
+    WHERE s.state = v_state AND s.effective_range @> now()
+  );
+  v_action := CASE WHEN v_fired THEN 'MANUAL_REVIEW_REQUIRED'::referral_action_t
+                   ELSE 'AUTO_PROCEED'::referral_action_t END;
+
+  INSERT INTO decision_log (application_id, rule_id, reason_code, action_taken, fired, decided_by, notes)
+  VALUES (p_application_id, 'PC-03', 'PC03_OUT_OF_LICENSED_TERRITORY', v_action, v_fired, p_decided_by,
+          format('garaging_state=%s, active_rating_table=%s', v_state, NOT v_fired));
+  RETURN v_action;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Orchestrator: evaluates the four confirmed rules for one application in a
+-- single transaction (four decision_log rows written, one per rule, fired or
+-- not) and returns the single most-severe action.
+--
+-- referral_action_t is DEFINED in ascending severity order (AUTO_PROCEED lowest
+-- ... HARD_DECLINE_COMPLIANCE highest), so GREATEST over the enum is the
+-- most-severe action, and a non-firing rule returns AUTO_PROCEED (the floor) -
+-- which reduces GREATEST to "the most severe rule that fired, else AUTO_PROCEED".
+-- That ordering is an invariant of the enum's definition; tests/0026 asserts it,
+-- so a future reorder of the enum fails a test rather than silently mis-routing.
+-- GREATEST already handles the full taxonomy, including the values none of these
+-- four rules produce, for when the remaining rules are added.
+CREATE OR REPLACE FUNCTION evaluate_application_referrals(p_application_id UUID, p_decided_by TEXT DEFAULT 'system')
+RETURNS referral_action_t AS $$
+DECLARE
+  v_al referral_action_t;
+  v_cp referral_action_t;
+  v_dh referral_action_t;
+  v_pc referral_action_t;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM applications WHERE application_id = p_application_id) THEN
+    RAISE EXCEPTION 'evaluate_application_referrals: application % does not exist', p_application_id;
+  END IF;
+
+  -- ADR 0026 scope: the four confirmed rules. The other 11 matrix rules
+  -- (VV-01..04, DH-02..04, AL-02, CP-01/CP-03, PC-01/02/04) are future work and
+  -- will each be added here as their own evaluate_<rule>() call.
+  v_al := evaluate_al01(p_application_id, p_decided_by);
+  v_cp := evaluate_cp02(p_application_id, p_decided_by);
+  v_dh := evaluate_dh01(p_application_id, p_decided_by);
+  v_pc := evaluate_pc03(p_application_id, p_decided_by);
+
+  RETURN GREATEST(v_al, v_cp, v_dh, v_pc);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- ============================================================================
 -- QUOTA SHARE / COMMISSION WATERFALL (ADR 0007)
 -- Direct analogue to the Energy manual's Ch.10 commission waterfall and
 -- Ch.11 market panel structure. In the admitted market this more often
@@ -3842,6 +4058,10 @@ GRANT EXECUTE ON FUNCTION link_reinstated_policy(UUID, UUID, TEXT) TO odoo;
 -- ADR 0024: the backdated reinstatement wrapper the Odoo reinstatement wizard
 -- calls (binds new business at the gap start, links, records the attestation).
 GRANT EXECUTE ON FUNCTION reinstate_policy(UUID, UUID, TEXT, TEXT, TEXT) TO odoo;
+-- ADR 0026: the referral-engine entry point. The per-rule functions are
+-- SECURITY DEFINER and reached through this orchestrator (which runs as the
+-- owner), so only the orchestrator needs a grant.
+GRANT EXECUTE ON FUNCTION evaluate_application_referrals(UUID, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION cancel_policy(UUID, TEXT, TEXT) TO odoo;
 -- ADR 0018. The three-argument cancel_policy above still needs its grant: it
 -- is reachable and raises CANCELLATION_TYPE_REQUIRED, which is the diagnosis

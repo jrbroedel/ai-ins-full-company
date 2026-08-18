@@ -88,6 +88,14 @@ import psycopg2
 # column - the short_rate_factors table and short_rate_factor() lookup already
 # existed (ADR 0018); this only wires an automatic seed onto state onboarding.
 #
+# ADR 0026's referral engine moves one count: +5 functions (evaluate_al01,
+# evaluate_cp02, evaluate_dh01, evaluate_pc03, evaluate_application_referrals).
+# It adds no table, type, view, trigger or SET NOT NULL column - the tables it
+# reads (applications, vehicles, claims_history, person_violations,
+# state_rating_table_versions), the append-only decision_log it writes, and the
+# referral_action_t enum all already existed (ADR 0005); only the evaluation
+# functions are new.
+#
 # This is the acceptance test for the parser itself - if the parser's counts don't
 # match this, that's a parser bug to fix, not a schema surprise, and the
 # parser is not trusted against a live database until it does. Updated by
@@ -97,7 +105,7 @@ import psycopg2
 BASELINE = {
     "tables": 30,
     "types": 19,
-    "functions": 40,
+    "functions": 45,
     "views": 7,
     "triggers": 24,
     "not_null_columns": 6,

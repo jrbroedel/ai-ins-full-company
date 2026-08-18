@@ -205,8 +205,8 @@
         "trigger": "Application is out-of-territory for the program (garaging state not currently licensed/active for this product)",
         "illustrative_threshold": "Garaging state has no active state_rating_table record",
         "source_fields": ["vehicles[].garaging_address.state"],
-        "action": "DECLINE_RECOMMENDED",
-        "rationale": "Not a risk judgment - a licensing fact. Kept as DECLINE_RECOMMENDED rather than HARD_DECLINE so a human can catch a registry gap (e.g. state is actually licensed but the registry record hasn't been created yet) before an applicant is turned away incorrectly.",
+        "action": "MANUAL_REVIEW_REQUIRED",
+        "rationale": "Not a risk judgment - a licensing fact. Routed to MANUAL_REVIEW_REQUIRED, not a decline: a missing active state_rating_table record usually means the compliance data for that state has not been built out yet, not that the MGA is actually unlicensed there, so a human confirms the licensing position rather than the pipeline recommending the applicant be turned away.",
         "state_override_hook": "existence of an active record for the state in question",
         "test_case_reference": null,
         "reason_code": "PC03_OUT_OF_LICENSED_TERRITORY"
