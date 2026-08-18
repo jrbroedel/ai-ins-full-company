@@ -82,8 +82,10 @@ BEGIN
 
   -- Prior policy: a first quote, bound, term straddling the backdated cancel date.
   INSERT INTO quotes
-    (application_id, state_rating_table_record_id, program_id, premium_amount, rating_basis, status)
-  VALUES (v_app, v_rating, v_program, p_premium, '{}'::jsonb, 'bound')
+    (application_id, state_rating_table_record_id, program_id, premium_amount, rating_basis, status,
+     broker_channel, broker_commission_rate)
+  VALUES (v_app, v_rating, v_program, p_premium, '{}'::jsonb, 'bound',
+          'retail', 10)
   RETURNING quote_id INTO v_quote1;
 
   INSERT INTO policies (quote_id, policy_number, effective_range, status)
@@ -108,8 +110,10 @@ BEGIN
 
   -- The returning customer's fresh, ISSUED quote (new business), ready to bind.
   INSERT INTO quotes
-    (application_id, state_rating_table_record_id, program_id, premium_amount, rating_basis, status)
-  VALUES (v_app, v_rating, v_program, p_premium, '{}'::jsonb, 'issued')
+    (application_id, state_rating_table_record_id, program_id, premium_amount, rating_basis, status,
+     broker_channel, broker_commission_rate)
+  VALUES (v_app, v_rating, v_program, p_premium, '{}'::jsonb, 'issued',
+          'retail', 10)
   RETURNING quote_id INTO new_quote_id;
 END;
 $fx$ LANGUAGE plpgsql;

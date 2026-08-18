@@ -76,8 +76,10 @@ BEGIN
          (v_program, 'reinsurer',         'Re Two',      40,  0, v_program_term);
 
   INSERT INTO quotes
-    (application_id, state_rating_table_record_id, program_id, premium_amount, rating_basis, status)
-  VALUES (v_app, v_rating, v_program, 36500, '{}'::jsonb, 'issued')
+    (application_id, state_rating_table_record_id, program_id, premium_amount, rating_basis, status,
+     broker_channel, broker_commission_rate)
+  VALUES (v_app, v_rating, v_program, 36500, '{}'::jsonb, 'issued',
+          'retail', 10)
   RETURNING quote_id INTO v_quote;
 
   -- The real common path under test.

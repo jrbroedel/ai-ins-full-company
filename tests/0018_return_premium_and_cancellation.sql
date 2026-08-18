@@ -93,8 +93,10 @@ BEGIN
          (v_program, 'reinsurer',         'Re Two',      40,  0, v_program_term);
 
   INSERT INTO quotes
-    (application_id, state_rating_table_record_id, program_id, premium_amount, rating_basis, status)
-  VALUES (v_app, v_rating, v_program, p_premium, '{}'::jsonb, 'bound')
+    (application_id, state_rating_table_record_id, program_id, premium_amount, rating_basis, status,
+     broker_channel, broker_commission_rate)
+  VALUES (v_app, v_rating, v_program, p_premium, '{}'::jsonb, 'bound',
+          'retail', 10)
   RETURNING quote_id INTO v_quote;
 
   INSERT INTO policies (quote_id, policy_number, effective_range, status)

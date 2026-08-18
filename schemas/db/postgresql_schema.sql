@@ -102,6 +102,15 @@ DO $$ BEGIN
 EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
+-- ADR 0007 addendum: the single broker channel a placement is written through.
+-- One column of this type holds exactly one value, so a dual retail+wholesale
+-- placement is structurally unrepresentable - the enforcement of the confirmed
+-- "either retail or wholesale, never both" rule is the data model itself.
+DO $$ BEGIN
+  CREATE TYPE broker_channel_t AS ENUM ('retail', 'wholesale');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- STATE RATING TABLE REGISTRY
@@ -1498,6 +1507,19 @@ CREATE TABLE IF NOT EXISTS quotes (
                                                                                         -- under - see
                                                                                         -- ADR 0007
   premium_amount                    NUMERIC(12,2) NOT NULL,
+  -- ADR 0007 addendum: broker + MGA acquisition commission on gross premium,
+  -- decided at quote time and inherited by the bound policy via quote_id, the
+  -- same way premium_amount is. Rates are PERCENTAGES (matching
+  -- program_participants.commission_rate, which the waterfall divides by 100),
+  -- not fractions. broker_channel is required - every placement legally goes
+  -- through one broker channel. mga_commission_rate is GENERATED, never
+  -- independently set: it fills the remainder under the 30% combined ceiling, so
+  -- broker + MGA = 30 is a schema fact; the 15% broker ceiling is the CHECK.
+  broker_channel                    broker_channel_t NOT NULL,
+  broker_commission_rate            NUMERIC(5,2) NOT NULL
+                                      CONSTRAINT quotes_broker_commission_rate_ck
+                                      CHECK (broker_commission_rate >= 0 AND broker_commission_rate <= 15),
+  mga_commission_rate               NUMERIC(5,2) GENERATED ALWAYS AS (30 - broker_commission_rate) STORED,
   rating_basis                      JSONB NOT NULL,  -- which permitted variables/values drove the
                                                          -- price - the per-quote decision-log
                                                          -- attachment referenced in the registry schema
@@ -1509,6 +1531,46 @@ CREATE TABLE IF NOT EXISTS quotes (
 
 CREATE INDEX IF NOT EXISTS idx_quotes_application ON quotes(application_id);
 CREATE INDEX IF NOT EXISTS idx_quotes_program ON quotes(program_id);
+
+-- ADR 0007 addendum, idempotent apply against an already-created quotes table:
+-- on a fresh apply the CREATE TABLE above carries these columns; on an existing
+-- database the CREATE TABLE IF NOT EXISTS is a no-op, so they arrive by ALTER.
+-- Added nullable first, then SET NOT NULL under a guard - the same discipline as
+-- the ADR 0016 addendum's vin/identity columns: quotes is empty today, but the
+-- schema checks rather than assumes, and refuses with a clear message rather
+-- than a bare NOT NULL violation if a real quote ever lacks a channel/rate. The
+-- CHECK is guarded by a pg_constraint lookup because ADD CONSTRAINT is not
+-- idempotent; the inline CONSTRAINT above carries the same name, so a fresh
+-- apply adds it once, not twice.
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS broker_channel broker_channel_t;
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS broker_commission_rate NUMERIC(5,2);
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS mga_commission_rate NUMERIC(5,2)
+  GENERATED ALWAYS AS (30 - broker_commission_rate) STORED;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'quotes_broker_commission_rate_ck'
+      AND conrelid = 'quotes'::regclass
+  ) THEN
+    ALTER TABLE quotes
+      ADD CONSTRAINT quotes_broker_commission_rate_ck
+      CHECK (broker_commission_rate >= 0 AND broker_commission_rate <= 15);
+  END IF;
+END $$;
+DO $$
+DECLARE v_missing INTEGER;
+BEGIN
+  SELECT count(*) INTO v_missing
+  FROM quotes WHERE broker_channel IS NULL OR broker_commission_rate IS NULL;
+  IF v_missing > 0 THEN
+    RAISE EXCEPTION 'ADR 0007 addendum: cannot enforce NOT NULL on quote broker commission - % quotes row(s) have a null broker_channel or broker_commission_rate',
+      v_missing
+      USING HINT = 'Every placement legally requires a broker channel and rate. Supply broker_channel and broker_commission_rate for these quotes, then re-run this file. This schema will not invent a channel or a rate to make itself apply.';
+  END IF;
+  ALTER TABLE quotes ALTER COLUMN broker_channel SET NOT NULL;
+  ALTER TABLE quotes ALTER COLUMN broker_commission_rate SET NOT NULL;
+END $$;
 
 -- ============================================================================
 -- POLICIES (ADR 0010)

@@ -52,6 +52,7 @@ Per the MGA software research (`docs/reference-materials/MGA_Software_Options.do
 
 Same pattern as the referral matrix's own open items list - these are business decisions, not things derivable from the schema:
 
+- ~~The layered retail/wholesale broker commission tiers - the top of the waterfall above (`less retail/wholesale broker commission`, `less the MGA's own commission`), which the "what's been built" section deliberately did not include, and which `calculate_premium_waterfall()`'s own comment flags as unresolved.~~ **Closed by the 2026-08-18 addendum below** (`0007-addendum-broker-mga-commission.md`): the broker + MGA *acquisition* commission is now modelled - confirmed as a 30% combined cap, a 15% broker ceiling, MGA filling the remainder, a single retail-or-wholesale channel only, and a broker legally required on every placement. (Wiring it into `calculate_premium_waterfall()`'s panel/cession side - so the panel's "gross" becomes net-of-acquisition - is separate follow-on work, not part of the addendum.)
 - The actual profit-commission formula (currently a free-text placeholder field).
 - Who the capacity provider and any reinsurance/participation partners actually are, and their real percentages - `program_participants` is ready to hold this data the moment it's decided, but no real program has been created yet.
 - Settlement timing (the Energy manual's 30-60 day broker settlement window is illustrative of market practice, not a number this project has picked yet).
@@ -60,3 +61,17 @@ Same pattern as the referral matrix's own open items list - these are business d
 
 - This is the second table-design addition since ADR 0005 (Odoo integration was the first, in ADR 0006) - `postgresql_schema.sql` is accumulating real structure and should keep being treated as living source of truth, not a one-time artifact.
 - ~~The temporal-overlap gap in the 100%-sum check is a known, tracked simplification - revisit before any real program data goes in, not before.~~ **Closed by ADR 0017** (2026-08-13), still before any real program data went in. It turned out to be worse than a simplification: the non-temporal check also *rejected* correct panel changes, so the panel could never have changed at all.
+
+## Addendum — 2026-08-18: broker + MGA acquisition commission (the top of the waterfall)
+
+The waterfall this ADR drew (`gross premium − retail/wholesale broker − MGA = net to the capacity provider`) had only its **bottom** built - the panel/cession side (`insurance_programs`, `program_participants`, `calculate_premium_waterfall()`). Its **top** - the broker and MGA *acquisition* commission on gross premium - was documented but not modelled, and `calculate_premium_waterfall()`'s own comment named that gap. It is now built.
+
+Confirmed business rules (from underwriting leadership):
+
+- **30% combined cap** - broker + MGA commission together may not exceed 30% of gross premium.
+- **15% broker ceiling** - and only ever one broker channel per placement (retail *or* wholesale/surplus-lines, never both at once).
+- **MGA fills the remainder** - MGA commission = 30% − broker, not an independent number ("MGA's share fills whatever's left under the 30% ceiling").
+- **A broker is legally required on every placement** - so the channel is mandatory; there is no direct/no-broker case.
+- **No floor** on either side (broker may be 0%).
+
+Schema-level detail (the columns, the enum, the generated MGA column, the caps as constraints, and what is deliberately still deferred - broker identity, the Odoo view, and wiring this into the panel waterfall) is in the addendum ADR, **`0007-addendum-broker-mga-commission.md`**. A future reader landing here should go there for the mechanics; a reader landing there is pointed back to this ADR for the waterfall context.

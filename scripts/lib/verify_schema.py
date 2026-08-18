@@ -96,6 +96,14 @@ import psycopg2
 # referral_action_t enum all already existed (ADR 0005); only the evaluation
 # functions are new.
 #
+# ADR 0007's broker/MGA-commission addendum moves two counts: +1 type
+# (broker_channel_t) and +2 SET NOT NULL columns (quotes.broker_channel,
+# quotes.broker_commission_rate, both added by ALTER for existing databases and
+# then SET NOT NULL under a guard). quotes.mga_commission_rate is a GENERATED
+# STORED column, not a SET NOT NULL one, so it does not move the not_null count;
+# the broker CHECK and the generated column are not categories this parser tracks.
+# No new table, function, view or trigger.
+#
 # This is the acceptance test for the parser itself - if the parser's counts don't
 # match this, that's a parser bug to fix, not a schema surprise, and the
 # parser is not trusted against a live database until it does. Updated by
@@ -104,11 +112,11 @@ import psycopg2
 # not something the parser can derive about itself.
 BASELINE = {
     "tables": 30,
-    "types": 19,
+    "types": 20,
     "functions": 45,
     "views": 7,
     "triggers": 24,
-    "not_null_columns": 6,
+    "not_null_columns": 8,
 }
 
 # Parsed and verified separately from PATTERNS/DB_QUERIES: a column isn't a
