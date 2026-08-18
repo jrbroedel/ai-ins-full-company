@@ -558,29 +558,51 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
--- T6  ADR 0018 section 5: short_rate_factors ships empty and selecting
---     short-rate with nothing loaded is REFUSED, not approximated. Filed,
---     state-regulated numbers are not something this project invents.
+-- T6  ADR 0018 section 5: selecting short-rate with no factor loaded is REFUSED,
+--     not approximated - the error names SHORT_RATE_TABLE_NOT_CONFIGURED and
+--     nothing is written.
 --
---     Two halves, and the second is the one worth having: the error names
---     SHORT_RATE_TABLE_NOT_CONFIGURED, and nothing at all was written - the
---     policy is still active, still runs to its original term end, and has no
---     cancellation row.
+--     REVISED for ADR 0025: onboarding a state now AUTO-SEEDS a short-rate
+--     factor (the trigger on state_rating_table_versions), so the original
+--     "licensed state but short_rate_factors empty" combination this case used
+--     is unreachable by design - a state with a rating table always has a
+--     factor. The refusal is exercised two ways instead:
+--       (A) short_rate_factor() called directly for a genuinely UNLICENSED
+--           state (no rating table, hence no seeded factor); and
+--       (B) cancel_policy()'s refuse-loudly-and-write-nothing transactionality,
+--           by removing the auto-seeded row for a licensed state first so the
+--           factor is genuinely absent.
 -- ---------------------------------------------------------------------------
 DO $$
-DECLARE v_policy UUID; v_state CHAR(2) := 'TX';
-        v_ok BOOLEAN := false; v_err TEXT; v_status policy_status_t;
+DECLARE v_policy UUID; v_state CHAR(2) := 'TX'; v_unlicensed CHAR(2) := 'ZZ';
+        v_ok BOOLEAN; v_err TEXT; v_status policy_status_t;
 BEGIN
   BEGIN
-    v_policy := pg_temp.mk_policy('T6', v_state, 36500,
-      tstzrange('2026-01-01 00:00:00+00', '2027-01-01 00:00:00+00', '[)'));
-
-    -- Checked rather than assumed: if a filed table is ever loaded for this
-    -- state, this case would be asserting nothing, and it should say so.
-    IF EXISTS (SELECT 1 FROM short_rate_factors WHERE state = v_state) THEN
-      RAISE EXCEPTION '0018-T6 FAILED: short_rate_factors now has rows for % - this case tests the empty-table refusal and needs a state with no filed factors', v_state;
+    -- (A) A genuinely unlicensed state (no rating table, so the ADR 0025 seed
+    -- never fired) has no factor, and the lookup refuses loudly.
+    IF EXISTS (SELECT 1 FROM short_rate_factors WHERE state = v_unlicensed) THEN
+      RAISE EXCEPTION '0018-T6 FAILED: % unexpectedly has a short-rate factor - this half needs a genuinely unlicensed state', v_unlicensed;
+    END IF;
+    v_ok := false;
+    BEGIN
+      PERFORM short_rate_factor(v_unlicensed, NULL, 'insured_initiated'::cancellation_type_t, 0.5, now());
+    EXCEPTION WHEN OTHERS THEN v_ok := true; v_err := SQLERRM;
+    END;
+    IF NOT v_ok OR v_err NOT LIKE '%SHORT_RATE_TABLE_NOT_CONFIGURED%' THEN
+      RAISE EXCEPTION '0018-T6 FAILED: short_rate_factor() for an unlicensed state did not refuse with SHORT_RATE_TABLE_NOT_CONFIGURED (ok=%, err=%)', v_ok, v_err;
     END IF;
 
+    -- (B) cancel_policy() still refuses and writes nothing when the factor is
+    -- absent. Onboarding TX auto-seeds one (ADR 0025), so remove it first to
+    -- recreate the "no factor for this state" condition.
+    v_policy := pg_temp.mk_policy('T6', v_state, 36500,
+      tstzrange('2026-01-01 00:00:00+00', '2027-01-01 00:00:00+00', '[)'));
+    DELETE FROM short_rate_factors WHERE state = v_state;
+    IF EXISTS (SELECT 1 FROM short_rate_factors WHERE state = v_state) THEN
+      RAISE EXCEPTION '0018-T6 FAILED: could not clear the seeded factor for %', v_state;
+    END IF;
+
+    v_ok := false;
     BEGIN
       PERFORM cancel_policy(v_policy, 'insured_initiated', 'CX_INSURED_REQUEST',
                             'short_rate', '2026-04-01 00:00:00+00', NULL, '0018-suite');
@@ -589,7 +611,7 @@ BEGIN
     END;
 
     IF NOT v_ok THEN
-      RAISE EXCEPTION '0018-T6 FAILED: a short-rate cancellation succeeded with no filed table loaded';
+      RAISE EXCEPTION '0018-T6 FAILED: a short-rate cancellation succeeded with no factor loaded';
     END IF;
     IF v_err NOT LIKE '%SHORT_RATE_TABLE_NOT_CONFIGURED%' THEN
       RAISE EXCEPTION '0018-T6 FAILED: wrong error: %', v_err;
@@ -616,7 +638,7 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'ROLLBACK_CASE' THEN RAISE; END IF;
   END;
-  RAISE NOTICE '0018-T6 pass: short-rate with no filed table is refused loudly, and writes nothing';
+  RAISE NOTICE '0018-T6 pass: short-rate with no loaded factor is refused loudly (direct lookup on an unlicensed state, and cancel_policy after clearing the seed), and writes nothing';
 END $$;
 
 -- ---------------------------------------------------------------------------

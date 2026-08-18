@@ -81,6 +81,13 @@ import psycopg2
 # happened to move the same three counts, but for different objects - it is not
 # what shipped. See docs/decisions/0024 for the rejected-design record.)
 #
+# ADR 0025's short-rate state-onboarding seed moves two counts: +1 function
+# (seed_short_rate_factor_for_state) and +1 trigger
+# (state_rating_versions_seed_short_rate, AFTER INSERT on
+# state_rating_table_versions). It adds no table, type, view or SET NOT NULL
+# column - the short_rate_factors table and short_rate_factor() lookup already
+# existed (ADR 0018); this only wires an automatic seed onto state onboarding.
+#
 # This is the acceptance test for the parser itself - if the parser's counts don't
 # match this, that's a parser bug to fix, not a schema surprise, and the
 # parser is not trusted against a live database until it does. Updated by
@@ -90,9 +97,9 @@ import psycopg2
 BASELINE = {
     "tables": 30,
     "types": 19,
-    "functions": 39,
+    "functions": 40,
     "views": 7,
-    "triggers": 23,
+    "triggers": 24,
     "not_null_columns": 6,
 }
 

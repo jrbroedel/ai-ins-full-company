@@ -2442,6 +2442,61 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
 
+-- ADR 0025: seed a short-rate factor when a state is onboarded.
+--
+-- Business decision (confirmed, internally set - not a filed rate): the
+-- short-rate cancellation penalty is a FLAT 10% admin holdback off the pro-rata
+-- unearned/return premium - the insured gets 90% of what pro-rata would return
+-- (a $100 pro-rata return pays $90). No variance by state, by program, or by who
+-- initiated the cancellation, and it does NOT change with how much of the term
+-- has elapsed. In this table's terms that is one row per state: factor 0.90 on
+-- the unearned_premium_multiplier basis, a single [0,1) band, program_id and
+-- applies_to NULL (any program, both initiators).
+--
+-- Why a trigger rather than a standalone load script or an onboarding wrapper
+-- (ADR 0025): the licensed-state source of truth is state_rating_table_versions
+-- itself (referral rule PC-03 - a state with no rating-table record is "not
+-- licensed"), and there is no onboarding function or runbook to fold this into
+-- today; states are onboarded by a direct INSERT here. A trigger fires however
+-- that INSERT happens - direct SQL now, a future wrapper later - so "a licensed
+-- state has a short-rate factor" is enforced by the database rather than left to
+-- a step someone must remember, the same discipline every exclusion constraint
+-- and append-only trigger in this schema already follows.
+--
+-- The NOT EXISTS guard does double duty: it keeps a second rating-table VERSION
+-- of an already-onboarded state from inserting a duplicate, AND it is the
+-- override hatch - a deliberately pre-seeded state-specific short_rate_factors
+-- row (a future state that must differ) is left untouched rather than overwritten
+-- or duplicated. The flat 0.90 is the default for a state that has not been given
+-- its own, not a value forced on every state forever. No parameterised factor is
+-- built because none is needed today (there is no wrapper to carry one, and the
+-- guard already provides the divergence path).
+--
+-- Consequence, recorded rather than hidden: this makes "licensed => has a
+-- short-rate factor" an invariant, so the SHORT_RATE_TABLE_NOT_CONFIGURED refusal
+-- is no longer reachable for a licensed state (it still guards a genuinely
+-- unlicensed one). ADR 0018's tests/0018 T6 exercised the old "licensed but table
+-- empty" combination and was revised for this.
+CREATE OR REPLACE FUNCTION seed_short_rate_factor_for_state()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM short_rate_factors WHERE state = NEW.state) THEN
+    INSERT INTO short_rate_factors
+      (state, program_id, elapsed_fraction_from, elapsed_fraction_to,
+       factor, basis, applies_to, effective_range,
+       serff_filing_tracking_number, rate_manual_reference)
+    VALUES
+      (NEW.state, NULL, 0, 1, 0.90, 'unearned_premium_multiplier'::short_rate_basis_t,
+       NULL, tstzrange(NULL, NULL), 'internally set - not filed', NULL);
+  END IF;
+  RETURN NULL;  -- AFTER trigger: return value is ignored
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+CREATE OR REPLACE TRIGGER state_rating_versions_seed_short_rate
+  AFTER INSERT ON state_rating_table_versions
+  FOR EACH ROW EXECUTE FUNCTION seed_short_rate_factor_for_state();
+
 -- Pro-rata unearned premium for a policy as of an instant: every premium
 -- amount in force is earned evenly across its OWN effective period, and what
 -- has not been earned by p_as_of is unearned. That means the quote's written
