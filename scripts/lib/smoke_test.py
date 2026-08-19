@@ -3,8 +3,10 @@ Post-deploy smoke test (ADR 0015 section 3). Run via `odoo shell` (needs the
 local `env` it provides to create/delete a disposable user), but the actual
 verification goes over real XML-RPC as that user - the same real-auth,
 real-ACL path a browser uses, not the shell's superuser bypass. Confirms all
-four luxauto.* models are actually queryable post-deploy, not just that the
-Odoo service is active.
+13 luxauto.* models in MODELS below are actually queryable post-deploy, not
+just that the Odoo service is active - and the read-only, _auto=False models
+backed by SQL views (every ADR 0029 model, plus the older waterfall/settlement)
+answer search_read over that path exactly as the regular-table models do.
 
 Also asserts that attachment storage still resolves to Azure Blob - see
 check_attachment_storage() below for why that needs a deploy-time check at all.
@@ -21,6 +23,10 @@ DB = 'luxauto'
 MODELS = [
     'luxauto.insured', 'luxauto.policy', 'luxauto.policy.vehicle', 'luxauto.policy.driver',
     'luxauto.policy.cancellation', 'luxauto.premium.waterfall', 'luxauto.settlement',
+    # ADR 0029 read-side visibility views. Same _auto=False view-backed pattern as
+    # waterfall/settlement above, so the same search_read probe covers them.
+    'luxauto.policy.reinstatement', 'luxauto.short.rate.factor', 'luxauto.decision.log',
+    'luxauto.application.referral', 'luxauto.quote.commission', 'luxauto.quote.rating',
 ]
 # The fs.storage record attachments are supposed to land in (ADR 0009).
 EXPECTED_ATTACHMENT_STORAGE = 'azure_blob_documents'
