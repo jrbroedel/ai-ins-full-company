@@ -124,8 +124,8 @@ BEGIN
       RAISE EXCEPTION '0027-T3 FAILED: a clean pre_war_vintage application returned %, expected AUTO_PROCEED (no rule branches on category)', v_action;
     END IF;
     SELECT count(*) INTO v_n FROM decision_log WHERE application_id = v_app;
-    IF v_n <> 4 THEN
-      RAISE EXCEPTION '0027-T3 FAILED: expected 4 decision_log rows, got % - a new category must not disturb the referral pass', v_n;
+    IF v_n <> 5 THEN
+      RAISE EXCEPTION '0027-T3 FAILED: expected 5 decision_log rows (AL/CP/DH/PC/EL), got % - a new category must not disturb the referral pass', v_n;
     END IF;
 
     RAISE EXCEPTION 'ROLLBACK_CASE';

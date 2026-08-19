@@ -104,6 +104,14 @@ import psycopg2
 # the broker CHECK and the generated column are not categories this parser tracks.
 # No new table, function, view or trigger.
 #
+# ADR 0028's rating engine v1 moves two counts: +3 tables (rating_base_rates,
+# vehicle_category_rating_class, territory_factors) and +2 functions
+# (compute_indicative_premium, and evaluate_el01 - the $100k eligibility floor
+# wired into evaluate_application_referrals as a fifth referral rule). No new
+# type, view, trigger or SET NOT NULL column; the seeded base-rate/territory rows
+# and the CHECK/EXCLUDE constraints are not categories this parser tracks (they
+# are covered by tests/0028).
+#
 # This is the acceptance test for the parser itself - if the parser's counts don't
 # match this, that's a parser bug to fix, not a schema surprise, and the
 # parser is not trusted against a live database until it does. Updated by
@@ -111,9 +119,9 @@ import psycopg2
 # automatically, but this snapshot is a fact about the file's current state,
 # not something the parser can derive about itself.
 BASELINE = {
-    "tables": 30,
+    "tables": 33,
     "types": 20,
-    "functions": 45,
+    "functions": 47,
     "views": 7,
     "triggers": 24,
     "not_null_columns": 8,

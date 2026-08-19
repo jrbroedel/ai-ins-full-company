@@ -622,9 +622,44 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
--- Orchestrator: evaluates the four confirmed rules for one application in a
--- single transaction (four decision_log rows written, one per rule, fired or
--- not) and returns the single most-severe action.
+-- EL-01 (ADR 0028): the $100,000 agreed-value eligibility floor as a referral
+-- rule. A risk below the floor is DECLINED, not rated - the source workbook's own
+-- language. Fires when ANY vehicle on the application is below the floor
+-- (min agreed value < $100,000); a NULL/unknown agreed value is not a floor
+-- violation (that is a missing-data question, not this rule's). Emits
+-- DECLINE_RECOMMENDED (a human confirms the auto-decline, matching the matrix's
+-- "no pure auto-decline except sanctions" philosophy), logged like every other
+-- rule. The rating function compute_indicative_premium() enforces the same floor
+-- independently, so an ineligible risk can never be rated even if this rule is
+-- bypassed.
+CREATE OR REPLACE FUNCTION evaluate_el01(p_application_id UUID, p_decided_by TEXT DEFAULT 'system')
+RETURNS referral_action_t AS $$
+DECLARE
+  v_min_value NUMERIC;
+  v_fired BOOLEAN;
+  v_action referral_action_t;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM applications WHERE application_id = p_application_id) THEN
+    RAISE EXCEPTION 'evaluate_el01: application % does not exist', p_application_id;
+  END IF;
+
+  SELECT min(current_appraised_value) INTO v_min_value
+  FROM vehicles WHERE application_id = p_application_id;
+
+  v_fired := (v_min_value IS NOT NULL AND v_min_value < 100000);
+  v_action := CASE WHEN v_fired THEN 'DECLINE_RECOMMENDED'::referral_action_t
+                   ELSE 'AUTO_PROCEED'::referral_action_t END;
+
+  INSERT INTO decision_log (application_id, rule_id, reason_code, action_taken, fired, decided_by, notes)
+  VALUES (p_application_id, 'EL-01', 'EL01_BELOW_AGREED_VALUE_FLOOR', v_action, v_fired, p_decided_by,
+          format('min_agreed_value=%s, floor=100000', v_min_value));
+  RETURN v_action;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Orchestrator: evaluates the confirmed rules for one application in a
+-- single transaction (one decision_log row written per rule - five now, with
+-- EL-01 - fired or not) and returns the single most-severe action.
 --
 -- referral_action_t is DEFINED in ascending severity order (AUTO_PROCEED lowest
 -- ... HARD_DECLINE_COMPLIANCE highest), so GREATEST over the enum is the
@@ -632,8 +667,10 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 -- which reduces GREATEST to "the most severe rule that fired, else AUTO_PROCEED".
 -- That ordering is an invariant of the enum's definition; tests/0026 asserts it,
 -- so a future reorder of the enum fails a test rather than silently mis-routing.
--- GREATEST already handles the full taxonomy, including the values none of these
--- four rules produce, for when the remaining rules are added.
+-- GREATEST already handles the full taxonomy, including the values these rules
+-- still do not produce (INFORMATION_REQUEST, AUTO_PROCEED_WITH_FLAG,
+-- HARD_DECLINE_COMPLIANCE - EL-01 now produces DECLINE_RECOMMENDED), for when the
+-- remaining rules are added.
 CREATE OR REPLACE FUNCTION evaluate_application_referrals(p_application_id UUID, p_decided_by TEXT DEFAULT 'system')
 RETURNS referral_action_t AS $$
 DECLARE
@@ -641,22 +678,222 @@ DECLARE
   v_cp referral_action_t;
   v_dh referral_action_t;
   v_pc referral_action_t;
+  v_el referral_action_t;
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM applications WHERE application_id = p_application_id) THEN
     RAISE EXCEPTION 'evaluate_application_referrals: application % does not exist', p_application_id;
   END IF;
 
-  -- ADR 0026 scope: the four confirmed rules. The other 11 matrix rules
-  -- (VV-01..04, DH-02..04, AL-02, CP-01/CP-03, PC-01/02/04) are future work and
-  -- will each be added here as their own evaluate_<rule>() call.
+  -- ADR 0026's four rules plus EL-01, the $100k eligibility floor (ADR 0028).
+  -- The remaining matrix rules (VV-01..04, DH-02..04, AL-02, CP-01/CP-03,
+  -- PC-01/02/04) are future work and each get added here as their own
+  -- evaluate_<rule>() call.
   v_al := evaluate_al01(p_application_id, p_decided_by);
   v_cp := evaluate_cp02(p_application_id, p_decided_by);
   v_dh := evaluate_dh01(p_application_id, p_decided_by);
   v_pc := evaluate_pc03(p_application_id, p_decided_by);
+  v_el := evaluate_el01(p_application_id, p_decided_by);
 
-  RETURN GREATEST(v_al, v_cp, v_dh, v_pc);
+  RETURN GREATEST(v_al, v_cp, v_dh, v_pc, v_el);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- ============================================================================
+-- RATING ENGINE v1 - MINIMAL CORE (ADR 0028)
+-- Deliberately simplified: base rate (by rating class + agreed-value band) x
+-- per-state territory factor, grossed up to an INDICATIVE premium. All other
+-- factors in the source workbook (driver/claims/deductible/cat-zone/ALAE/ULAE/
+-- risk margin/liability/underwriter judgment - 28 total) are OUT of v1 scope.
+-- The output is called "indicative_premium", NOT "technical premium", which in
+-- the source material means the full multi-factor calculation. All loaded rate
+-- numbers are illustrative benchmarks, not actuarially certified or filed. See
+-- ADR 0028.
+-- ============================================================================
+
+-- Base rate per $100 of agreed value, keyed by a 12-class rating taxonomy that
+-- is INDEPENDENT of the 6-value vehicle_category enum (the workbook classes are
+-- finer than the enum and do not align 1:1, so keying on the enum could neither
+-- hold all 12 nor future-proof for classes not yet in the enum). value bands are
+-- [lower, upper); a NULL upper is the open-ended top band. effective_range
+-- versions the table the way state_rating_table_versions and short_rate_factors
+-- are versioned.
+CREATE TABLE IF NOT EXISTS rating_base_rates (
+  base_rate_id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  rating_vehicle_class  SMALLINT NOT NULL,
+  rating_class_label    TEXT NOT NULL,
+  value_band_lower      NUMERIC(14,2) NOT NULL,
+  value_band_upper      NUMERIC(14,2),
+  base_rate             NUMERIC(8,4) NOT NULL,
+  effective_range       TSTZRANGE NOT NULL,
+  source_reference      TEXT NOT NULL
+    DEFAULT 'Illustrative underwriting benchmark, not actuarially certified - see workbook README disclaimer',
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT rating_base_rates_class_ck CHECK (rating_vehicle_class BETWEEN 1 AND 12),
+  CONSTRAINT rating_base_rates_band_ck  CHECK (value_band_upper IS NULL OR value_band_upper > value_band_lower),
+  CONSTRAINT rating_base_rates_rate_ck  CHECK (base_rate >= 0),
+  CONSTRAINT no_overlapping_base_rate_bands
+    EXCLUDE USING gist (rating_vehicle_class WITH =,
+                        numrange(value_band_lower, value_band_upper) WITH &&,
+                        effective_range WITH &&)
+);
+
+-- The confirmed 12 x 7 benchmark table (84 rows). Loaded once (guarded on an
+-- empty table) as a class-array cross-joined with the seven value bands, so the
+-- 84 rows are 12 rate arrays x 7 band definitions rather than 84 hand-typed
+-- lines - less transcription risk, same result.
+INSERT INTO rating_base_rates (rating_vehicle_class, rating_class_label, value_band_lower, value_band_upper, base_rate, effective_range)
+SELECT c.cls, c.label, b.lo, b.hi, c.rates[b.idx],
+       tstzrange('2000-01-01 00:00:00+00', '2100-01-01 00:00:00+00', '[)')
+FROM (VALUES
+  (1::smallint,  '01 Luxury Sedan/SUV',                ARRAY[0.92,0.75,0.65,0.55,0.48,0.42,0.38]::numeric[]),
+  (2::smallint,  '02 Sports/GT',                       ARRAY[1.18,0.95,0.82,0.70,0.58,0.50,0.42]::numeric[]),
+  (3::smallint,  '03 Supercar',                        ARRAY[1.42,1.15,0.95,0.80,0.65,0.55,0.45]::numeric[]),
+  (4::smallint,  '04 Hypercar',                        ARRAY[1.75,1.45,1.20,1.00,0.82,0.68,0.55]::numeric[]),
+  (5::smallint,  '05 Limited Edition/Track',           ARRAY[1.65,1.35,1.10,0.92,0.78,0.64,0.52]::numeric[]),
+  (6::smallint,  '06 Vintage Pre-War (pre-1946)',      ARRAY[0.50,0.42,0.38,0.34,0.30,0.27,0.24]::numeric[]),
+  (7::smallint,  '07 Post-War Classic (1946-1972)',    ARRAY[0.57,0.48,0.43,0.38,0.33,0.29,0.26]::numeric[]),
+  (8::smallint,  '08 Modern Classic (1973-1999)',      ARRAY[0.74,0.62,0.55,0.48,0.42,0.36,0.32]::numeric[]),
+  (9::smallint,  '09 Youngtimer (2000-2010)',          ARRAY[0.86,0.72,0.63,0.55,0.47,0.41,0.35]::numeric[]),
+  (10::smallint, '10 Competition/Race (non-comp use)', ARRAY[1.00,0.85,0.75,0.65,0.56,0.48,0.42]::numeric[]),
+  (11::smallint, '11 Restomod/Coachbuilt',             ARRAY[1.05,0.88,0.78,0.68,0.58,0.50,0.43]::numeric[]),
+  (12::smallint, '12 Performance EV/Electric Hyper',   ARRAY[1.58,1.30,1.10,0.95,0.80,0.66,0.55]::numeric[])
+) c(cls, label, rates)
+CROSS JOIN (VALUES
+  (1,   100000::numeric,   250000::numeric),
+  (2,   250000::numeric,   500000::numeric),
+  (3,   500000::numeric,  1000000::numeric),
+  (4,  1000000::numeric,  2000000::numeric),
+  (5,  2000000::numeric,  5000000::numeric),
+  (6,  5000000::numeric, 10000000::numeric),
+  (7, 10000000::numeric,     NULL::numeric)
+) b(idx, lo, hi)
+WHERE NOT EXISTS (SELECT 1 FROM rating_base_rates);
+
+-- Maps the vehicle_category enum onto a rating class (data-driven, no CASE - the
+-- anti-pattern ADR 0027 flagged). Five of six categories map; modified_performance
+-- deliberately has NO row (confirmed: not worth a rate class in v1). It stays a
+-- valid intake category; it just cannot be auto-rated, and the rating function
+-- raises RATING_CLASS_NOT_CONFIGURED_FOR_CATEGORY rather than guessing a class.
+CREATE TABLE IF NOT EXISTS vehicle_category_rating_class (
+  vehicle_category      vehicle_category_t PRIMARY KEY,
+  rating_vehicle_class  SMALLINT NOT NULL,
+  CONSTRAINT vehicle_category_rating_class_class_ck CHECK (rating_vehicle_class BETWEEN 1 AND 12)
+);
+
+INSERT INTO vehicle_category_rating_class (vehicle_category, rating_vehicle_class) VALUES
+  ('production_luxury',   1),   -- 01 Luxury Sedan/SUV
+  ('exotic',              3),   -- 03 Supercar
+  ('classic_collector',   7),   -- 07 Post-War Classic (1946-1972)
+  ('pre_war_vintage',     6),   -- 06 Vintage Pre-War
+  ('restomod_coachbuilt', 11)   -- 11 Restomod/Coachbuilt
+ON CONFLICT (vehicle_category) DO NOTHING;
+
+-- Per-state PD territory factor. Loaded MANUALLY per state as part of onboarding
+-- (real proprietary rate content with no sensible universal default), NOT
+-- auto-seeded like the flat-10% short-rate factor - a neutral 1.00 auto-seed
+-- would silently mis-price real business. The lookup fails loud
+-- (TERRITORY_FACTOR_NOT_CONFIGURED) for any state with no row, like
+-- short_rate_factor(). v1 ships exactly one placeholder row for test state 'T0'.
+CREATE TABLE IF NOT EXISTS territory_factors (
+  territory_factor_id  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  state                CHAR(2) NOT NULL,
+  pd_territory_factor  NUMERIC(6,4) NOT NULL,
+  effective_range      TSTZRANGE NOT NULL,
+  source_reference     TEXT NOT NULL
+    DEFAULT 'Illustrative underwriting benchmark, not actuarially certified - see workbook README disclaimer',
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT territory_factors_factor_ck CHECK (pd_territory_factor >= 0),
+  CONSTRAINT no_overlapping_territory_factors
+    EXCLUDE USING gist (state WITH =, effective_range WITH &&)
+);
+
+INSERT INTO territory_factors (state, pd_territory_factor, effective_range, source_reference)
+SELECT 'T0', 1.0000, tstzrange('2000-01-01 00:00:00+00', '2100-01-01 00:00:00+00', '[)'),
+       'Placeholder/test territory factor (neutral 1.00) - not a real state; real per-state factors are loaded during onboarding'
+WHERE NOT EXISTS (SELECT 1 FROM territory_factors WHERE state = 'T0');
+
+-- The v1 indicative-premium computation: base rate x territory factor, grossed
+-- up by the 0.53 divisor (1 - 0.47: target profit 10% + reinsurance 5% + admin
+-- 2% + acquisition commission 30%). The 30% acquisition is the platform's own
+-- confirmed figure - ADR 0007's addendum makes broker + MGA commission sum to
+-- exactly 30% by construction - overriding the workbook's illustrative 27.5%.
+--
+-- Below the $100,000 agreed-value floor a risk is DECLINED, not rated: this
+-- function refuses (RATING_BELOW_AGREED_VALUE_FLOOR), and EL-01 in the referral
+-- engine records the decline. Every "not configured" case fails loud rather than
+-- guessing. Returns the premium plus an auditable JSONB breakdown for
+-- quotes.rating_basis.
+CREATE OR REPLACE FUNCTION compute_indicative_premium(
+  p_vehicle_category vehicle_category_t,
+  p_agreed_value NUMERIC,
+  p_state CHAR(2),
+  p_as_of TIMESTAMPTZ DEFAULT now()
+) RETURNS TABLE (
+  indicative_premium NUMERIC,
+  rating_vehicle_class SMALLINT,
+  base_rate NUMERIC,
+  territory_factor NUMERIC,
+  breakdown JSONB
+) AS $$
+DECLARE
+  v_class SMALLINT; v_label TEXT;
+  v_base_rate NUMERIC; v_band_lower NUMERIC; v_band_upper NUMERIC;
+  v_terr NUMERIC; v_base_loss_cost NUMERIC; v_adjusted NUMERIC; v_premium NUMERIC;
+BEGIN
+  IF p_agreed_value < 100000 THEN
+    RAISE EXCEPTION 'RATING_BELOW_AGREED_VALUE_FLOOR: agreed value % is below the $100,000 eligibility floor - the risk is declined, not rated', p_agreed_value
+      USING HINT = 'A risk below the $100,000 agreed-value floor is auto-declined (EL-01 in the referral engine), never rated.';
+  END IF;
+
+  SELECT m.rating_vehicle_class INTO v_class
+  FROM vehicle_category_rating_class m WHERE m.vehicle_category = p_vehicle_category;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'RATING_CLASS_NOT_CONFIGURED_FOR_CATEGORY: vehicle_category % has no rating class mapping and cannot be auto-rated', p_vehicle_category
+      USING HINT = 'The category is valid for intake but has no row in vehicle_category_rating_class (e.g. modified_performance in v1). It cannot be auto-rated until a class mapping is configured - no default is substituted.';
+  END IF;
+
+  SELECT r.base_rate, r.rating_class_label, r.value_band_lower, r.value_band_upper
+    INTO v_base_rate, v_label, v_band_lower, v_band_upper
+  FROM rating_base_rates r
+  WHERE r.rating_vehicle_class = v_class
+    AND p_agreed_value >= r.value_band_lower
+    AND (r.value_band_upper IS NULL OR p_agreed_value < r.value_band_upper)
+    AND r.effective_range @> p_as_of;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'RATING_BASE_RATE_NOT_CONFIGURED: no base rate for rating class % at agreed value % (as of %)', v_class, p_agreed_value, p_as_of;
+  END IF;
+
+  SELECT tf.pd_territory_factor INTO v_terr
+  FROM territory_factors tf
+  WHERE tf.state = p_state AND tf.effective_range @> p_as_of;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'TERRITORY_FACTOR_NOT_CONFIGURED: no territory factor loaded for state % (as of %)', p_state, p_as_of
+      USING HINT = 'Territory factors are real per-state rate content loaded during state onboarding; there is no default. Load the state factor before rating there.';
+  END IF;
+
+  v_base_loss_cost := p_agreed_value / 100 * v_base_rate;
+  v_adjusted := v_base_loss_cost * v_terr;
+  v_premium := ROUND(v_adjusted / 0.53, 2);
+
+  RETURN QUERY SELECT
+    v_premium, v_class, v_base_rate, v_terr,
+    jsonb_build_object(
+      'model', 'indicative_premium_v1',
+      'note', 'Indicative premium (v1: base rate x territory factor, grossed up). NOT the full technical premium.',
+      'disclaimer', 'Illustrative underwriting benchmark, not actuarially certified.',
+      'agreed_value', p_agreed_value,
+      'rating_vehicle_class', v_class,
+      'rating_class_label', v_label,
+      'value_band', jsonb_build_object('lower', v_band_lower, 'upper', v_band_upper),
+      'base_rate_per_100', v_base_rate,
+      'base_loss_cost', v_base_loss_cost,
+      'territory_state', p_state,
+      'territory_factor', v_terr,
+      'gross_up_divisor', 0.53,
+      'indicative_premium', v_premium
+    );
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ============================================================================
 -- QUOTA SHARE / COMMISSION WATERFALL (ADR 0007)
@@ -4138,6 +4375,10 @@ GRANT EXECUTE ON FUNCTION reinstate_policy(UUID, UUID, TEXT, TEXT, TEXT) TO odoo
 -- SECURITY DEFINER and reached through this orchestrator (which runs as the
 -- owner), so only the orchestrator needs a grant.
 GRANT EXECUTE ON FUNCTION evaluate_application_referrals(UUID, TEXT) TO odoo;
+-- ADR 0028: the rating-engine entry point (v1 indicative premium). The per-rule
+-- referral function evaluate_el01 is reached through the orchestrator above and
+-- needs no separate grant.
+GRANT EXECUTE ON FUNCTION compute_indicative_premium(vehicle_category_t, NUMERIC, CHAR(2), TIMESTAMPTZ) TO odoo;
 GRANT EXECUTE ON FUNCTION cancel_policy(UUID, TEXT, TEXT) TO odoo;
 -- ADR 0018. The three-argument cancel_policy above still needs its grant: it
 -- is reachable and raises CANCELLATION_TYPE_REQUIRED, which is the diagnosis

@@ -240,10 +240,11 @@ BEGIN
       RAISE EXCEPTION '0026-T5 FAILED: combo 1 returned %, expected MANUAL_REVIEW_SENIOR (most severe of SENIOR/REQUIRED)', v_action;
     END IF;
 
-    -- Exactly four rows, one per rule, with the expected fired flags.
+    -- One row per rule (five since ADR 0028 added EL-01), with the expected
+    -- fired flags on the four ADR 0026 rules.
     SELECT count(*) INTO v_n FROM decision_log WHERE application_id = v_app;
-    IF v_n <> 4 THEN
-      RAISE EXCEPTION '0026-T5 FAILED: expected 4 decision_log rows from one orchestrator call, got %', v_n;
+    IF v_n <> 5 THEN
+      RAISE EXCEPTION '0026-T5 FAILED: expected 5 decision_log rows from one orchestrator call, got %', v_n;
     END IF;
     SELECT (SELECT fired FROM decision_log WHERE application_id = v_app AND rule_id = 'AL-01'),
            (SELECT fired FROM decision_log WHERE application_id = v_app AND rule_id = 'CP-02'),
@@ -255,7 +256,7 @@ BEGIN
     END IF;
 
     -- Combo 2: clean application, licensed state -> nothing fires -> AUTO_PROCEED,
-    -- four rows all fired=false.
+    -- five rows all fired=false (AL/CP/DH/PC/EL).
     v_app := pg_temp.mk_app('T5b', 'QQ');
     PERFORM pg_temp.add_vehicle(v_app, 500000);
     INSERT INTO state_rating_table_versions
@@ -268,8 +269,8 @@ BEGIN
       RAISE EXCEPTION '0026-T5 FAILED: a clean, licensed application returned %, expected AUTO_PROCEED', v_action;
     END IF;
     SELECT count(*) INTO v_n FROM decision_log WHERE application_id = v_app AND NOT fired;
-    IF v_n <> 4 THEN
-      RAISE EXCEPTION '0026-T5 FAILED: expected 4 non-fired decision_log rows for a clean application, got %', v_n;
+    IF v_n <> 5 THEN
+      RAISE EXCEPTION '0026-T5 FAILED: expected 5 non-fired decision_log rows for a clean application, got %', v_n;
     END IF;
 
     RAISE EXCEPTION 'ROLLBACK_CASE';
