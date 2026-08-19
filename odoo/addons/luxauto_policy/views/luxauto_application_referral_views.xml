@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_luxauto_application_referral_list" model="ir.ui.view">
+        <field name="name">luxauto.application.referral.list</field>
+        <field name="model">luxauto.application.referral</field>
+        <field name="arch" type="xml">
+            <list create="false" edit="false" delete="false" import="false">
+                <field name="application_id"/>
+                <field name="most_severe_action"/>
+                <field name="fired_rule_count"/>
+                <field name="rule_count"/>
+                <field name="evaluated_at"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_luxauto_application_referral_form" model="ir.ui.view">
+        <field name="name">luxauto.application.referral.form</field>
+        <field name="model">luxauto.application.referral</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false" delete="false">
+                <sheet>
+                    <group string="Referral Summary">
+                        <field name="application_id"/>
+                        <field name="most_severe_action"/>
+                        <field name="fired_rule_count"/>
+                        <field name="rule_count"/>
+                        <field name="evaluated_at"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_luxauto_application_referral" model="ir.actions.act_window">
+        <field name="name">Application Referrals</field>
+        <field name="res_model">luxauto.application.referral</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

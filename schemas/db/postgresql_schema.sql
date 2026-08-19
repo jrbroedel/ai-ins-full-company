@@ -4343,6 +4343,178 @@ JOIN policy_events be ON be.policy_id = p.policy_id AND be.event_type = 'bound'
 CROSS JOIN LATERAL calculate_cancellation_waterfall(c.cancellation_id) w
 WHERE NOT isempty(c.effective_range);
 
+-- ============================================================================
+-- READ-SIDE VISIBILITY VIEWS (ADR 0029)
+-- Five domains that shipped their write/compute side (ADRs 0024-0028) with the
+-- Odoo read side deliberately deferred and batched into this one pass. Every
+-- view here follows the pattern the earlier read views established (ADR 0006's
+-- _auto=False, ADR 0010's scope): a synthetic integer id hashed from the row's
+-- key for Odoo, real UUID keys carried as-is, tstzrange columns left unmapped
+-- with immutable scalars derived where a reader needs them, and no filtering -
+-- every row is returned, the row itself carrying whatever "is this current"
+-- signal it has. None of these compute anything: the pipeline functions
+-- (reinstate_policy, short_rate_factor, the referral rules,
+-- compute_indicative_premium) remain the system of record and are untouched.
+-- ============================================================================
+
+-- Reinstatement (ADR 0024): the link-and-attestation audit record. reinstated_
+-- from_policy_id already surfaces the bare predecessor link on luxauto_policy_
+-- view (ADR 0023); this is the audit row behind it - the gap instant, the
+-- signed no-known-loss attestation reference, and who performed it - which had
+-- no read side. policies is joined twice (new and prior) so a reader gets both
+-- policy numbers without a second round-trip; single-column hash on
+-- reinstatement_id, one row per reinstatement with no fan-out. gap_start is a
+-- single instant, not a range: the cancellation effective date is the new
+-- policy's backdated inception (zero gap is the whole point of ADR 0024).
+CREATE OR REPLACE VIEW luxauto_policy_reinstatement_view AS
+SELECT
+  ('x' || substr(md5(r.reinstatement_id::text), 1, 8))::bit(32)::int AS id,
+  r.reinstatement_id,
+  r.new_policy_id,
+  np.policy_number AS new_policy_number,
+  r.prior_policy_id,
+  pp.policy_number AS prior_policy_number,
+  r.cancellation_id,
+  r.gap_start,
+  r.attestation_reference,
+  r.performed_by,
+  r.created_at
+FROM policy_reinstatements r
+JOIN policies np ON np.policy_id = r.new_policy_id
+JOIN policies pp ON pp.policy_id = r.prior_policy_id;
+
+-- Short-rate factors (ADR 0025), the CONFIGURED table - what factor is filed
+-- for a state/program right now, for internal/admin reference. This is the
+-- lookup table, NOT the applied factor: the factor actually charged on a given
+-- cancellation is already visible on luxauto_policy_cancellation_view
+-- (short_rate_factor / short_rate_basis, ADR 0018 addendum), a separate
+-- historical fact and deliberately not conflated with this reference row.
+-- Single-column hash on short_rate_factor_id; effective_range (tstzrange) is
+-- unmappable in Odoo like everywhere else here, so its immutable bounds are
+-- derived as scalars rather than a now()-based "active" flag (which would make
+-- the view non-deterministic) - the reader judges currency from the bounds.
+CREATE OR REPLACE VIEW luxauto_short_rate_factor_view AS
+SELECT
+  ('x' || substr(md5(f.short_rate_factor_id::text), 1, 8))::bit(32)::int AS id,
+  f.short_rate_factor_id,
+  f.state,
+  f.program_id,
+  f.elapsed_fraction_from,
+  f.elapsed_fraction_to,
+  f.factor,
+  f.basis,
+  f.applies_to,
+  lower(f.effective_range) AS effective_from,
+  upper(f.effective_range) AS effective_to,
+  f.serff_filing_tracking_number,
+  f.rate_manual_reference,
+  f.created_at
+FROM short_rate_factors f;
+
+-- Referral / decision log (ADR 0026/0028), the DETAIL view: one row per
+-- decision_log row, every rule evaluation whether it fired or not, across every
+-- evaluation run. No filtering and no collapsing - this is the raw append-only
+-- audit, the same "return all rows, the row is the fact" philosophy as the
+-- cancellation view. Single-column hash on log_id. The summary view below is
+-- what collapses this to a current per-application disposition.
+CREATE OR REPLACE VIEW luxauto_decision_log_view AS
+SELECT
+  ('x' || substr(md5(d.log_id::text), 1, 8))::bit(32)::int AS id,
+  d.log_id,
+  d.application_id,
+  d.rule_id,
+  d.reason_code,
+  d.action_taken,
+  d.fired,
+  d.decided_by,
+  d.notes,
+  d.created_at
+FROM decision_log d;
+
+-- Referral SUMMARY view (ADR 0026/0028): one row per application, the current
+-- disposition an underwriter actually wants - which rules are in effect and the
+-- most-severe action across them. Derived from decision_log rows, NEVER by
+-- calling evaluate_application_referrals(): that orchestrator is SECURITY
+-- DEFINER and INSERTs a decision_log row per rule on every call, so calling it
+-- from a read view would write audit rows as a side effect of reading. Instead:
+-- decision_log is append-only and re-evaluation appends a fresh set of rows, so
+-- take the LATEST row per (application, rule) via DISTINCT ON, then aggregate.
+-- max(action_taken) reproduces the orchestrator's GREATEST(...) exactly: the
+-- referral_action_t enum is declared least-severe -> most-severe, and a
+-- non-firing rule logs AUTO_PROCEED (the enum minimum), so the max over the
+-- current per-rule actions is the same value the orchestrator returns, with no
+-- side effect. Single-column hash on application_id.
+CREATE OR REPLACE VIEW luxauto_application_referral_view AS
+WITH latest_per_rule AS (
+  SELECT DISTINCT ON (d.application_id, d.rule_id)
+    d.application_id, d.rule_id, d.action_taken, d.fired, d.created_at
+  FROM decision_log d
+  ORDER BY d.application_id, d.rule_id, d.created_at DESC
+)
+SELECT
+  ('x' || substr(md5(lpr.application_id::text), 1, 8))::bit(32)::int AS id,
+  lpr.application_id,
+  max(lpr.action_taken) AS most_severe_action,
+  count(*) FILTER (WHERE lpr.fired) AS fired_rule_count,
+  count(*) AS rule_count,
+  max(lpr.created_at) AS evaluated_at
+FROM latest_per_rule lpr
+GROUP BY lpr.application_id;
+
+-- Commission (ADR 0007 addendum): broker channel and both commission rates,
+-- decided at quote time and inherited by the bound policy via quote_id. Quote
+-- grain (single-column hash on quote_id) so an unbound quote is covered too;
+-- the bound policy reaches this through application_id. mga_commission_rate is
+-- the generated 30 - broker column, so broker + MGA = 30 shows as the schema
+-- fact it is. Open to base.group_user like luxauto_premium_waterfall_view (ADR
+-- 0029 decision), not gated like the settlement report.
+CREATE OR REPLACE VIEW luxauto_quote_commission_view AS
+SELECT
+  ('x' || substr(md5(q.quote_id::text), 1, 8))::bit(32)::int AS id,
+  q.quote_id,
+  q.application_id,
+  q.program_id,
+  q.premium_amount,
+  q.broker_channel,
+  q.broker_commission_rate,
+  q.mga_commission_rate,
+  q.status AS quote_status,
+  q.quoted_at
+FROM quotes q;
+
+-- Rating (ADR 0028): the persisted per-quote rating_basis JSONB unpacked into
+-- typed columns so the breakdown - which base rate, territory factor and
+-- gross-up divisor produced the number - is legible, not opaque. Quote grain,
+-- single-column hash on quote_id. The ->> extractions of the v1
+-- (indicative_premium_v1) key shape cast cleanly to numeric/smallint; a quote
+-- whose rating_basis is not v1-shaped yields NULLs rather than an error, which
+-- is the intended behaviour today: compute_indicative_premium() is NOT yet
+-- wired into quote creation (ADR 0028 built the calculation but never made it
+-- fire on quote insert), so no real quote writes a v1 rating_basis yet. Wiring
+-- that is scoped-out follow-up work (ADR 0029 flags it); this view is built
+-- correct now so it renders the moment a v1-shaped basis is written.
+CREATE OR REPLACE VIEW luxauto_quote_rating_view AS
+SELECT
+  ('x' || substr(md5(q.quote_id::text), 1, 8))::bit(32)::int AS id,
+  q.quote_id,
+  q.application_id,
+  q.premium_amount,
+  q.rating_basis ->> 'model'                            AS rating_model,
+  (q.rating_basis ->> 'agreed_value')::numeric          AS agreed_value,
+  (q.rating_basis ->> 'rating_vehicle_class')::smallint AS rating_vehicle_class,
+  q.rating_basis ->> 'rating_class_label'               AS rating_class_label,
+  (q.rating_basis #>> '{value_band,lower}')::numeric    AS value_band_lower,
+  (q.rating_basis #>> '{value_band,upper}')::numeric    AS value_band_upper,
+  (q.rating_basis ->> 'base_rate_per_100')::numeric     AS base_rate_per_100,
+  (q.rating_basis ->> 'base_loss_cost')::numeric        AS base_loss_cost,
+  q.rating_basis ->> 'territory_state'                  AS territory_state,
+  (q.rating_basis ->> 'territory_factor')::numeric      AS territory_factor,
+  (q.rating_basis ->> 'gross_up_divisor')::numeric      AS gross_up_divisor,
+  (q.rating_basis ->> 'indicative_premium')::numeric    AS indicative_premium,
+  q.status AS quote_status,
+  q.quoted_at
+FROM quotes q;
+
 -- These views are owned by whichever role runs this script (the
 -- Postgres admin, in practice - see ADR 0011), not by the `odoo` role Odoo
 -- itself connects as (ADR 0009). A plain view runs with its owner's table
@@ -4360,6 +4532,16 @@ GRANT SELECT ON luxauto_policy_driver_view TO odoo;
 GRANT SELECT ON luxauto_policy_cancellation_view TO odoo;
 GRANT SELECT ON luxauto_premium_waterfall_view TO odoo;
 GRANT SELECT ON luxauto_settlement_view TO odoo;
+-- ADR 0029 read-side visibility views. SELECT only, same as every read view
+-- above: the write/compute paths (reinstate_policy, cancel_policy's short-rate
+-- lookup, the referral rules, compute_indicative_premium) are untouched and
+-- reach nothing through these grants.
+GRANT SELECT ON luxauto_policy_reinstatement_view TO odoo;
+GRANT SELECT ON luxauto_short_rate_factor_view TO odoo;
+GRANT SELECT ON luxauto_decision_log_view TO odoo;
+GRANT SELECT ON luxauto_application_referral_view TO odoo;
+GRANT SELECT ON luxauto_quote_commission_view TO odoo;
+GRANT SELECT ON luxauto_quote_rating_view TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID) TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID, NUMERIC, TIMESTAMPTZ) TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_endorsement_waterfall(UUID) TO odoo;

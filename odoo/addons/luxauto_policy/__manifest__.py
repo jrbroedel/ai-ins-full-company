@@ -1,7 +1,7 @@
 {
     'name': 'Luxury Auto Policy',
     'version': '19.0.1.0.0',
-    'summary': 'Read-only Insured/Policy/Vehicle/Driver/Cancellation/Waterfall/Settlement views over the pipeline database (ADR 0010/0013/0016/0018)',
+    'summary': 'Read-only Insured/Policy/Vehicle/Driver/Cancellation/Waterfall/Settlement/Reinstatement/Short-Rate/Referral/Commission/Rating views over the pipeline database (ADR 0010/0013/0016/0018/0029)',
     'description': """
 Luxury Auto Policy
 ===================
@@ -36,6 +36,24 @@ base.group_user - it exposes commission rates and participant splits, more
 sensitive than the other models here. No user is added to that group by
 default.
 
+ADR 0029 adds six read-only models for the domains whose write/compute side
+shipped in ADRs 0024-0028 with the Odoo read side deferred and batched here:
+luxauto.policy.reinstatement (the backdated-reinstatement audit record),
+luxauto.short.rate.factor (the configured short-rate reference table - the
+factor actually applied to a cancellation is already on
+luxauto.policy.cancellation), luxauto.application.referral (per-application
+summary: most-severe action derived from the decision log without re-running
+the orchestrator) and luxauto.decision.log (the per-rule detail behind it),
+luxauto.quote.commission (broker channel + broker/MGA rates + premium), and
+luxauto.quote.rating (the v1 rating_basis breakdown unpacked into typed
+columns). All are backed by luxauto_*_view SQL views and open to
+base.group_user; luxauto.quote.commission follows luxauto.premium.waterfall
+(open) rather than the gated settlement report, a deliberate ADR 0029 choice.
+luxauto.quote.rating renders NULLs until quote creation is wired to write a
+v1-shaped rating_basis - compute_indicative_premium() exists but is not yet
+called on quote insert, a scoped-out follow-up flagged in ADR 0029, not part
+of this read-only pass.
+
 Writes (binding a quote into a policy, cancelling a policy) go through
 explicit server actions, not the read-only models above - see ADR 0010
 section 4. Each calls a SECURITY DEFINER Postgres function
@@ -56,6 +74,12 @@ wizard, rather than writing to the pipeline tables directly.
         'views/luxauto_policy_cancellation_views.xml',
         'views/luxauto_premium_waterfall_views.xml',
         'views/luxauto_settlement_views.xml',
+        'views/luxauto_policy_reinstatement_views.xml',
+        'views/luxauto_short_rate_factor_views.xml',
+        'views/luxauto_decision_log_views.xml',
+        'views/luxauto_application_referral_views.xml',
+        'views/luxauto_quote_commission_views.xml',
+        'views/luxauto_quote_rating_views.xml',
         'views/luxauto_bind_wizard_views.xml',
         'views/luxauto_menus.xml',
     ],

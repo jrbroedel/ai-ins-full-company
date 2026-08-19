@@ -112,6 +112,16 @@ import psycopg2
 # and the CHECK/EXCLUDE constraints are not categories this parser tracks (they
 # are covered by tests/0028).
 #
+# ADR 0029's read-side visibility batch moves exactly one count: +6 views
+# (luxauto_policy_reinstatement_view, luxauto_short_rate_factor_view,
+# luxauto_decision_log_view, luxauto_application_referral_view,
+# luxauto_quote_commission_view, luxauto_quote_rating_view) - the Odoo read side
+# for ADRs 0024-0028, deferred and batched here. Each is a plain
+# CREATE OR REPLACE VIEW plus a GRANT SELECT (the GRANT is not a category this
+# parser tracks). No new table, type, function, trigger or SET NOT NULL column:
+# these views only read tables and functions that already exist. Behaviour is
+# covered by tests/0029.
+#
 # This is the acceptance test for the parser itself - if the parser's counts don't
 # match this, that's a parser bug to fix, not a schema surprise, and the
 # parser is not trusted against a live database until it does. Updated by
@@ -122,7 +132,7 @@ BASELINE = {
     "tables": 33,
     "types": 20,
     "functions": 47,
-    "views": 7,
+    "views": 13,
     "triggers": 24,
     "not_null_columns": 8,
 }

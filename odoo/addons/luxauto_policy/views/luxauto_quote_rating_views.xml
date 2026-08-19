@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_luxauto_quote_rating_list" model="ir.ui.view">
+        <field name="name">luxauto.quote.rating.list</field>
+        <field name="model">luxauto.quote.rating</field>
+        <field name="arch" type="xml">
+            <list create="false" edit="false" delete="false" import="false">
+                <field name="quote_id"/>
+                <field name="quote_status"/>
+                <field name="rating_class_label"/>
+                <field name="agreed_value"/>
+                <field name="base_rate_per_100"/>
+                <field name="territory_factor"/>
+                <field name="indicative_premium"/>
+                <field name="premium_amount"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_luxauto_quote_rating_form" model="ir.ui.view">
+        <field name="name">luxauto.quote.rating.form</field>
+        <field name="model">luxauto.quote.rating</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false" delete="false">
+                <sheet>
+                    <group>
+                        <group string="Rating Basis">
+                            <field name="rating_model"/>
+                            <field name="rating_class_label"/>
+                            <field name="rating_vehicle_class"/>
+                            <field name="agreed_value"/>
+                            <field name="value_band_lower"/>
+                            <field name="value_band_upper"/>
+                        </group>
+                        <group string="Computation">
+                            <field name="base_rate_per_100"/>
+                            <field name="base_loss_cost"/>
+                            <field name="territory_state"/>
+                            <field name="territory_factor"/>
+                            <field name="gross_up_divisor"/>
+                            <field name="indicative_premium"/>
+                        </group>
+                    </group>
+                    <group string="Quote">
+                        <field name="quote_id"/>
+                        <field name="application_id"/>
+                        <field name="premium_amount"/>
+                        <field name="quote_status"/>
+                        <field name="quoted_at"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_luxauto_quote_rating" model="ir.actions.act_window">
+        <field name="name">Quote Ratings</field>
+        <field name="res_model">luxauto.quote.rating</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

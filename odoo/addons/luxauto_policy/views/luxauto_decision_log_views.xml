@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_luxauto_decision_log_list" model="ir.ui.view">
+        <field name="name">luxauto.decision.log.list</field>
+        <field name="model">luxauto.decision.log</field>
+        <field name="arch" type="xml">
+            <list create="false" edit="false" delete="false" import="false">
+                <field name="application_id"/>
+                <field name="rule_id"/>
+                <field name="reason_code"/>
+                <field name="action_taken"/>
+                <field name="fired"/>
+                <field name="decided_by"/>
+                <field name="created_at"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_luxauto_decision_log_form" model="ir.ui.view">
+        <field name="name">luxauto.decision.log.form</field>
+        <field name="model">luxauto.decision.log</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false" delete="false">
+                <sheet>
+                    <group>
+                        <group string="Rule">
+                            <field name="rule_id"/>
+                            <field name="reason_code"/>
+                            <field name="action_taken"/>
+                            <field name="fired"/>
+                        </group>
+                        <group string="Audit">
+                            <field name="application_id"/>
+                            <field name="decided_by"/>
+                            <field name="created_at"/>
+                            <field name="log_id"/>
+                        </group>
+                    </group>
+                    <group string="Notes">
+                        <field name="notes" nolabel="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_luxauto_decision_log" model="ir.actions.act_window">
+        <field name="name">Referral Decision Log</field>
+        <field name="res_model">luxauto.decision.log</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

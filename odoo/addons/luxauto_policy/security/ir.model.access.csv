@@ -5,6 +5,12 @@ access_luxauto_policy_vehicle,luxauto.policy.vehicle,model_luxauto_policy_vehicl
 access_luxauto_policy_driver,luxauto.policy.driver,model_luxauto_policy_driver,base.group_user,1,0,0,0
 access_luxauto_policy_cancellation,luxauto.policy.cancellation,model_luxauto_policy_cancellation,base.group_user,1,0,0,0
 access_luxauto_premium_waterfall,luxauto.premium.waterfall,model_luxauto_premium_waterfall,base.group_user,1,0,0,0
+access_luxauto_policy_reinstatement,luxauto.policy.reinstatement,model_luxauto_policy_reinstatement,base.group_user,1,0,0,0
+access_luxauto_short_rate_factor,luxauto.short.rate.factor,model_luxauto_short_rate_factor,base.group_user,1,0,0,0
+access_luxauto_decision_log,luxauto.decision.log,model_luxauto_decision_log,base.group_user,1,0,0,0
+access_luxauto_application_referral,luxauto.application.referral,model_luxauto_application_referral,base.group_user,1,0,0,0
+access_luxauto_quote_commission,luxauto.quote.commission,model_luxauto_quote_commission,base.group_user,1,0,0,0
+access_luxauto_quote_rating,luxauto.quote.rating,model_luxauto_quote_rating,base.group_user,1,0,0,0
 access_luxauto_bind_wizard,luxauto.bind.wizard,model_luxauto_bind_wizard,base.group_user,1,1,1,1
 access_luxauto_cancel_wizard,luxauto.cancel.wizard,model_luxauto_cancel_wizard,base.group_user,1,1,1,1
 access_luxauto_settlement,luxauto.settlement,model_luxauto_settlement,luxauto_policy.group_settlement_viewer,1,0,0,0

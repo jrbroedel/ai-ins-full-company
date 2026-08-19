@@ -42,11 +42,50 @@
               action="action_luxauto_policy_cancellation"
               sequence="26"/>
 
+    <!-- ADR 0029 read-side visibility. Standalone siblings under the same root,
+         consistent with the flat, no-notebook house style every other read view
+         here follows; the referral summary and detail sit next to each other. -->
+    <menuitem id="menu_luxauto_policy_reinstatement"
+              name="Policy Reinstatements"
+              parent="menu_luxauto_root"
+              action="action_luxauto_policy_reinstatement"
+              sequence="27"/>
+
+    <menuitem id="menu_luxauto_short_rate_factor"
+              name="Short-Rate Factors"
+              parent="menu_luxauto_root"
+              action="action_luxauto_short_rate_factor"
+              sequence="28"/>
+
     <menuitem id="menu_luxauto_premium_waterfall"
               name="Premium Waterfall"
               parent="menu_luxauto_root"
               action="action_luxauto_premium_waterfall"
               sequence="30"/>
+
+    <menuitem id="menu_luxauto_application_referral"
+              name="Application Referrals"
+              parent="menu_luxauto_root"
+              action="action_luxauto_application_referral"
+              sequence="32"/>
+
+    <menuitem id="menu_luxauto_decision_log"
+              name="Referral Decision Log"
+              parent="menu_luxauto_root"
+              action="action_luxauto_decision_log"
+              sequence="34"/>
+
+    <menuitem id="menu_luxauto_quote_commission"
+              name="Quote Commissions"
+              parent="menu_luxauto_root"
+              action="action_luxauto_quote_commission"
+              sequence="36"/>
+
+    <menuitem id="menu_luxauto_quote_rating"
+              name="Quote Ratings"
+              parent="menu_luxauto_root"
+              action="action_luxauto_quote_rating"
+              sequence="38"/>
 
     <!-- groups= hides the menu item itself for non-members, on top of the
          model-level access rights (ir.model.access.csv) that are the real

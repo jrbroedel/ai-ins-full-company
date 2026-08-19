@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_luxauto_short_rate_factor_list" model="ir.ui.view">
+        <field name="name">luxauto.short.rate.factor.list</field>
+        <field name="model">luxauto.short.rate.factor</field>
+        <field name="arch" type="xml">
+            <list create="false" edit="false" delete="false" import="false">
+                <field name="state"/>
+                <field name="factor"/>
+                <field name="basis"/>
+                <field name="applies_to"/>
+                <field name="elapsed_fraction_from"/>
+                <field name="elapsed_fraction_to"/>
+                <field name="effective_from"/>
+                <field name="effective_to"/>
+                <field name="serff_filing_tracking_number"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_luxauto_short_rate_factor_form" model="ir.ui.view">
+        <field name="name">luxauto.short.rate.factor.form</field>
+        <field name="model">luxauto.short.rate.factor</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false" delete="false">
+                <sheet>
+                    <group>
+                        <group string="Factor">
+                            <field name="state"/>
+                            <field name="factor"/>
+                            <field name="basis"/>
+                            <field name="applies_to"/>
+                            <field name="program_id"/>
+                        </group>
+                        <group string="Applicability">
+                            <field name="elapsed_fraction_from"/>
+                            <field name="elapsed_fraction_to"/>
+                            <field name="effective_from"/>
+                            <field name="effective_to"/>
+                        </group>
+                    </group>
+                    <group string="Filing">
+                        <field name="serff_filing_tracking_number"/>
+                        <field name="rate_manual_reference"/>
+                        <field name="short_rate_factor_id"/>
+                        <field name="created_at"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_luxauto_short_rate_factor" model="ir.actions.act_window">
+        <field name="name">Short-Rate Factors</field>
+        <field name="res_model">luxauto.short.rate.factor</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>
