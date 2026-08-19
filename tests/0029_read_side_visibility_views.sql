@@ -105,8 +105,8 @@ BEGIN
   VALUES (v_app, 'Driver ' || p_tag, DATE '1980-01-01') RETURNING driver_id INTO v_driver;
 
   INSERT INTO quotes
-    (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-  VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'bound', 'retail', 10)
+    (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+  VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'bound', 'retail', 10, '0029-fixture')
   RETURNING quote_id INTO v_quote1;
 
   INSERT INTO policies (quote_id, policy_number, effective_range, status)
@@ -130,8 +130,8 @@ BEGIN
   FROM policy_cancellations pc WHERE pc.cancellation_id = mk_reinstatement.cancellation_id;
 
   INSERT INTO quotes
-    (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-  VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'issued', 'retail', 10)
+    (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+  VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'issued', 'retail', 10, '0029-fixture')
   RETURNING quote_id INTO v_quote2;
 
   new_policy_id := reinstate_policy(v_quote2, cancellation_id, new_policy_number, 'ATTEST-0029-' || p_tag, '0029-suite');
@@ -356,8 +356,8 @@ DECLARE v_app UUID; v_rating UUID; v_quote UUID; r RECORD;
 BEGIN
   BEGIN
     SELECT * FROM pg_temp.mk_chain('T5', 'OR') INTO v_app, v_rating;
-    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-    VALUES (v_app, v_rating, 25000, '{}'::jsonb, 'issued', 'wholesale', 12)
+    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+    VALUES (v_app, v_rating, 25000, '{}'::jsonb, 'issued', 'wholesale', 12, '0029-fixture')
     RETURNING quote_id INTO v_quote;
 
     SELECT * INTO r FROM luxauto_quote_commission_view WHERE quote_id = v_quote;
@@ -392,8 +392,8 @@ BEGIN
     -- The real v1 breakdown, taken from the function itself (STABLE, no writes).
     SELECT breakdown INTO v_basis FROM compute_indicative_premium('exotic', 600000, 'T0');
 
-    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-    VALUES (v_app, v_rating, 10754.72, v_basis, 'issued', 'retail', 10)
+    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+    VALUES (v_app, v_rating, 10754.72, v_basis, 'issued', 'retail', 10, '0029-fixture')
     RETURNING quote_id INTO v_quote_v1;
 
     SELECT * INTO r FROM luxauto_quote_rating_view WHERE quote_id = v_quote_v1;
@@ -411,8 +411,8 @@ BEGIN
     END IF;
 
     -- A non-v1 basis: every unpacked field is NULL, no error.
-    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-    VALUES (v_app, v_rating, 9999, '{}'::jsonb, 'draft', 'retail', 10)
+    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+    VALUES (v_app, v_rating, 9999, '{}'::jsonb, 'draft', 'retail', 10, '0029-fixture')
     RETURNING quote_id INTO v_quote_empty;
 
     SELECT * INTO r FROM luxauto_quote_rating_view WHERE quote_id = v_quote_empty;

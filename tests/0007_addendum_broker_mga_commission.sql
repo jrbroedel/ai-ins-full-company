@@ -53,16 +53,16 @@ BEGIN
     SELECT * FROM pg_temp.mk_chain('T1', 'CA') INTO v_app, v_rating;
 
     -- 0% accepted, MGA = 30.
-    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-    VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'retail', 0)
+    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+    VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'retail', 0, '0007A-fixture')
     RETURNING mga_commission_rate INTO v_mga;
     IF v_mga IS DISTINCT FROM 30.00 THEN
       RAISE EXCEPTION '0007A-T1 FAILED: broker 0%% gave MGA %, expected 30.00', v_mga;
     END IF;
 
     -- Exactly 15% accepted (boundary), MGA = 15.
-    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-    VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'wholesale', 15)
+    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+    VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'wholesale', 15, '0007A-fixture')
     RETURNING mga_commission_rate INTO v_mga;
     IF v_mga IS DISTINCT FROM 15.00 THEN
       RAISE EXCEPTION '0007A-T1 FAILED: broker 15%% gave MGA %, expected 15.00', v_mga;
@@ -71,8 +71,8 @@ BEGIN
     -- Just over 15% rejected.
     v_ok := false;
     BEGIN
-      INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-      VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'retail', 15.01);
+      INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+      VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'retail', 15.01, '0007A-fixture');
     EXCEPTION WHEN OTHERS THEN v_ok := true; v_err := SQLERRM;
     END;
     IF NOT v_ok OR v_err NOT LIKE '%quotes_broker_commission_rate_ck%' THEN
@@ -82,8 +82,8 @@ BEGIN
     -- 16% likewise rejected.
     v_ok := false;
     BEGIN
-      INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-      VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'retail', 16);
+      INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+      VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'retail', 16, '0007A-fixture');
     EXCEPTION WHEN OTHERS THEN v_ok := true; v_err := SQLERRM;
     END;
     IF NOT v_ok OR v_err NOT LIKE '%quotes_broker_commission_rate_ck%' THEN
@@ -107,8 +107,8 @@ BEGIN
   BEGIN
     SELECT * FROM pg_temp.mk_chain('T2', 'NV') INTO v_app, v_rating;
 
-    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-    VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'retail', 10)
+    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+    VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'retail', 10, '0007A-fixture')
     RETURNING mga_commission_rate INTO v_mga;
     IF v_mga IS DISTINCT FROM 20.00 THEN
       RAISE EXCEPTION '0007A-T2 FAILED: broker 10%% gave MGA %, expected 20.00', v_mga;
@@ -117,8 +117,8 @@ BEGIN
     -- Trying to set mga_commission_rate directly is refused (GENERATED ALWAYS).
     v_ok := false;
     BEGIN
-      INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, mga_commission_rate)
-      VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'retail', 10, 5);
+      INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, mga_commission_rate, quoted_by)
+      VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'retail', 10, 5, '0007A-fixture');
     EXCEPTION WHEN OTHERS THEN v_ok := true; v_err := SQLERRM;
     END;
     IF NOT v_ok OR v_err NOT LIKE '%mga_commission_rate%' THEN
@@ -145,8 +145,8 @@ BEGIN
     -- NULL channel rejected (NOT NULL).
     v_ok := false;
     BEGIN
-      INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-      VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', NULL, 10);
+      INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+      VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', NULL, 10, '0007A-fixture');
     EXCEPTION WHEN OTHERS THEN v_ok := true; v_err := SQLERRM;
     END;
     IF NOT v_ok OR v_err NOT LIKE '%broker_channel%' THEN
@@ -156,8 +156,8 @@ BEGIN
     -- A value outside the enum rejected.
     v_ok := false;
     BEGIN
-      INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-      VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'direct', 10);
+      INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+      VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'direct', 10, '0007A-fixture');
     EXCEPTION WHEN OTHERS THEN v_ok := true; v_err := SQLERRM;
     END;
     IF NOT v_ok OR v_err NOT LIKE '%invalid input value for enum broker_channel_t%' THEN
@@ -165,9 +165,9 @@ BEGIN
     END IF;
 
     -- Both valid values accepted.
-    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-    VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'retail', 10),
-           (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'wholesale', 10);
+    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+    VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'retail', 10, '0007A-fixture'),
+           (v_app, v_rating, 10000, '{}'::jsonb, 'draft', 'wholesale', 10, '0007A-fixture');
     SELECT count(*) INTO v_n FROM quotes WHERE application_id = v_app;
     IF v_n <> 2 THEN
       RAISE EXCEPTION '0007A-T3 FAILED: expected 2 accepted quotes (retail + wholesale), got %', v_n;
@@ -192,8 +192,8 @@ BEGIN
   BEGIN
     SELECT * FROM pg_temp.mk_chain('T4', 'OR') INTO v_app, v_rating;
 
-    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate)
-    VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'issued', 'wholesale', 12)
+    INSERT INTO quotes (application_id, state_rating_table_record_id, premium_amount, rating_basis, status, broker_channel, broker_commission_rate, quoted_by)
+    VALUES (v_app, v_rating, 10000, '{}'::jsonb, 'issued', 'wholesale', 12, '0007A-fixture')
     RETURNING quote_id INTO v_quote;
 
     v_policy := bind_policy(v_quote, 'POL-0007A-T4', '0007A-suite');

@@ -112,6 +112,14 @@ import psycopg2
 # and the CHECK/EXCLUDE constraints are not categories this parser tracks (they
 # are covered by tests/0028).
 #
+# ADR 0030's quote-creation wiring moves two counts: +1 function (create_quote,
+# the first real write path into quotes, which rates the quote via
+# compute_indicative_premium() as it creates it) and +1 SET NOT NULL column
+# (quotes.quoted_by, the quote-creation audit column create_quote persists
+# p_performed_by into - added by ALTER then SET NOT NULL under a guard, the same
+# idiom as the ADR 0007 addendum's broker columns). It adds no table, type, view
+# or trigger. Behaviour is covered by tests/0030.
+#
 # ADR 0029's read-side visibility batch moves exactly one count: +6 views
 # (luxauto_policy_reinstatement_view, luxauto_short_rate_factor_view,
 # luxauto_decision_log_view, luxauto_application_referral_view,
@@ -131,10 +139,10 @@ import psycopg2
 BASELINE = {
     "tables": 33,
     "types": 20,
-    "functions": 47,
+    "functions": 48,
     "views": 13,
     "triggers": 24,
-    "not_null_columns": 8,
+    "not_null_columns": 9,
 }
 
 # Parsed and verified separately from PATTERNS/DB_QUERIES: a column isn't a

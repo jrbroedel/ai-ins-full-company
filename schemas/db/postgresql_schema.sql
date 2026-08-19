@@ -1776,6 +1776,12 @@ CREATE TABLE IF NOT EXISTS quotes (
                                                          -- attachment referenced in the registry schema
   status                            TEXT NOT NULL DEFAULT 'draft'
                                        CHECK (status IN ('draft', 'issued', 'bound', 'expired', 'declined')),
+  -- ADR 0030: who created the quote. A normal audit column, the same provenance
+  -- every other write path records (policy_cancellations.performed_by,
+  -- policy_reinstatements.performed_by): create_quote() persists its
+  -- p_performed_by here. Added by ALTER too (below) so it lands on an already-
+  -- created quotes table, same idiom as the ADR 0007 addendum's broker columns.
+  quoted_by                         TEXT NOT NULL,
   quoted_at                         TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at                        TIMESTAMPTZ
 );
@@ -1822,6 +1828,135 @@ BEGIN
   ALTER TABLE quotes ALTER COLUMN broker_channel SET NOT NULL;
   ALTER TABLE quotes ALTER COLUMN broker_commission_rate SET NOT NULL;
 END $$;
+
+-- ADR 0030: quoted_by, the quote-creation audit column, on an already-created
+-- quotes table. Same discipline as the broker columns above - ADD nullable, then
+-- SET NOT NULL under a guard that fails loud rather than inventing a creator for
+-- a pre-existing row that lacks one. quotes is empty today, so this applies
+-- cleanly; a real row without a creator would refuse with a clear message.
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS quoted_by TEXT;
+DO $$
+DECLARE v_missing INTEGER;
+BEGIN
+  SELECT count(*) INTO v_missing FROM quotes WHERE quoted_by IS NULL;
+  IF v_missing > 0 THEN
+    RAISE EXCEPTION 'ADR 0030: cannot enforce NOT NULL on quotes.quoted_by - % row(s) have a null quoted_by', v_missing
+      USING HINT = 'Every quote records who created it. Backfill quoted_by for these rows, then re-run this file. This schema will not invent a creator to make itself apply.';
+  END IF;
+  ALTER TABLE quotes ALTER COLUMN quoted_by SET NOT NULL;
+END $$;
+
+-- ============================================================================
+-- QUOTE CREATION (ADR 0030)
+-- The first real write path into quotes. Until now a quote was only ever
+-- INSERTed by test fixtures; ADR 0028 built compute_indicative_premium() and
+-- named quotes.premium_amount / quotes.rating_basis as its destination, but
+-- nothing called it on quote creation, so every real quote's rating view read
+-- all-NULL. This wires the two together.
+--
+-- A thin composition, the same idiom as bind_policy / reinstate_policy: it does
+-- NOT reimplement rating. compute_indicative_premium() remains the single source
+-- of both the premium and the breakdown, and its own guards are surfaced
+-- unchanged rather than duplicated here - a below-floor risk
+-- (RATING_BELOW_AGREED_VALUE_FLOOR), an unmapped category
+-- (RATING_CLASS_NOT_CONFIGURED_FOR_CATEGORY) and - the resolved failure mode -
+-- an unconfigured territory (TERRITORY_FACTOR_NOT_CONFIGURED) each propagate out
+-- of this function and NO quote row is written. Fail-loud, no partial state: the
+-- same discipline short_rate_factor() and territory_factor() already follow, and
+-- consistent with the FK to state_rating_table_versions that already blocks a
+-- quote for an un-onboarded state. A state is not ready for quoting until BOTH
+-- its state_rating_table_versions row AND its territory_factors row exist (ADR
+-- 0030): this function is where that second, previously-implicit precondition
+-- becomes observable.
+--
+-- Single vehicle only. Rating v1 is explicitly single-vehicle (ADR 0028), and a
+-- quote reaches vehicle data only through its application (1:N). Zero or 2+
+-- vehicles fail loud rather than pick one silently or aggregate (aggregation is
+-- deferred out of v1) - QUOTE_RATING_MULTI_VEHICLE_UNSUPPORTED / _NO_VEHICLE.
+--
+-- p_agreed_value for the rating call is the vehicle's current_appraised_value:
+-- there is no separate numeric agreed-value column (agreed_value_requested is a
+-- boolean flag), and this is the same value ADR 0028's tests and evaluate_el01()
+-- already use. The state driving the territory lookup is the vehicle's
+-- garaging_state (== applications.garaging_state, which is keyed off it).
+--
+-- Scope note: this pass wires RATING only. The referral engine
+-- (evaluate_application_referrals / evaluate_el01 and the rest) is also unwired
+-- in production and is a separate follow-up - referral evaluation belongs at
+-- application submission, a different moment than quote creation. Until that
+-- lands, EL-01's audited below-floor decline does not fire; only
+-- compute_indicative_premium()'s own hard RATING_BELOW_AGREED_VALUE_FLOOR guard
+-- protects quote creation, which is sufficient to stop a below-floor quote here.
+--
+-- The created quote is 'issued' (rated and bindable): ADR 0028 frames a clean
+-- rated risk as final and bindable, bind_policy() requires 'issued', and there
+-- is no separate issue step - creating it 'draft' would strand it with nothing
+-- able to advance or bind it. A later draft->issued acceptance lifecycle, if
+-- ever wanted, is a separate concern.
+--
+-- p_performed_by is persisted into quotes.quoted_by, the same provenance every
+-- other write function records (cancel_policy/reinstate_policy's performed_by) -
+-- an accepted-but-discarded argument would be a real inconsistency, so the column
+-- carries it rather than the function dropping it (ADR 0030).
+CREATE OR REPLACE FUNCTION create_quote(
+  p_application_id UUID,
+  p_broker_channel broker_channel_t,
+  p_broker_commission_rate NUMERIC,
+  p_state_rating_table_record_id UUID,
+  p_program_id UUID,
+  p_performed_by TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_garaging_state CHAR(2);
+  v_vehicle_count INT;
+  v_category vehicle_category_t;
+  v_appraised NUMERIC;
+  v_veh_state CHAR(2);
+  v_premium NUMERIC;
+  v_basis JSONB;
+  v_quote_id UUID;
+BEGIN
+  SELECT garaging_state INTO v_garaging_state
+  FROM applications WHERE application_id = p_application_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'QUOTE_APPLICATION_NOT_FOUND: application % does not exist', p_application_id;
+  END IF;
+
+  -- Single-vehicle only (ADR 0028 v1 scope). Fail loud on 0 or 2+.
+  SELECT count(*) INTO v_vehicle_count FROM vehicles WHERE application_id = p_application_id;
+  IF v_vehicle_count = 0 THEN
+    RAISE EXCEPTION 'QUOTE_RATING_NO_VEHICLE: application % has no vehicle to rate', p_application_id
+      USING HINT = 'A quote is rated from exactly one vehicle in v1; this application has none.';
+  ELSIF v_vehicle_count > 1 THEN
+    RAISE EXCEPTION 'QUOTE_RATING_MULTI_VEHICLE_UNSUPPORTED: application % has % vehicles; rating v1 rates exactly one', p_application_id, v_vehicle_count
+      USING HINT = 'Multi-vehicle aggregation is deferred out of rating v1 (ADR 0028). Rate manually.';
+  END IF;
+
+  SELECT vehicle_category, current_appraised_value, garaging_state
+    INTO v_category, v_appraised, v_veh_state
+  FROM vehicles WHERE application_id = p_application_id;
+
+  -- Thin call: the number and the breakdown both come from here, and every one
+  -- of this function's guards propagates out un-caught (below-floor, unmapped
+  -- category, unconfigured territory) - no quote is written when it raises.
+  SELECT indicative_premium, breakdown INTO v_premium, v_basis
+  FROM compute_indicative_premium(v_category, v_appraised, v_veh_state);
+
+  -- rating_basis stored verbatim - no reshaping. The ADR 0029 rating view reads
+  -- exactly the v1 keys this breakdown carries.
+  INSERT INTO quotes (
+    application_id, state_rating_table_record_id, program_id,
+    premium_amount, rating_basis, status,
+    broker_channel, broker_commission_rate, quoted_by
+  ) VALUES (
+    p_application_id, p_state_rating_table_record_id, p_program_id,
+    v_premium, v_basis, 'issued',
+    p_broker_channel, p_broker_commission_rate, p_performed_by
+  ) RETURNING quote_id INTO v_quote_id;
+
+  RETURN v_quote_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ============================================================================
 -- POLICIES (ADR 0010)
@@ -4547,6 +4682,10 @@ GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID, NUMERIC, TIMESTAMPTZ
 GRANT EXECUTE ON FUNCTION calculate_endorsement_waterfall(UUID) TO odoo;
 -- ADR 0024 widened this to a four-argument form (optional inception date); the
 -- three-argument grant is gone with the three-argument function.
+-- ADR 0030: the first quote-creation write path, rating the quote via
+-- compute_indicative_premium() as it creates it. Granted so an Odoo quote-
+-- creation wizard (a later step, not built here) can call it, same as bind.
+GRANT EXECUTE ON FUNCTION create_quote(UUID, broker_channel_t, NUMERIC, UUID, UUID, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION bind_policy(UUID, TEXT, TEXT, TIMESTAMPTZ) TO odoo;
 -- ADR 0023: the reinstatement-linking step the Odoo wizard calls after bind.
 GRANT EXECUTE ON FUNCTION link_reinstated_policy(UUID, UUID, TEXT) TO odoo;

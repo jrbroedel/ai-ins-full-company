@@ -42,8 +42,8 @@ BEGIN
 
   INSERT INTO quotes
     (application_id, state_rating_table_record_id, premium_amount, rating_basis, status,
-     broker_channel, broker_commission_rate)
-  VALUES (app_id, v_rating, 10000, '{}'::jsonb, 'issued', 'retail', 10)
+     broker_channel, broker_commission_rate, quoted_by)
+  VALUES (app_id, v_rating, 10000, '{}'::jsonb, 'issued', 'retail', 10, '0027-fixture')
   RETURNING quotes.quote_id INTO quote_id;
 END;
 $fx$ LANGUAGE plpgsql;
