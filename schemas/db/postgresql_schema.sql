@@ -773,6 +773,219 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ============================================================================
+-- UNDERWRITER SUPERVISED RELEASE / REFERRAL OVERRIDE (ADR 0032)
+-- The referral gate (ADR 0031) permanently blocks any application worse than
+-- AUTO_PROCEED_WITH_FLAG. The taxonomy says a MANUAL_REVIEW_* application is
+-- still quotable - just not automatically - so a human underwriter must be able
+-- to supervise-release it. This adds that override path AROUND the gate; it does
+-- not change what triggers a referral (the rules/orchestrator/submit_application/
+-- current_referral_action are untouched).
+--
+-- THE HARD CONSTRAINT, structurally enforced: HARD_DECLINE_COMPLIANCE
+-- (sanctions/compliance) is NEVER overridable by anyone. A sanctions hit has no
+-- human discretion, and an AI-driven decline released with no human in the loop
+-- is exactly the fact pattern that draws regulatory scrutiny. This is enforced by
+-- the whitelist CHECK on referral_overrides below (a row overriding it CANNOT be
+-- inserted) AND by an explicit guard in create_quote() - belt and suspenders.
+-- DECLINE_RECOMMENDED is different: a human confirming or reversing a
+-- recommendation is normal, so it IS overridable.
+-- ============================================================================
+
+-- The two authority tiers the referral matrix actually distinguishes - no finer.
+-- An enum, matching broker_channel_t / cancellation_type_t (small fixed sets).
+DO $$ BEGIN
+  CREATE TYPE underwriter_authority_t AS ENUM ('standard', 'senior');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+-- The first backed-identity concept in the schema: a small MUTABLE reference
+-- roster (unlike the append-only audit tables - people join, leave, get
+-- promoted). `active` closes a real hole: a departed underwriter must not retain
+-- authorization power. Deliberately minimal - no HR/roster system.
+CREATE TABLE IF NOT EXISTS underwriters (
+  underwriter_id   UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name             TEXT NOT NULL,
+  authority_level  underwriter_authority_t NOT NULL,
+  active           BOOLEAN NOT NULL DEFAULT true,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The smallest controlled write path onto the roster (same idiom as
+-- add_program_participant_with_reallocation). Promotion / deactivation (updating
+-- authority_level / active) is a trivial future update_underwriter(), not this
+-- pass. NOT schema-seeded: underwriters are operational people, not fixed rate
+-- content.
+CREATE OR REPLACE FUNCTION add_underwriter(p_name TEXT, p_authority_level underwriter_authority_t)
+RETURNS UUID AS $$
+DECLARE v_id UUID;
+BEGIN
+  IF p_name IS NULL OR length(btrim(p_name)) = 0 THEN
+    RAISE EXCEPTION 'ADD_UNDERWRITER_NAME_REQUIRED: an underwriter must have a name';
+  END IF;
+  INSERT INTO underwriters (name, authority_level)
+  VALUES (p_name, p_authority_level) RETURNING underwriter_id INTO v_id;
+  RETURN v_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- The supervised-release audit record. Append-only, like decision_log /
+-- policy_reinstatements. The whitelist CHECK is the STRUCTURAL guarantee that
+-- HARD_DECLINE_COMPLIANCE is never overridable - a row overriding it cannot
+-- physically be inserted, and the whitelist (not a <> blacklist) also excludes
+-- INFORMATION_REQUEST (a data-completeness gate, resolved by re-evaluation, not a
+-- risk override) and the AUTO levels, and can't be widened by a future enum value
+-- by accident. evaluated_at pins the override to the SPECIFIC evaluation the
+-- underwriter reviewed: a later re-evaluation moves current_referral_evaluated_at
+-- and this override stops satisfying the guard, so an override can never clear a
+-- newer, unreviewed disposition (even one with the same action value).
+CREATE TABLE IF NOT EXISTS referral_overrides (
+  override_id                   UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  application_id                UUID NOT NULL REFERENCES applications(application_id) ON DELETE CASCADE,
+  overridden_action             referral_action_t NOT NULL,
+  evaluated_at                  TIMESTAMPTZ NOT NULL,
+  reason                        TEXT NOT NULL,
+  authorized_by_underwriter_id  UUID NOT NULL REFERENCES underwriters(underwriter_id),
+  created_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- HARD_DECLINE_COMPLIANCE is absent by construction: this is the hard constraint.
+  CONSTRAINT referral_overrides_overridable_ck
+    CHECK (overridden_action IN ('MANUAL_REVIEW_REQUIRED', 'MANUAL_REVIEW_SENIOR', 'DECLINE_RECOMMENDED')),
+  -- A supervised override with no stated reason defeats the point of a human in the loop.
+  CONSTRAINT referral_overrides_reason_nonblank_ck
+    CHECK (length(btrim(reason)) > 0)
+);
+CREATE INDEX IF NOT EXISTS idx_referral_overrides_application ON referral_overrides(application_id);
+
+-- Append-only: no UPDATE, no DELETE, ever - same discipline as decision_log.
+CREATE OR REPLACE FUNCTION reject_referral_overrides_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'referral_overrides is append-only: % is not permitted', TG_OP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER referral_overrides_no_update
+  BEFORE UPDATE ON referral_overrides
+  FOR EACH ROW EXECUTE FUNCTION reject_referral_overrides_mutation();
+
+CREATE OR REPLACE TRIGGER referral_overrides_no_delete
+  BEFORE DELETE ON referral_overrides
+  FOR EACH ROW EXECUTE FUNCTION reject_referral_overrides_mutation();
+
+-- Authority enforcement, STRUCTURAL (a plain CHECK can't subquery underwriters):
+-- MANUAL_REVIEW_SENIOR requires a senior; an inactive authorizer is refused; an
+-- unknown authorizer is refused (the FK would also catch it, but this gives a
+-- clear message). Runs on every INSERT - including a direct one that bypasses
+-- authorize_referral_override() - so it is the real enforcement, with the
+-- function's pre-check below just providing a friendlier early error.
+CREATE OR REPLACE FUNCTION enforce_referral_override_authority()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_level underwriter_authority_t;
+  v_active BOOLEAN;
+BEGIN
+  SELECT authority_level, active INTO v_level, v_active
+  FROM underwriters WHERE underwriter_id = NEW.authorized_by_underwriter_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'OVERRIDE_AUTHORIZER_UNKNOWN: underwriter % does not exist', NEW.authorized_by_underwriter_id;
+  END IF;
+  IF NOT v_active THEN
+    RAISE EXCEPTION 'OVERRIDE_AUTHORIZER_INACTIVE: underwriter % is not active and cannot authorize overrides', NEW.authorized_by_underwriter_id;
+  END IF;
+  IF NEW.overridden_action = 'MANUAL_REVIEW_SENIOR'::referral_action_t AND v_level <> 'senior' THEN
+    RAISE EXCEPTION 'OVERRIDE_SENIOR_AUTHORITY_REQUIRED: overriding MANUAL_REVIEW_SENIOR requires a senior underwriter, but % is %', NEW.authorized_by_underwriter_id, v_level;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER referral_overrides_authority_check
+  BEFORE INSERT ON referral_overrides
+  FOR EACH ROW EXECUTE FUNCTION enforce_referral_override_authority();
+
+-- The evaluation timestamp of the current disposition: max(created_at) over the
+-- latest row per rule, exactly the evaluated_at luxauto_application_referral_view
+-- (ADR 0029) reports. NULL when never evaluated. The staleness pin reads this.
+CREATE OR REPLACE FUNCTION current_referral_evaluated_at(p_application_id UUID)
+RETURNS TIMESTAMPTZ AS $$
+  WITH latest_per_rule AS (
+    SELECT DISTINCT ON (d.rule_id) d.created_at
+    FROM decision_log d
+    WHERE d.application_id = p_application_id
+    ORDER BY d.rule_id, d.created_at DESC
+  )
+  SELECT max(created_at) FROM latest_per_rule;
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Record a supervised override: the single controlled write path onto
+-- referral_overrides. Validates that the override targets the application's ACTUAL
+-- current disposition, refuses a compliance decline with a clear message (the
+-- table CHECK is the structural backstop), pins the override to the current
+-- evaluation, and does a friendly authority pre-check (the trigger is the real
+-- enforcement). p_underwriter_id is a FK into underwriters - the ONE deliberately
+-- backed-identity argument in the system; every other function's free-text
+-- performed_by/decided_by convention is untouched (ADR 0032), because override
+-- authorization is the one action whose whole point is a specific, authority-
+-- bearing human standing behind it.
+CREATE OR REPLACE FUNCTION authorize_referral_override(
+  p_application_id UUID,
+  p_overridden_action referral_action_t,
+  p_reason TEXT,
+  p_underwriter_id UUID
+) RETURNS UUID AS $$
+DECLARE
+  v_current referral_action_t;
+  v_eval TIMESTAMPTZ;
+  v_level underwriter_authority_t;
+  v_active BOOLEAN;
+  v_override_id UUID;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM applications WHERE application_id = p_application_id) THEN
+    RAISE EXCEPTION 'OVERRIDE_APPLICATION_NOT_FOUND: application % does not exist', p_application_id;
+  END IF;
+
+  v_current := current_referral_action(p_application_id);
+  IF v_current IS NULL THEN
+    RAISE EXCEPTION 'OVERRIDE_APPLICATION_NOT_EVALUATED: application % has no referral evaluation to override', p_application_id;
+  END IF;
+  IF v_current <= 'AUTO_PROCEED_WITH_FLAG'::referral_action_t THEN
+    RAISE EXCEPTION 'OVERRIDE_NOTHING_TO_OVERRIDE: application % is already clear (disposition %) - no override needed', p_application_id, v_current;
+  END IF;
+  IF v_current = 'HARD_DECLINE_COMPLIANCE'::referral_action_t THEN
+    RAISE EXCEPTION 'OVERRIDE_COMPLIANCE_DECLINE_FORBIDDEN: a HARD_DECLINE_COMPLIANCE (sanctions/compliance) disposition is never overridable by anyone'
+      USING HINT = 'Structurally enforced by the referral_overrides CHECK as well - no such row can be recorded.';
+  END IF;
+  IF p_overridden_action IS DISTINCT FROM v_current THEN
+    RAISE EXCEPTION 'OVERRIDE_DISPOSITION_MISMATCH: override targets % but the application''s current disposition is % - only the current disposition can be overridden', p_overridden_action, v_current;
+  END IF;
+
+  -- Friendly authority pre-check; the BEFORE INSERT trigger is the real enforcement.
+  SELECT authority_level, active INTO v_level, v_active
+  FROM underwriters WHERE underwriter_id = p_underwriter_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'OVERRIDE_AUTHORIZER_UNKNOWN: underwriter % does not exist', p_underwriter_id;
+  END IF;
+  IF NOT v_active THEN
+    RAISE EXCEPTION 'OVERRIDE_AUTHORIZER_INACTIVE: underwriter % is not active and cannot authorize overrides', p_underwriter_id;
+  END IF;
+  IF p_overridden_action = 'MANUAL_REVIEW_SENIOR'::referral_action_t AND v_level <> 'senior' THEN
+    RAISE EXCEPTION 'OVERRIDE_SENIOR_AUTHORITY_REQUIRED: overriding MANUAL_REVIEW_SENIOR requires a senior underwriter, but % is %', p_underwriter_id, v_level;
+  END IF;
+
+  -- Pin to the evaluation being reviewed (staleness): a later re-evaluation moves
+  -- this, and the override then stops satisfying create_quote()'s guard.
+  v_eval := current_referral_evaluated_at(p_application_id);
+
+  INSERT INTO referral_overrides
+    (application_id, overridden_action, evaluated_at, reason, authorized_by_underwriter_id)
+  VALUES (p_application_id, p_overridden_action, v_eval, p_reason, p_underwriter_id)
+  RETURNING override_id INTO v_override_id;
+
+  RETURN v_override_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- ============================================================================
 -- RATING ENGINE v1 - MINIMAL CORE (ADR 0028)
 -- Deliberately simplified: base rate (by rating class + agreed-value band) x
 -- per-state territory factor, grossed up to an INDICATIVE premium. All other
@@ -2010,8 +2223,26 @@ BEGIN
       USING HINT = 'create_quote requires the referral engine to have cleared the application first (ADR 0031).';
   END IF;
   IF v_referral > 'AUTO_PROCEED_WITH_FLAG'::referral_action_t THEN
-    RAISE EXCEPTION 'QUOTE_APPLICATION_NOT_CLEAR_TO_QUOTE: application % referral disposition is % - not eligible for an automatic bindable quote', p_application_id, v_referral
-      USING HINT = 'The application is flagged for a human underwriter (see decision_log for the reason codes). No underwriter-override path exists yet (ADR 0031).';
+    -- ADR 0032: a flagged application may still be quoted if a human underwriter
+    -- has recorded a valid supervised override (authorize_referral_override).
+    -- HARD_DECLINE_COMPLIANCE is never overridable - stated explicitly here as
+    -- well as being un-insertable in referral_overrides (belt and suspenders).
+    IF v_referral = 'HARD_DECLINE_COMPLIANCE'::referral_action_t THEN
+      RAISE EXCEPTION 'QUOTE_APPLICATION_COMPLIANCE_DECLINE: application % is a HARD_DECLINE_COMPLIANCE (sanctions/compliance) decline and can never be quoted, by anyone', p_application_id
+        USING HINT = 'No override applies to a compliance decline (ADR 0032); this is structurally enforced, not a policy.';
+    END IF;
+    -- A valid override must match BOTH the current disposition and the current
+    -- evaluation (evaluated_at) - so a re-evaluation invalidates a stale override.
+    IF NOT EXISTS (
+      SELECT 1 FROM referral_overrides o
+      WHERE o.application_id = p_application_id
+        AND o.overridden_action = v_referral
+        AND o.evaluated_at = current_referral_evaluated_at(p_application_id)
+    ) THEN
+      RAISE EXCEPTION 'QUOTE_APPLICATION_NOT_CLEAR_TO_QUOTE: application % referral disposition is % - not eligible for an automatic bindable quote', p_application_id, v_referral
+        USING HINT = 'The application is flagged for a human underwriter; a senior/standard underwriter can supervise-release it via authorize_referral_override (ADR 0032). See decision_log for the reason codes.';
+    END IF;
+    -- A valid supervised override is present - proceed to rate and quote.
   END IF;
 
   -- Single-vehicle only (ADR 0028 v1 scope). Fail loud on 0 or 2+.
@@ -4795,6 +5026,13 @@ GRANT EXECUTE ON FUNCTION evaluate_application_referrals(UUID, TEXT) TO odoo;
 -- ADR 0029 read view).
 GRANT EXECUTE ON FUNCTION submit_application(UUID, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION current_referral_action(UUID) TO odoo;
+-- ADR 0032: the underwriter supervised-release path. add_underwriter manages the
+-- roster; authorize_referral_override records a supervised override (an Odoo
+-- underwriter wizard would call it); current_referral_evaluated_at is the
+-- staleness-pin read helper, granted for completeness.
+GRANT EXECUTE ON FUNCTION add_underwriter(TEXT, underwriter_authority_t) TO odoo;
+GRANT EXECUTE ON FUNCTION authorize_referral_override(UUID, referral_action_t, TEXT, UUID) TO odoo;
+GRANT EXECUTE ON FUNCTION current_referral_evaluated_at(UUID) TO odoo;
 -- ADR 0028: the rating-engine entry point (v1 indicative premium). The per-rule
 -- referral function evaluate_el01 is reached through the orchestrator above and
 -- needs no separate grant.

@@ -112,6 +112,17 @@ import psycopg2
 # and the CHECK/EXCLUDE constraints are not categories this parser tracks (they
 # are covered by tests/0028).
 #
+# ADR 0032's underwriter supervised-release moves four counts: +1 type
+# (underwriter_authority_t), +2 tables (underwriters, referral_overrides),
+# +5 functions (add_underwriter, current_referral_evaluated_at,
+# authorize_referral_override, and the two trigger functions
+# reject_referral_overrides_mutation + enforce_referral_override_authority), and
+# +3 triggers (referral_overrides_no_update/_no_delete append-only, plus
+# referral_overrides_authority_check). create_quote() gains the override branch
+# but is the same object. No new view or SET NOT NULL column (the referral_overrides
+# CHECKs and the FK/NOT NULL in its CREATE TABLE body are not categories this
+# parser tracks). Covered by tests/0032.
+#
 # ADR 0031's referral-gate wiring moves one count: +2 functions
 # (current_referral_action, the latest-per-rule disposition read helper mirroring
 # the ADR 0029 view; and submit_application, the first applications-lifecycle
@@ -145,11 +156,11 @@ import psycopg2
 # automatically, but this snapshot is a fact about the file's current state,
 # not something the parser can derive about itself.
 BASELINE = {
-    "tables": 33,
-    "types": 20,
-    "functions": 50,
+    "tables": 35,
+    "types": 21,
+    "functions": 55,
     "views": 13,
-    "triggers": 24,
+    "triggers": 27,
     "not_null_columns": 9,
 }
 
