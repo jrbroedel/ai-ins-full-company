@@ -11,8 +11,10 @@
 --   T3  0 vehicles  -> QUOTE_RATING_NO_VEHICLE, no quote
 --   T4  unconfigured territory -> TERRITORY_FACTOR_NOT_CONFIGURED (the resolved
 --       failure mode: creation fails outright, no "unrated" quote ever exists)
---   T5  below the $100k floor -> RATING_BELOW_AGREED_VALUE_FLOOR via the rating
---       function's own guard, no quote
+--   T5  below the $100k floor -> now blocked at the ADR 0031 referral gate
+--       (EL-01 DECLINE_RECOMMENDED) before rating runs, no quote
+--   NB: every case now submit_application()s before create_quote() - the ADR 0031
+--       referral gate requires a cleared evaluation first (contract change).
 --   T6  unmapped category (modified_performance) -> RATING_CLASS_NOT_CONFIGURED_
 --       FOR_CATEGORY, no quote - the thin call surfaces every rating guard
 --
@@ -67,6 +69,10 @@ DECLARE v_app UUID; v_rating UUID; v_quote UUID;
 BEGIN
   BEGIN
     SELECT * FROM pg_temp.mk('T1', 'T0', 600000, 1, 'exotic') INTO v_app, v_rating;
+    -- ADR 0031: create_quote now requires a cleared referral evaluation. A clean
+    -- single-vehicle T0 application (rating table present, so PC-03 does not fire)
+    -- evaluates to AUTO_PROCEED, so the gate passes.
+    PERFORM submit_application(v_app, '0030-suite');
 
     v_quote := create_quote(v_app, 'retail', 10, v_rating, NULL, '0030-suite');
     IF v_quote IS NULL THEN
@@ -128,6 +134,7 @@ DECLARE v_app UUID; v_rating UUID; v_ok BOOLEAN; v_err TEXT;
 BEGIN
   BEGIN
     SELECT * FROM pg_temp.mk('T2', 'T0', 600000, 2, 'exotic') INTO v_app, v_rating;
+    PERFORM submit_application(v_app, '0030-suite');  -- clean (2x $600k, no DUI) -> AUTO_PROCEED
     v_ok := false;
     BEGIN
       PERFORM create_quote(v_app, 'retail', 10, v_rating, NULL, '0030-suite');
@@ -155,6 +162,7 @@ DECLARE v_app UUID; v_rating UUID; v_ok BOOLEAN; v_err TEXT;
 BEGIN
   BEGIN
     SELECT * FROM pg_temp.mk('T3', 'T0', 600000, 0) INTO v_app, v_rating;
+    PERFORM submit_application(v_app, '0030-suite');  -- no vehicles, no violations -> AUTO_PROCEED
     v_ok := false;
     BEGIN
       PERFORM create_quote(v_app, 'retail', 10, v_rating, NULL, '0030-suite');
@@ -184,6 +192,10 @@ DECLARE v_app UUID; v_rating UUID; v_ok BOOLEAN; v_err TEXT;
 BEGIN
   BEGIN
     SELECT * FROM pg_temp.mk('T4', 'ZZ', 600000, 1, 'exotic') INTO v_app, v_rating;
+    -- ZZ has a rating-table version (mk creates it) so PC-03 does not fire; the
+    -- app is clean (AUTO_PROCEED). The gate passes and rating then fails on the
+    -- MISSING territory factor - the two are separate per-state loads (ADR 0030).
+    PERFORM submit_application(v_app, '0030-suite');
     v_ok := false;
     BEGIN
       PERFORM create_quote(v_app, 'retail', 10, v_rating, NULL, '0030-suite');
@@ -204,21 +216,26 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
--- T5  Below the $100k floor: rejected through compute_indicative_premium()'s own
---     guard, no quote written.
+-- T5  Below the $100k floor: now intercepted by the ADR 0031 referral gate
+--     BEFORE rating runs. Submission fires EL-01 (DECLINE_RECOMMENDED), so the
+--     application is not clear to auto-quote and create_quote refuses with
+--     QUOTE_APPLICATION_NOT_CLEAR_TO_QUOTE - it never reaches
+--     compute_indicative_premium()'s own RATING_BELOW_AGREED_VALUE_FLOOR guard,
+--     which remains a backstop (exercised directly in tests/0028). No quote.
 -- ---------------------------------------------------------------------------
 DO $$
 DECLARE v_app UUID; v_rating UUID; v_ok BOOLEAN; v_err TEXT;
 BEGIN
   BEGIN
     SELECT * FROM pg_temp.mk('T5', 'T0', 99999.99, 1, 'exotic') INTO v_app, v_rating;
+    PERFORM submit_application(v_app, '0030-suite');  -- EL-01 fires -> DECLINE_RECOMMENDED
     v_ok := false;
     BEGIN
       PERFORM create_quote(v_app, 'retail', 10, v_rating, NULL, '0030-suite');
     EXCEPTION WHEN OTHERS THEN v_ok := true; v_err := SQLERRM;
     END;
-    IF NOT v_ok OR v_err NOT LIKE '%RATING_BELOW_AGREED_VALUE_FLOOR%' THEN
-      RAISE EXCEPTION '0030-T5 FAILED: a below-floor risk was not rejected with RATING_BELOW_AGREED_VALUE_FLOOR (ok=%, err=%)', v_ok, v_err;
+    IF NOT v_ok OR v_err NOT LIKE '%QUOTE_APPLICATION_NOT_CLEAR_TO_QUOTE%' THEN
+      RAISE EXCEPTION '0030-T5 FAILED: a below-floor risk was not rejected at the referral gate with QUOTE_APPLICATION_NOT_CLEAR_TO_QUOTE (ok=%, err=%)', v_ok, v_err;
     END IF;
     IF (SELECT count(*) FROM quotes WHERE application_id = v_app) <> 0 THEN
       RAISE EXCEPTION '0030-T5 FAILED: a below-floor create still wrote a quote';
@@ -228,7 +245,7 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'ROLLBACK_CASE' THEN RAISE; END IF;
   END;
-  RAISE NOTICE '0030-T5 pass: below the $100k floor rejected via the rating guard (RATING_BELOW_AGREED_VALUE_FLOOR), no quote written';
+  RAISE NOTICE '0030-T5 pass: below the $100k floor blocked at the ADR 0031 referral gate (EL-01 DECLINE_RECOMMENDED -> QUOTE_APPLICATION_NOT_CLEAR_TO_QUOTE), no quote written';
 END $$;
 
 -- ---------------------------------------------------------------------------
@@ -241,6 +258,9 @@ DECLARE v_app UUID; v_rating UUID; v_ok BOOLEAN; v_err TEXT;
 BEGIN
   BEGIN
     SELECT * FROM pg_temp.mk('T6', 'T0', 600000, 1, 'modified_performance') INTO v_app, v_rating;
+    -- Clean app (category is not a referral factor) -> AUTO_PROCEED; the gate
+    -- passes and rating then fails on the unmapped category.
+    PERFORM submit_application(v_app, '0030-suite');
     v_ok := false;
     BEGIN
       PERFORM create_quote(v_app, 'retail', 10, v_rating, NULL, '0030-suite');

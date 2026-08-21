@@ -699,6 +699,80 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ============================================================================
+-- REFERRAL GATE (ADR 0031)
+-- The referral engine above was built (ADR 0026/0028) but called nowhere in a
+-- real flow - only test fixtures ran it. These two functions wire it in: one
+-- triggers evaluation at submission, the other reads the current disposition so
+-- create_quote() can refuse to auto-quote a non-clean application. Neither
+-- touches the rules or the orchestrator - they only call and read.
+-- ============================================================================
+
+-- The current most-severe referral action for an application, derived from
+-- decision_log EXACTLY as luxauto_application_referral_view does (ADR 0029):
+-- the latest row per rule (DISTINCT ON ... created_at DESC), then max() over the
+-- enum's ascending severity order. decision_log is append-only, so re-evaluation
+-- appends a fresh set of rows and this always reflects the newest run - no change
+-- was needed to support re-evaluation. Returns NULL when the application has
+-- never been evaluated (no rows), which the caller treats as distinct from any
+-- real disposition. SECURITY DEFINER so a least-privilege caller (or a guard in
+-- another SECURITY DEFINER function) can read the disposition without a direct
+-- decision_log grant, mirroring how the ADR 0029 view exposes the same fact.
+CREATE OR REPLACE FUNCTION current_referral_action(p_application_id UUID)
+RETURNS referral_action_t AS $$
+  WITH latest_per_rule AS (
+    SELECT DISTINCT ON (d.rule_id) d.action_taken
+    FROM decision_log d
+    WHERE d.application_id = p_application_id
+    ORDER BY d.rule_id, d.created_at DESC
+  )
+  SELECT max(action_taken) FROM latest_per_rule;
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Submit an application: the first applications-lifecycle transition. Moves a
+-- draft to submitted, stamps submitted_at, and evaluates the referral engine
+-- (writing the decision_log rows), returning the most-severe action so the
+-- caller sees the disposition. Re-runnable for re-evaluation: allowed from
+-- 'draft' (first submission) or 'submitted' (a later re-evaluation after the
+-- application's data changed - e.g. a document resolves a flagged item). Each
+-- call appends a fresh decision_log set; submitted_at is kept from the FIRST
+-- submission (COALESCE), since re-evaluation is not re-submission.
+--
+-- Minimal status wiring (ADR 0031 decision): status only ever becomes
+-- 'submitted' here - the richer disposition->status mapping (recommend-decline ->
+-- in_review, hard-decline -> declined, etc.) is a deliberate follow-up, NOT this
+-- pass. decision_log, not applications.status, is the sole source of truth for
+-- the auto-quote gate, so status staying coarse here is fine.
+CREATE OR REPLACE FUNCTION submit_application(p_application_id UUID, p_performed_by TEXT)
+RETURNS referral_action_t AS $$
+DECLARE
+  v_status application_status_t;
+  v_action referral_action_t;
+BEGIN
+  SELECT status INTO v_status
+  FROM applications WHERE application_id = p_application_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SUBMIT_APPLICATION_NOT_FOUND: application % does not exist', p_application_id;
+  END IF;
+  IF v_status NOT IN ('draft', 'submitted') THEN
+    RAISE EXCEPTION 'SUBMIT_APPLICATION_INVALID_STATE: application % is % - only a draft or already-submitted application can be (re-)submitted', p_application_id, v_status
+      USING HINT = 'This minimal lifecycle (ADR 0031) only wires draft->submitted; a bound/declined/withdrawn application is out of its scope.';
+  END IF;
+
+  -- Evaluate first (writes decision_log), then record the transition. The rules
+  -- and orchestrator are untouched - this only calls them.
+  v_action := evaluate_application_referrals(p_application_id, p_performed_by);
+
+  UPDATE applications
+  SET status = 'submitted',
+      submitted_at = COALESCE(submitted_at, now())
+  WHERE application_id = p_application_id;
+
+  RETURN v_action;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- ============================================================================
 -- RATING ENGINE v1 - MINIMAL CORE (ADR 0028)
 -- Deliberately simplified: base rate (by rating class + agreed-value band) x
 -- per-state territory factor, grossed up to an INDICATIVE premium. All other
@@ -1915,11 +1989,29 @@ DECLARE
   v_premium NUMERIC;
   v_basis JSONB;
   v_quote_id UUID;
+  v_referral referral_action_t;
 BEGIN
   SELECT garaging_state INTO v_garaging_state
   FROM applications WHERE application_id = p_application_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'QUOTE_APPLICATION_NOT_FOUND: application % does not exist', p_application_id;
+  END IF;
+
+  -- Referral gate (ADR 0031). An automatic, bindable quote may only be produced
+  -- for an application the referral engine has cleared. The taxonomy permits it
+  -- for AUTO_PROCEED and AUTO_PROCEED_WITH_FLAG (the latter is explicitly "not
+  -- blocking"); INFORMATION_REQUEST and up route to a human before any quote is
+  -- issued. decision_log is the sole source of truth (never applications.status),
+  -- read via current_referral_action() - the latest-per-rule disposition, so it
+  -- reflects the most recent evaluation.
+  v_referral := current_referral_action(p_application_id);
+  IF v_referral IS NULL THEN
+    RAISE EXCEPTION 'QUOTE_APPLICATION_NOT_EVALUATED: application % has no referral evaluation - submit it (submit_application) before quoting', p_application_id
+      USING HINT = 'create_quote requires the referral engine to have cleared the application first (ADR 0031).';
+  END IF;
+  IF v_referral > 'AUTO_PROCEED_WITH_FLAG'::referral_action_t THEN
+    RAISE EXCEPTION 'QUOTE_APPLICATION_NOT_CLEAR_TO_QUOTE: application % referral disposition is % - not eligible for an automatic bindable quote', p_application_id, v_referral
+      USING HINT = 'The application is flagged for a human underwriter (see decision_log for the reason codes). No underwriter-override path exists yet (ADR 0031).';
   END IF;
 
   -- Single-vehicle only (ADR 0028 v1 scope). Fail loud on 0 or 2+.
@@ -4696,6 +4788,13 @@ GRANT EXECUTE ON FUNCTION reinstate_policy(UUID, UUID, TEXT, TEXT, TEXT) TO odoo
 -- SECURITY DEFINER and reached through this orchestrator (which runs as the
 -- owner), so only the orchestrator needs a grant.
 GRANT EXECUTE ON FUNCTION evaluate_application_referrals(UUID, TEXT) TO odoo;
+-- ADR 0031: submit an application (evaluates the referral engine, first
+-- lifecycle transition) and read its current disposition. An Odoo submission
+-- wizard would call submit_application; current_referral_action is the guard's
+-- read helper, granted for completeness (it is also reachable through the
+-- ADR 0029 read view).
+GRANT EXECUTE ON FUNCTION submit_application(UUID, TEXT) TO odoo;
+GRANT EXECUTE ON FUNCTION current_referral_action(UUID) TO odoo;
 -- ADR 0028: the rating-engine entry point (v1 indicative premium). The per-rule
 -- referral function evaluate_el01 is reached through the orchestrator above and
 -- needs no separate grant.

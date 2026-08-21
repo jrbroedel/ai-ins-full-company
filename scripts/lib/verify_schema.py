@@ -112,6 +112,14 @@ import psycopg2
 # and the CHECK/EXCLUDE constraints are not categories this parser tracks (they
 # are covered by tests/0028).
 #
+# ADR 0031's referral-gate wiring moves one count: +2 functions
+# (current_referral_action, the latest-per-rule disposition read helper mirroring
+# the ADR 0029 view; and submit_application, the first applications-lifecycle
+# transition that evaluates the referral engine). create_quote() gains a guard
+# but is the same one function (CREATE OR REPLACE), so it does not move any count.
+# No new table, type, view, trigger or SET NOT NULL column. Covered by tests/0031
+# (and the tests/0030 fixtures now submit before quoting).
+#
 # ADR 0030's quote-creation wiring moves two counts: +1 function (create_quote,
 # the first real write path into quotes, which rates the quote via
 # compute_indicative_premium() as it creates it) and +1 SET NOT NULL column
@@ -139,7 +147,7 @@ import psycopg2
 BASELINE = {
     "tables": 33,
     "types": 20,
-    "functions": 48,
+    "functions": 50,
     "views": 13,
     "triggers": 24,
     "not_null_columns": 9,
