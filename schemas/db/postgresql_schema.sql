@@ -3537,49 +3537,147 @@ CREATE OR REPLACE TRIGGER state_rating_versions_seed_short_rate
   FOR EACH ROW EXECUTE FUNCTION seed_short_rate_factor_for_state();
 
 -- ============================================================================
--- CONNECTICUT - FIRST ILLUSTRATIVE STATE ONBOARDING (ADR 0034)
--- The first real-named state onboarded end to end, chosen so the existing
--- sample APP-0001 (Miriam Ostrander, Greenwich CT) can flow through the real
--- pipeline. DIRECTIONAL/ILLUSTRATIVE ONLY - same status as
--- sample-data/state_rating_tables_sample.json's 8-state skeleton (which does NOT
--- include CT). No real vendor/compliance relationship exists; nothing here traces
--- to a filed CT rate manual. Placed AFTER the ADR 0025 seed trigger above ON
--- PURPOSE: inserting the state_rating_table_versions row fires that trigger and
--- auto-seeds a CT short_rate_factors row (flat 10% holdback) - the first time
--- that trigger runs for a real state rather than a test fixture.
+-- ONBOARD A STATE - THE SOLE SANCTIONED PATH (ADR 0035)
+-- The ADR 0034 footgun: a raw INSERT INTO state_rating_table_versions placed
+-- BEFORE the ADR 0025 seed trigger above silently skips the short-rate seed, with
+-- zero error. onboard_state() closes it by being the only way to write that
+-- table: a BEFORE INSERT guard rejects any insert not made through it (via the
+-- luxauto.onboarding_state transaction-local flag - the same escape-hatch idiom
+-- the luxauto.superseding_* correction guards use). Because onboard_state() is
+-- defined AFTER the seed trigger, it can never be placed before it, and it
+-- ASSERTS the seed fired before returning - so the silent failure becomes a loud,
+-- transaction-aborting one.
 --
--- The ai_governance documentation bar is built to the NY DFS Circular Letter
--- 2024-7 standard by default (this project's baseline design principle: every
--- state is a subset of NY's standard, not a special case). credit_based_insurance
--- _score is marked permitted because no CT credit-score ban is documented in this
--- project's research - to be verified, not asserted. Everything not researched is
--- marked TBD/illustrative, exactly like the skeleton states.
-INSERT INTO state_rating_table_versions (
-  state, regulator_name, filing_status, line_of_business_code,
-  serff_filing_tracking_number, rate_manual_reference, effective_range,
-  approved_rating_variables, prohibited_variables, state_specific_application_fields,
-  credit_based_insurance_score, territory_rating_basis, agreed_value_rules,
-  referral_thresholds_state_specific, ai_governance, documentation)
-SELECT
-  'CT', 'Connecticut Insurance Department', 'prior_approval', 'Private Passenger Auto',
-  'TBD-ILLUSTRATIVE', 'TBD - illustrative onboarding (ADR 0034), not a filed manual',
-  tstzrange('2026-01-01 00:00:00+00', '2100-01-01 00:00:00+00', '[)'),
-  '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
-  $json${"permitted": true, "usage_context": ["new_business", "renewal", "tiering"], "notes": "No CT credit-based-score ban is documented in this project research; permitted pending verification. Any model using it falls under AI/algorithmic governance (see ai_governance)."}$json$::jsonb,
-  'TBD - PD territory factor loaded separately in territory_factors (1.12, illustrative)',
-  $json${"max_annual_mileage_for_agreed_value": null, "pleasure_use_required": true, "reappraisal_interval_years": 2, "notes": "Illustrative defaults matching the skeleton-state pattern; verify against CT filed rules."}$json$::jsonb,
-  $json${"dui_lookback_years": null, "sr22_fr44_required": false, "salvage_title_disclosure_rule": "TBD", "notes": "TBD - illustrative."}$json$::jsonb,
-  $json${"naic_model_bulletin_adopted": true, "naic_model_bulletin_adoption_date": "TBD - verify current NAIC tracker for CT", "state_specific_ai_law": null, "documentation_required": ["bias_testing_records", "vendor_audit_rights", "internal_governance_log", "explainability_for_adverse_outcomes"], "citation": "Built to the NY DFS Circular Letter 2024-7 documentation standard by default (this project baseline: every state is a subset, not a special case). CT-specific AI guidance not yet researched."}$json$::jsonb,
-  $json${"source_urls": [], "last_verified_date": "2026-08-19", "verified_by": "Illustrative onboarding (ADR 0034) - demo/design, NOT a compliance verification", "note": "DIRECTIONAL/ILLUSTRATIVE ONLY, same status as sample-data/state_rating_tables_sample.json's skeleton states."}$json$::jsonb
-WHERE NOT EXISTS (SELECT 1 FROM state_rating_table_versions WHERE state = 'CT');
+-- GRANT/REVOKE is NOT the lock here (ADR 0035): no non-owner role has any
+-- privilege on these tables, and the table owner's rights cannot be revoked while
+-- onboard_state runs SECURITY DEFINER as that same owner. The REVOKE below is
+-- explicit documentation of intent; the guard trigger is the real enforcement.
+--
+-- Scope is state_rating_table_versions ONLY (the footgun table). territory_factors
+-- is deliberately NOT guarded - the T0 test-state seed loads a territory factor
+-- with no paired rating version, which is legitimate. onboard_state() still always
+-- loads both together for the front door.
 
--- CT PD territory factor: 1.12, from the Exotic/Collector rating workbook's
--- Territory Factors sheet (illustrative). A manual load, per ADR 0028 (territory
--- factors are never auto-seeded, unlike the flat short-rate default above).
-INSERT INTO territory_factors (state, pd_territory_factor, effective_range, source_reference)
-SELECT 'CT', 1.1200, tstzrange('2026-01-01 00:00:00+00', '2100-01-01 00:00:00+00', '[)'),
-       'Illustrative PD territory factor from the Exotic/Collector rating workbook Territory Factors sheet (ADR 0034); demo onboarding, not a filed factor'
-WHERE NOT EXISTS (SELECT 1 FROM territory_factors WHERE state = 'CT');
+CREATE OR REPLACE FUNCTION reject_unonboarded_state_rating_insert()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF current_setting('luxauto.onboarding_state', true) IS DISTINCT FROM 'on' THEN
+    RAISE EXCEPTION 'STATE_RATING_TABLE_DIRECT_INSERT_FORBIDDEN: state_rating_table_versions must be written through onboard_state() (ADR 0035), not a direct INSERT'
+      USING HINT = 'A direct insert can be placed before the ADR 0025 short-rate seed trigger and silently skip the seed. onboard_state() sets luxauto.onboarding_state, loads the territory factor too, and asserts the seed fired. Test fixtures that need a raw rating-table row set that flag explicitly via the escape hatch.';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER state_rating_versions_onboard_guard
+  BEFORE INSERT ON state_rating_table_versions
+  FOR EACH ROW EXECUTE FUNCTION reject_unonboarded_state_rating_insert();
+
+-- Onboard a state's rating data in one atomic operation: the compliance record
+-- (fires the ADR 0025 short-rate seed) AND its PD territory factor, together, so a
+-- state is never left half-onboarded (the ADR 0034 uncoupled-loads gap - a state
+-- with a rating version but no territory factor passes PC-03 then fails
+-- create_quote at TERRITORY_FACTOR_NOT_CONFIGURED). Territory data is a single PD
+-- factor per state (territory_factors is one scalar per state/period, no array, no
+-- FK). p_ai_governance defaults to the NY DFS Circular Letter 2024-7 documentation
+-- standard - the project baseline that every state is a subset of, not a special
+-- case. Any failure at any step aborts the whole transaction; no partial state.
+CREATE OR REPLACE FUNCTION onboard_state(
+  p_state CHAR(2),
+  p_regulator_name TEXT,
+  p_filing_status filing_status_t,
+  p_line_of_business_code TEXT,
+  p_serff_filing_tracking_number TEXT,
+  p_effective_range TSTZRANGE,
+  p_pd_territory_factor NUMERIC,
+  p_territory_source_reference TEXT,
+  p_rate_manual_reference TEXT DEFAULT NULL,
+  p_expiration_or_review_date DATE DEFAULT NULL,
+  p_approved_rating_variables JSONB DEFAULT '[]'::jsonb,
+  p_prohibited_variables JSONB DEFAULT '[]'::jsonb,
+  p_state_specific_application_fields JSONB DEFAULT '[]'::jsonb,
+  p_credit_based_insurance_score JSONB DEFAULT '{}'::jsonb,
+  p_gender_rating_permitted BOOLEAN DEFAULT NULL,
+  p_territory_rating_basis TEXT DEFAULT NULL,
+  p_agreed_value_rules JSONB DEFAULT '{}'::jsonb,
+  p_referral_thresholds_state_specific JSONB DEFAULT '{}'::jsonb,
+  p_ai_governance JSONB DEFAULT $json${"naic_model_bulletin_adopted": true, "documentation_required": ["bias_testing_records", "vendor_audit_rights", "internal_governance_log", "explainability_for_adverse_outcomes"], "citation": "Built to the NY DFS Circular Letter 2024-7 documentation standard by default (project baseline: every state is a subset, not a special case)."}$json$::jsonb,
+  p_documentation JSONB DEFAULT '{}'::jsonb
+) RETURNS UUID AS $$
+DECLARE
+  v_record_id UUID;
+BEGIN
+  -- Open the guard for this function's inserts only; closed again below.
+  PERFORM set_config('luxauto.onboarding_state', 'on', true);
+
+  INSERT INTO state_rating_table_versions (
+    state, regulator_name, filing_status, line_of_business_code,
+    serff_filing_tracking_number, rate_manual_reference, effective_range,
+    expiration_or_review_date, approved_rating_variables, prohibited_variables,
+    state_specific_application_fields, credit_based_insurance_score,
+    gender_rating_permitted, territory_rating_basis, agreed_value_rules,
+    referral_thresholds_state_specific, ai_governance, documentation)
+  VALUES (
+    p_state, p_regulator_name, p_filing_status, p_line_of_business_code,
+    p_serff_filing_tracking_number, p_rate_manual_reference, p_effective_range,
+    p_expiration_or_review_date, p_approved_rating_variables, p_prohibited_variables,
+    p_state_specific_application_fields, p_credit_based_insurance_score,
+    p_gender_rating_permitted, p_territory_rating_basis, p_agreed_value_rules,
+    p_referral_thresholds_state_specific, p_ai_governance, p_documentation)
+  RETURNING record_id INTO v_record_id;   -- fires state_rating_versions_seed_short_rate
+
+  INSERT INTO territory_factors (state, pd_territory_factor, effective_range, source_reference)
+  VALUES (p_state, p_pd_territory_factor, p_effective_range, p_territory_source_reference);
+
+  -- Assert the ADR 0025 seed fired (its exact signature). If somehow absent, the
+  -- whole onboarding rolls back - the footgun made loud.
+  IF NOT EXISTS (
+    SELECT 1 FROM short_rate_factors
+    WHERE state = p_state AND factor = 0.90
+      AND basis = 'unearned_premium_multiplier'::short_rate_basis_t
+      AND serff_filing_tracking_number = 'internally set - not filed'
+  ) THEN
+    RAISE EXCEPTION 'ONBOARD_STATE_SHORTRATE_SEED_MISSING: onboarding % produced no ADR 0025 short-rate seed - the seed trigger did not fire', p_state
+      USING HINT = 'state_rating_versions_seed_short_rate must exist and run AFTER INSERT on state_rating_table_versions.';
+  END IF;
+
+  PERFORM set_config('luxauto.onboarding_state', 'off', true);
+  RETURN v_record_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Explicit documentation of intent (NOT the real lock - the guard trigger is).
+REVOKE INSERT, UPDATE, DELETE ON state_rating_table_versions, territory_factors FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION onboard_state(
+  CHAR(2), TEXT, filing_status_t, TEXT, TEXT, TSTZRANGE, NUMERIC, TEXT, TEXT, DATE,
+  JSONB, JSONB, JSONB, JSONB, BOOLEAN, TEXT, JSONB, JSONB, JSONB, JSONB) TO odoo;
+
+-- ============================================================================
+-- CONNECTICUT - FIRST ILLUSTRATIVE STATE, now onboarded through onboard_state()
+-- (ADR 0035 migrates ADR 0034's raw insert to the sanctioned path). DIRECTIONAL/
+-- ILLUSTRATIVE ONLY - same status as sample-data/state_rating_tables_sample.json's
+-- 8-state skeleton (no CT). No filed CT manual; everything unresearched is TBD.
+-- Identical data to ADR 0034's seed - a clean swap of insertion path, not new
+-- data (idempotent: skipped if CT already exists, e.g. on the live DB).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM state_rating_table_versions WHERE state = 'CT') THEN
+    PERFORM onboard_state(
+      'CT', 'Connecticut Insurance Department', 'prior_approval', 'Private Passenger Auto',
+      'TBD-ILLUSTRATIVE',
+      tstzrange('2026-01-01 00:00:00+00', '2100-01-01 00:00:00+00', '[)'),
+      1.1200,
+      'Illustrative PD territory factor from the Exotic/Collector rating workbook Territory Factors sheet (ADR 0034); demo onboarding, not a filed factor',
+      p_rate_manual_reference := 'TBD - illustrative onboarding (ADR 0034), not a filed manual',
+      p_credit_based_insurance_score := $json${"permitted": true, "usage_context": ["new_business", "renewal", "tiering"], "notes": "No CT credit-based-score ban is documented in this project research; permitted pending verification. Any model using it falls under AI/algorithmic governance (see ai_governance)."}$json$::jsonb,
+      p_territory_rating_basis := 'TBD - PD territory factor loaded separately in territory_factors (1.12, illustrative)',
+      p_agreed_value_rules := $json${"max_annual_mileage_for_agreed_value": null, "pleasure_use_required": true, "reappraisal_interval_years": 2, "notes": "Illustrative defaults matching the skeleton-state pattern; verify against CT filed rules."}$json$::jsonb,
+      p_referral_thresholds_state_specific := $json${"dui_lookback_years": null, "sr22_fr44_required": false, "salvage_title_disclosure_rule": "TBD", "notes": "TBD - illustrative."}$json$::jsonb,
+      p_ai_governance := $json${"naic_model_bulletin_adopted": true, "naic_model_bulletin_adoption_date": "TBD - verify current NAIC tracker for CT", "state_specific_ai_law": null, "documentation_required": ["bias_testing_records", "vendor_audit_rights", "internal_governance_log", "explainability_for_adverse_outcomes"], "citation": "Built to the NY DFS Circular Letter 2024-7 documentation standard by default (this project baseline: every state is a subset, not a special case). CT-specific AI guidance not yet researched."}$json$::jsonb,
+      p_documentation := $json${"source_urls": [], "last_verified_date": "2026-08-19", "verified_by": "Illustrative onboarding (ADR 0034/0035) - demo/design, NOT a compliance verification", "note": "DIRECTIONAL/ILLUSTRATIVE ONLY, same status as sample-data/state_rating_tables_sample.json's skeleton states."}$json$::jsonb
+    );
+  END IF;
+END $$;
 
 -- Pro-rata unearned premium for a policy as of an instant: every premium
 -- amount in force is earned evenly across its OWN effective period, and what

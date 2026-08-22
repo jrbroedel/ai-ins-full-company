@@ -112,6 +112,15 @@ import psycopg2
 # and the CHECK/EXCLUDE constraints are not categories this parser tracks (they
 # are covered by tests/0028).
 #
+# ADR 0035's onboard_state moves two counts: +2 functions (onboard_state, the
+# sole sanctioned path for onboarding a state's rating data; and
+# reject_unonboarded_state_rating_insert, the BEFORE INSERT guard trigger function
+# that makes it sole by rejecting a direct insert without the luxauto.onboarding_
+# state flag) and +1 trigger (state_rating_versions_onboard_guard). It also
+# migrates ADR 0034's raw CT insert to an onboard_state() call and adds a
+# REVOKE/GRANT, neither of which the parser tracks. No new table, type, view or
+# SET NOT NULL column. Covered by tests/0035.
+#
 # ADR 0033's renewal workflow moves one count: +4 functions (policy_tenure_years,
 # copy_application_for_renewal, renew_policy, generate_renewal_offers). It adds
 # three columns to policies (renewed_from_policy_id, original_policy_id,
@@ -170,9 +179,9 @@ import psycopg2
 BASELINE = {
     "tables": 35,
     "types": 21,
-    "functions": 59,
+    "functions": 61,
     "views": 13,
-    "triggers": 27,
+    "triggers": 28,
     "not_null_columns": 9,
 }
 

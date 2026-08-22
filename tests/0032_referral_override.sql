@@ -27,6 +27,10 @@
 
 \set ON_ERROR_STOP on
 BEGIN;
+-- ADR 0035: this suite writes state_rating_table_versions rows directly as fixtures;
+-- the onboard_state() guard permits that through the escape flag, set for this
+-- rolled-back test transaction (tests use the hatch; production goes through onboard_state).
+SET LOCAL luxauto.onboarding_state = 'on';
 
 -- Fixture: a rateable application - a T0 rating-table version, an applicant, a
 -- 'submitted' application, and one exotic vehicle at $600k in the state. (A

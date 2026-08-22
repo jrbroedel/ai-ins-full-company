@@ -28,6 +28,10 @@
 
 \set ON_ERROR_STOP on
 BEGIN;
+-- ADR 0035: this suite writes state_rating_table_versions rows directly as fixtures;
+-- the onboard_state() guard permits that through the escape flag, set for this
+-- rolled-back test transaction (tests use the hatch; production goes through onboard_state).
+SET LOCAL luxauto.onboarding_state = 'on';
 
 -- Fixture: a real bound, rateable T0 policy built through the whole pipeline
 -- (so a renewal has a genuine source application to copy). p_inception lets the
