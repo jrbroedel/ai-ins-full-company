@@ -139,7 +139,7 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'ROLLBACK_CASE' THEN RAISE; END IF;
   END;
-  RAISE NOTICE '0027-T3 pass: the referral engine handles a new-category vehicle like any other (no branch on category, 4 rows, correct outcome)';
+  RAISE NOTICE '0027-T3 pass: the referral engine handles a new-category vehicle like any other (no branch on category, 12 rows, correct outcome)';
 END $$;
 
 ROLLBACK;
