@@ -1,6 +1,6 @@
 # systemd units
 
-Two timer/service pairs run on `luxauto-odoo`. Both follow the same shape: a
+Three timer/service pairs run on `luxauto-odoo`. All follow the same shape: a
 oneshot service running as `odoo`, a timer with `Persistent=true`, and the
 schedule kept versioned here rather than only on the host.
 
@@ -17,6 +17,22 @@ Why here and not `pg_cron`: `pg_cron` is preloaded on `luxauto-pg` but is not in
 that server's `azure.extensions` allow-list, so `CREATE EXTENSION pg_cron` is
 refused. Allow-listing it is an Azure control-plane parameter change plus a
 restart. The timer keeps the schedule versioned in this repo either way.
+
+## `luxauto-generate-renewal-offers.{service,timer}` (ADR 0033)
+
+Runs `scripts/generate-renewal-offers.sh`, which calls `generate_renewal_offers()`
+to auto-generate a full renewal (fresh copied application, re-referral, re-rating,
+contiguous-inception bound successor) for every active policy whose term ends
+within 30 days, excluding any with an active nonrenewal decision or an existing
+successor.
+
+**Daily**, not hourly: the 30-day window gives ~29 days of runway once a policy
+enters it, so a day of detection latency is immaterial — unlike `expire_policies`,
+which acts at the immediate term end.
+
+Note (ADR 0033, A1): the renewal copies the predecessor's risk data verbatim and
+nothing here refreshes it, so the re-referral that runs is mechanically real but
+practically inert. See ADR 0033.
 
 ## `luxauto-verify-attachment-storage.{service,timer}` (ADR 0009 Deviation 7, second addendum)
 
@@ -41,9 +57,11 @@ addendum.
 
 ```
 sudo cp /opt/odoo-custom-addons/luxauto/infra/systemd/luxauto-expire-policies.* /etc/systemd/system/
+sudo cp /opt/odoo-custom-addons/luxauto/infra/systemd/luxauto-generate-renewal-offers.* /etc/systemd/system/
 sudo cp /opt/odoo-custom-addons/luxauto/infra/systemd/luxauto-verify-attachment-storage.* /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now luxauto-expire-policies.timer
+sudo systemctl enable --now luxauto-generate-renewal-offers.timer
 sudo systemctl enable --now luxauto-verify-attachment-storage.timer
 ```
 

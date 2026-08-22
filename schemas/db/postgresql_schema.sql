@@ -2311,10 +2311,28 @@ CREATE TABLE IF NOT EXISTS policies (
   -- NOT (and cannot) prove the target is really a predecessor - that is
   -- link_reinstated_policy()'s job.
   reinstated_from_policy_id         UUID REFERENCES policies(policy_id),
+  -- ADR 0033 renewal linkage. renewed_from_policy_id is the IMMEDIATE
+  -- predecessor (distinct from reinstated_from_policy_id: renewal is a
+  -- successive term, reinstatement is restored coverage after a lapse - kept
+  -- separable at the schema level). original_policy_id is the chain HEAD,
+  -- denormalized so cumulative tenure is an O(1) lookup rather than an
+  -- unbounded walk back through renewed_from_policy_id (a 20-year annually-
+  -- renewed policy would be 20 hops). NULL on an original; contiguous terms
+  -- mean the head's inception -> now is the continuous time with the carrier.
+  -- renewal_generation is 0 on an original, +1 each renewal - cheap "how many
+  -- terms" for audit/display without walking the chain. All set once at
+  -- renewal by renew_policy(), never superseded, same as reinstated_from.
+  renewed_from_policy_id            UUID REFERENCES policies(policy_id),
+  original_policy_id                UUID REFERENCES policies(policy_id),
+  renewal_generation                INTEGER NOT NULL DEFAULT 0,
   created_at                        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at                        TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT policies_no_self_reinstatement
-    CHECK (reinstated_from_policy_id IS NULL OR reinstated_from_policy_id <> policy_id)
+    CHECK (reinstated_from_policy_id IS NULL OR reinstated_from_policy_id <> policy_id),
+  CONSTRAINT policies_no_self_renewal
+    CHECK (renewed_from_policy_id IS NULL OR renewed_from_policy_id <> policy_id),
+  CONSTRAINT policies_original_not_self
+    CHECK (original_policy_id IS NULL OR original_policy_id <> policy_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_policies_quote ON policies(quote_id);
@@ -2344,6 +2362,40 @@ BEGIN
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_policies_reinstated_from ON policies(reinstated_from_policy_id);
+
+-- ADR 0033 renewal columns, idempotent apply against an already-created policies
+-- table (same fresh-apply-plus-existing-DB pattern as reinstated_from above).
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS renewed_from_policy_id UUID REFERENCES policies(policy_id);
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS original_policy_id UUID REFERENCES policies(policy_id);
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS renewal_generation INTEGER NOT NULL DEFAULT 0;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'policies_no_self_renewal' AND conrelid = 'policies'::regclass) THEN
+    ALTER TABLE policies ADD CONSTRAINT policies_no_self_renewal
+      CHECK (renewed_from_policy_id IS NULL OR renewed_from_policy_id <> policy_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'policies_original_not_self' AND conrelid = 'policies'::regclass) THEN
+    ALTER TABLE policies ADD CONSTRAINT policies_original_not_self
+      CHECK (original_policy_id IS NULL OR original_policy_id <> policy_id);
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_policies_renewed_from ON policies(renewed_from_policy_id);
+CREATE INDEX IF NOT EXISTS idx_policies_original ON policies(original_policy_id);
+
+-- Cumulative tenure with the carrier, in years, as of a given instant (ADR 0033).
+-- Contiguous renewals mean the CHAIN HEAD's inception -> as_of is the continuous
+-- time on risk, so this resolves the head (original_policy_id, or self on an
+-- original) and measures from its inception. O(1) via the denormalized head - no
+-- walk back through renewed_from_policy_id. This is what finally makes
+-- nonrenewal_notice_requirements.min_policy_years reachable (a single policy's
+-- own age is always < 1 year). Returns NULL for a policy that does not exist.
+CREATE OR REPLACE FUNCTION policy_tenure_years(p_policy_id UUID, p_as_of TIMESTAMPTZ)
+RETURNS NUMERIC AS $$
+  SELECT EXTRACT(EPOCH FROM (p_as_of - lower(head.effective_range))) / (365.25 * 86400)
+  FROM policies self
+  JOIN policies head ON head.policy_id = COALESCE(self.original_policy_id, self.policy_id)
+  WHERE self.policy_id = p_policy_id;
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ============================================================================
 -- POLICY EVENTS (ADR 0010)
@@ -4327,7 +4379,15 @@ BEGIN
   JOIN applications a ON a.application_id = q.application_id
   WHERE p.policy_id = p_policy_id;
 
-  v_policy_years := EXTRACT(EPOCH FROM (v_at - lower(v_term))) / (365.25 * 86400);
+  -- ADR 0033 (Flag B, a scoped one-line relaxation of ADR 0019's "do not touch"):
+  -- tenure is CUMULATIVE across chained renewals, not this term's own age, so
+  -- nonrenewal_notice_requirements.min_policy_years is finally reachable. This is
+  -- byte-identical for any policy with no renewal history (original_policy_id is
+  -- NULL -> policy_tenure_years measures from this policy's own inception, the
+  -- same v_at - lower(v_term) it computed before). correct_policy_nonrenewal
+  -- still uses the inline own-age formula (its ADR 0019 protection was NOT
+  -- relaxed) - a documented inconsistency flagged for a follow-up decision.
+  v_policy_years := policy_tenure_years(p_policy_id, v_at);
   v_required := nonrenewal_notice_days(v_state, v_program_id, v_policy_years, v_at);
   v_given := FLOOR(EXTRACT(EPOCH FROM (upper(v_term) - v_at)) / 86400);
 
@@ -4428,7 +4488,12 @@ BEGIN
   JOIN applications a ON a.application_id = q.application_id
   WHERE p.policy_id = v_policy_id;
 
-  v_policy_years := EXTRACT(EPOCH FROM (p_new_notice_at - lower(v_term))) / (365.25 * 86400);
+  -- ADR 0033 (Flag B, extended): cumulative tenure, matching nonrenew_policy, so
+  -- correcting a nonrenewal validates against the same tenure basis issuing one
+  -- does - no divergence. Byte-identical for any no-renewal-history policy
+  -- (original_policy_id NULL -> own inception, the same p_new_notice_at -
+  -- lower(v_term) as before).
+  v_policy_years := policy_tenure_years(v_policy_id, p_new_notice_at);
   v_required := nonrenewal_notice_days(v_state, v_program_id, v_policy_years, p_new_notice_at);
   v_given := FLOOR(EXTRACT(EPOCH FROM (upper(v_term) - p_new_notice_at)) / 86400);
 
@@ -4515,6 +4580,230 @@ BEGIN
   FROM updated;
 
   RETURN QUERY SELECT v_expired, v_nonrenewed;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- ============================================================================
+-- RENEWAL (ADR 0033)
+-- The largest single addition: automatic renewal 30 days before term end. ADR
+-- 0019 deliberately did not foreclose it, and this reuses the whole pipeline
+-- rather than duplicating it - a renewal is a fresh application (copied from the
+-- predecessor), submit_application (re-referral), create_quote (re-rating), and
+-- bind_policy at a contiguous inception. The rules, orchestrator,
+-- submit_application, current_referral_action, create_quote and bind_policy are
+-- all UNTOUCHED - renewal composes them.
+--
+-- A1 CONSEQUENCE, STATED LOUDLY (a deliberate, informed limitation - see ADR
+-- 0033): the renewal copies the predecessor application's risk data verbatim, and
+-- NOTHING in this pass refreshes it (there is no MVR pull, no fresh loss run).
+-- So the re-referral that runs on a renewal is MECHANICALLY REAL BUT PRACTICALLY
+-- INERT: it re-evaluates the same frozen data already evaluated at the prior
+-- bind, so it returns essentially the same disposition and will NOT catch risk
+-- that materially worsened since (a new DUI, a new at-fault claim). "The referral
+-- engine ran" must not be mistaken for "the risk was re-checked" on a renewal.
+-- Time-based lookbacks can only make a disposition LESS severe (an old violation
+-- ages out); nothing here makes it more severe. A real risk-data refresh before
+-- renewal evaluation is genuine near-term follow-up work, not a nice-to-have.
+-- ============================================================================
+
+-- Deep-copies an application's RISK DATA into a fresh draft application, for a
+-- renewal. Scope is exactly what the referral engine and rating read (and what
+-- bind_policy snapshots): the application row, vehicles, additional_drivers,
+-- claims_history, and person_violations. person_violations.subject_driver_id is
+-- REMAPPED to the newly-created drivers (NULL, the applicant, stays NULL) so the
+-- copy is internally consistent rather than pointing back at the source app's
+-- drivers. Coverage/prior-insurance/enrichment detail is deliberately NOT copied:
+-- no current rule or rating input reads it, so carrying it would be dead weight
+-- and a maintenance trap (every future risk table would have to be added here);
+-- that is future work if a rule ever reads it. Returns the new application id.
+CREATE OR REPLACE FUNCTION copy_application_for_renewal(p_src_application_id UUID)
+RETURNS UUID AS $$
+DECLARE
+  v_new_app UUID;
+  v_driver_map JSONB := '{}'::jsonb;
+  r RECORD;
+  v_new_driver UUID;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM applications WHERE application_id = p_src_application_id) THEN
+    RAISE EXCEPTION 'RENEWAL_SOURCE_APPLICATION_NOT_FOUND: application % does not exist', p_src_application_id;
+  END IF;
+
+  INSERT INTO applications (applicant_id, status, garaging_state, state_specific_extensions)
+  SELECT applicant_id, 'draft', garaging_state, state_specific_extensions
+  FROM applications WHERE application_id = p_src_application_id
+  RETURNING application_id INTO v_new_app;
+
+  INSERT INTO vehicles (application_id, year, make, model, trim, vin, vehicle_category,
+    purchase_price, current_appraised_value, appraisal_date, appraisal_source,
+    agreed_value_requested, annual_mileage, primary_use, garaging_street, garaging_city,
+    garaging_state, garaging_zip, garage_type, security_features, modifications,
+    existing_liens, lienholder_name)
+  SELECT v_new_app, year, make, model, trim, vin, vehicle_category,
+    purchase_price, current_appraised_value, appraisal_date, appraisal_source,
+    agreed_value_requested, annual_mileage, primary_use, garaging_street, garaging_city,
+    garaging_state, garaging_zip, garage_type, security_features, modifications,
+    existing_liens, lienholder_name
+  FROM vehicles WHERE application_id = p_src_application_id;
+
+  -- Drivers, capturing an old->new id map so violations can be remapped.
+  FOR r IN SELECT * FROM additional_drivers WHERE application_id = p_src_application_id LOOP
+    INSERT INTO additional_drivers (application_id, name, relationship_to_applicant,
+      date_of_birth, years_licensed, license_status, violations_last_5yr, at_fault_accidents_last_5yr)
+    VALUES (v_new_app, r.name, r.relationship_to_applicant, r.date_of_birth, r.years_licensed,
+      r.license_status, r.violations_last_5yr, r.at_fault_accidents_last_5yr)
+    RETURNING driver_id INTO v_new_driver;
+    v_driver_map := v_driver_map || jsonb_build_object(r.driver_id::text, v_new_driver::text);
+  END LOOP;
+
+  INSERT INTO claims_history (application_id, claim_date, claim_type, at_fault, paid_amount, description)
+  SELECT v_new_app, claim_date, claim_type, at_fault, paid_amount, description
+  FROM claims_history WHERE application_id = p_src_application_id;
+
+  INSERT INTO person_violations (application_id, subject_driver_id, violation_date,
+    violation_type, conviction, bac_level, source)
+  SELECT v_new_app,
+    CASE WHEN pv.subject_driver_id IS NULL THEN NULL
+         ELSE (v_driver_map ->> pv.subject_driver_id::text)::uuid END,
+    pv.violation_date, pv.violation_type, pv.conviction, pv.bac_level, pv.source
+  FROM person_violations pv WHERE pv.application_id = p_src_application_id;
+
+  RETURN v_new_app;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Binds a renewal quote as the successor policy, contiguous with its predecessor.
+-- A thin wrapper over bind_policy (the reinstate_policy idiom - wrap, don't widen
+-- bind_policy again): it computes the contiguous inception (exactly the
+-- predecessor's term end, via bind_policy's existing p_inception_date), binds,
+-- and sets the renewal linkage/generation on the new row. STRUCTURAL nonrenewal
+-- guard: a policy with an active nonrenewal decision can never be renewed, by any
+-- caller (belt to the detector's suspenders). Returns the new policy id.
+CREATE OR REPLACE FUNCTION renew_policy(
+  p_quote_id UUID,
+  p_predecessor_policy_id UUID,
+  p_policy_number TEXT,
+  p_performed_by TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_pred_range TSTZRANGE;
+  v_pred_original UUID;
+  v_pred_generation INTEGER;
+  v_inception TIMESTAMPTZ;
+  v_new_policy UUID;
+BEGIN
+  SELECT effective_range, original_policy_id, renewal_generation
+    INTO v_pred_range, v_pred_original, v_pred_generation
+  FROM policies WHERE policy_id = p_predecessor_policy_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'RENEWAL_PREDECESSOR_NOT_FOUND: policy % does not exist', p_predecessor_policy_id;
+  END IF;
+
+  -- Structural nonrenewal guard (ADR 0033 point 6): an in-force nonrenewal
+  -- decision means "do not renew", full stop - refused regardless of caller.
+  IF EXISTS (SELECT 1 FROM policy_nonrenewals n
+             WHERE n.policy_id = p_predecessor_policy_id AND NOT isempty(n.effective_range)) THEN
+    RAISE EXCEPTION 'RENEWAL_POLICY_NONRENEWED: policy % has an active nonrenewal decision and cannot be renewed', p_predecessor_policy_id
+      USING HINT = 'A nonrenewal decision must be withdrawn (a separate follow-up) before the policy can renew.';
+  END IF;
+
+  v_inception := upper(v_pred_range);
+  IF v_inception IS NULL THEN
+    RAISE EXCEPTION 'RENEWAL_PREDECESSOR_UNBOUNDED_TERM: policy % has no term end, so a contiguous renewal has no inception', p_predecessor_policy_id;
+  END IF;
+
+  -- Contiguous inception exactly at the predecessor's term end.
+  v_new_policy := bind_policy(p_quote_id, p_policy_number, p_performed_by, v_inception);
+
+  UPDATE policies
+  SET renewed_from_policy_id = p_predecessor_policy_id,
+      original_policy_id = COALESCE(v_pred_original, p_predecessor_policy_id),
+      renewal_generation = v_pred_generation + 1
+  WHERE policy_id = v_new_policy;
+
+  INSERT INTO policy_events (policy_id, event_type, performed_by, notes)
+  VALUES (v_new_policy, 'renewed', p_performed_by,
+          format('Renewal of policy %s (generation %s), inception %s', p_predecessor_policy_id, v_pred_generation + 1, v_inception));
+
+  RETURN v_new_policy;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- The pre-expiry detector: the scheduled sweep (a daily VM systemd timer, the
+-- same pattern as expire_policies - pg_cron is blocked on luxauto-pg). Finds
+-- active policies whose term ends within 30 days, and for each generates a full
+-- renewal by reusing the pipeline: copy the application, submit_application
+-- (re-referral), create_quote (re-rating, gated), renew_policy (bind contiguous).
+--
+-- Skips (does not offer): a policy with an active nonrenewal decision (the
+-- detector-level half of the two-place guard), and one that already has a
+-- successor (idempotency - unlike expire_policies, whose status filter is
+-- self-idempotent, this detector's targets stay 'active', so a re-run without
+-- this check would double-renew). A policy whose renewal cannot currently produce
+-- a clean quote (a lapsed state filing making PC-03 fire, an expired territory
+-- factor, or a risk that would now be flagged/was previously overridden) is
+-- caught per-policy and counted as skipped rather than aborting the whole run -
+-- it simply is not auto-renewed, which is the correct outcome (a non-clean risk
+-- must not silently auto-renew). Returns (renewed_count, skipped_count).
+CREATE OR REPLACE FUNCTION generate_renewal_offers(p_as_of TIMESTAMPTZ DEFAULT now())
+RETURNS TABLE (renewed_count INTEGER, skipped_count INTEGER) AS $$
+DECLARE
+  v_renewed INTEGER := 0;
+  v_skipped INTEGER := 0;
+  v_pol RECORD;
+  v_src_app UUID;
+  v_new_app UUID;
+  v_channel broker_channel_t;
+  v_broker_rate NUMERIC;
+  v_program UUID;
+  v_garaging_state CHAR(2);
+  v_rating_record UUID;
+  v_quote UUID;
+  v_number TEXT;
+BEGIN
+  FOR v_pol IN
+    SELECT p.policy_id, p.policy_number, p.renewal_generation, q.application_id AS src_app,
+           q.broker_channel, q.broker_commission_rate, q.program_id, ap.garaging_state
+    FROM policies p
+    JOIN quotes q ON q.quote_id = p.quote_id
+    JOIN applications ap ON ap.application_id = q.application_id
+    WHERE p.status = 'active'
+      AND upper(p.effective_range) IS NOT NULL
+      AND upper(p.effective_range) > p_as_of
+      AND upper(p.effective_range) <= p_as_of + interval '30 days'
+      AND NOT EXISTS (SELECT 1 FROM policy_nonrenewals n
+                      WHERE n.policy_id = p.policy_id AND NOT isempty(n.effective_range))
+      AND NOT EXISTS (SELECT 1 FROM policies s WHERE s.renewed_from_policy_id = p.policy_id)
+    FOR UPDATE OF p
+  LOOP
+    BEGIN
+      -- The current filed rating-table version for the state (also what PC-03
+      -- checks): its absence means the renewal cannot be cleanly quoted.
+      SELECT record_id INTO v_rating_record
+      FROM state_rating_table_versions
+      WHERE state = v_pol.garaging_state AND effective_range @> p_as_of
+      ORDER BY lower(effective_range) DESC
+      LIMIT 1;
+      IF v_rating_record IS NULL THEN
+        RAISE EXCEPTION 'RENEWAL_NO_CURRENT_RATING_TABLE: no active state rating table for state %', v_pol.garaging_state;
+      END IF;
+
+      v_new_app := copy_application_for_renewal(v_pol.src_app);
+      PERFORM submit_application(v_new_app, 'system');   -- re-referral (see A1 note)
+      v_quote := create_quote(v_new_app, v_pol.broker_channel, v_pol.broker_commission_rate,
+                              v_rating_record, v_pol.program_id, 'system');  -- re-rating + gate
+      v_number := format('%s-R%s', COALESCE(v_pol.policy_number, v_pol.policy_id::text), v_pol.renewal_generation + 1);
+      PERFORM renew_policy(v_quote, v_pol.policy_id, v_number, 'system');
+      v_renewed := v_renewed + 1;
+    EXCEPTION WHEN OTHERS THEN
+      -- Any per-policy failure (flagged referral, lapsed filing, etc.) is a skip,
+      -- not a fatal error for the whole sweep. Its partial work is rolled back to
+      -- this savepoint.
+      v_skipped := v_skipped + 1;
+    END;
+  END LOOP;
+
+  RETURN QUERY SELECT v_renewed, v_skipped;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
@@ -5054,6 +5343,14 @@ GRANT EXECUTE ON FUNCTION nonrenew_policy(UUID, TEXT, TIMESTAMPTZ, TEXT, TEXT) T
 GRANT EXECUTE ON FUNCTION correct_policy_nonrenewal(UUID, TIMESTAMPTZ, TEXT, TEXT, TEXT) TO odoo;
 GRANT EXECUTE ON FUNCTION nonrenewal_notice_days(CHAR(2), UUID, NUMERIC, TIMESTAMPTZ) TO odoo;
 GRANT EXECUTE ON FUNCTION expire_policies(TIMESTAMPTZ) TO odoo;
+-- ADR 0033 renewal. generate_renewal_offers is what the daily VM systemd job
+-- runs (as the least-privilege odoo role, like expire_policies); renew_policy
+-- and copy_application_for_renewal are granted for a future manual-renewal
+-- wizard; policy_tenure_years is a read helper.
+GRANT EXECUTE ON FUNCTION generate_renewal_offers(TIMESTAMPTZ) TO odoo;
+GRANT EXECUTE ON FUNCTION renew_policy(UUID, UUID, TEXT, TEXT) TO odoo;
+GRANT EXECUTE ON FUNCTION copy_application_for_renewal(UUID) TO odoo;
+GRANT EXECUTE ON FUNCTION policy_tenure_years(UUID, TIMESTAMPTZ) TO odoo;
 -- Read-only and useful before the fact: a cancellation UI should be able to
 -- show the return premium it is about to create.
 GRANT EXECUTE ON FUNCTION policy_unearned_premium(UUID, TSTZRANGE, TIMESTAMPTZ) TO odoo;

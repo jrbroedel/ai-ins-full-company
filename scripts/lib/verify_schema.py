@@ -112,6 +112,18 @@ import psycopg2
 # and the CHECK/EXCLUDE constraints are not categories this parser tracks (they
 # are covered by tests/0028).
 #
+# ADR 0033's renewal workflow moves one count: +4 functions (policy_tenure_years,
+# copy_application_for_renewal, renew_policy, generate_renewal_offers). It adds
+# three columns to policies (renewed_from_policy_id, original_policy_id,
+# renewal_generation) and their CHECK/index, and changes the tenure line in both
+# nonrenew_policy and correct_policy_nonrenewal to call policy_tenure_years (the
+# scoped Flag B relaxation, extended to both to avoid a divergence) - but
+# added columns, CHECK constraints and CREATE-OR-REPLACE bodies are not categories
+# this parser tracks (renewal_generation is added via ADD COLUMN ... NOT NULL
+# DEFAULT, not an ALTER ... SET NOT NULL, so it does not move not_null_columns).
+# No new table (A1: the successor policy IS the offer, no renewal_offers table),
+# type, view or trigger. Covered by tests/0033.
+#
 # ADR 0032's underwriter supervised-release moves four counts: +1 type
 # (underwriter_authority_t), +2 tables (underwriters, referral_overrides),
 # +5 functions (add_underwriter, current_referral_evaluated_at,
@@ -158,7 +170,7 @@ import psycopg2
 BASELINE = {
     "tables": 35,
     "types": 21,
-    "functions": 55,
+    "functions": 59,
     "views": 13,
     "triggers": 27,
     "not_null_columns": 9,

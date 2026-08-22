@@ -1,0 +1,16 @@
+# ADR 0033. Daily, not hourly: the detector's 30-day window gives ~29 days of
+# runway once a policy enters it, so a day of detection latency is immaterial -
+# unlike luxauto-expire-policies, which acts at the immediate term end and runs
+# hourly. Persistent=true so a VM that was down catches up on the next boot
+# instead of silently skipping a day's cohort.
+[Unit]
+Description=Daily automatic renewal generation (ADR 0033)
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=600
+Persistent=true
+Unit=luxauto-generate-renewal-offers.service
+
+[Install]
+WantedBy=timers.target
