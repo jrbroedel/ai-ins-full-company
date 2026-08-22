@@ -18,12 +18,14 @@ CREATE FUNCTION pg_temp.mk_app(p_tag TEXT, p_state CHAR(2), p_value NUMERIC)
 RETURNS UUID AS $fx$
 DECLARE v_applicant UUID; v_app UUID;
 BEGIN
-  INSERT INTO applicants (first_name, last_name)
-  VALUES ('Test', '0028-' || p_tag) RETURNING applicant_id INTO v_applicant;
+  -- Applicant + vehicle populated with the DH-04-relevant fields (ADR 0037) so
+  -- the completeness gate does not fire on these rating fixtures.
+  INSERT INTO applicants (first_name, last_name, date_of_birth, license_status, years_licensed)
+  VALUES ('Test', '0028-' || p_tag, DATE '1980-01-01', 'valid', 20) RETURNING applicant_id INTO v_applicant;
   INSERT INTO applications (applicant_id, status, garaging_state)
   VALUES (v_applicant, 'submitted', p_state) RETURNING application_id INTO v_app;
-  INSERT INTO vehicles (application_id, year, make, model, vehicle_category, garaging_state, current_appraised_value)
-  VALUES (v_app, 2022, 'Ferrari', 'SF90', 'exotic', p_state, p_value);
+  INSERT INTO vehicles (application_id, year, make, model, vin, vehicle_category, garaging_state, garaging_street, current_appraised_value)
+  VALUES (v_app, 2022, 'Ferrari', 'SF90', 'VIN0028' || left(md5(random()::text), 10), 'exotic', p_state, '1 Test St', p_value);
   RETURN v_app;
 END;
 $fx$ LANGUAGE plpgsql;
@@ -103,7 +105,7 @@ END $$;
 -- ---------------------------------------------------------------------------
 -- T3  EL-01 through evaluate_application_referrals(): a below-floor vehicle fires
 --     EL01_BELOW_AGREED_VALUE_FLOOR -> DECLINE_RECOMMENDED, logged; an at/above
---     vehicle does not fire it. Five decision_log rows per call now.
+--     vehicle does not fire it. Twelve decision_log rows per call now (ADR 0037).
 -- ---------------------------------------------------------------------------
 DO $$
 DECLARE v_app UUID; v_action referral_action_t; v_fired BOOLEAN; v_n INT;
@@ -121,8 +123,8 @@ BEGIN
       RAISE EXCEPTION '0028-T3 FAILED: EL-01 did not fire for a below-floor application';
     END IF;
     SELECT count(*) INTO v_n FROM decision_log WHERE application_id = v_app;
-    IF v_n <> 5 THEN
-      RAISE EXCEPTION '0028-T3 FAILED: expected 5 decision_log rows (AL/CP/DH/PC/EL), got %', v_n;
+    IF v_n <> 12 THEN
+      RAISE EXCEPTION '0028-T3 FAILED: expected 12 decision_log rows (all rules, ADR 0037), got %', v_n;
     END IF;
 
     -- At/above floor: EL-01 does not fire.
@@ -137,7 +139,7 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'ROLLBACK_CASE' THEN RAISE; END IF;
   END;
-  RAISE NOTICE '0028-T3 pass: EL-01 fires below the floor (DECLINE_RECOMMENDED, logged), clears above it; 5 rows per call';
+  RAISE NOTICE '0028-T3 pass: EL-01 fires below the floor (DECLINE_RECOMMENDED, logged), clears above it; 12 rows per call';
 END $$;
 
 -- ---------------------------------------------------------------------------
@@ -269,11 +271,12 @@ BEGIN
     IF (v_dh, v_dh_action) IS DISTINCT FROM (true, 'MANUAL_REVIEW_SENIOR'::referral_action_t) THEN
       RAISE EXCEPTION '0028-T7 FAILED: DH-01 row is fired=%/action=%, expected true/MANUAL_REVIEW_SENIOR', v_dh, v_dh_action;
     END IF;
-    -- Five rows total, three fired (EL-01, DH-01, PC-03) - EL-01 firing does not
-    -- suppress or duplicate any other rule's row.
+    -- Twelve rows total (ADR 0037), three fired (EL-01, DH-01, PC-03) - EL-01
+    -- firing does not suppress or duplicate any other rule's row, and the seven
+    -- ADR 0037 rules stay quiet on this fixture.
     SELECT count(*) INTO v_n FROM decision_log WHERE application_id = v_app;
-    IF v_n <> 5 THEN
-      RAISE EXCEPTION '0028-T7 FAILED: expected 5 decision_log rows, got %', v_n;
+    IF v_n <> 12 THEN
+      RAISE EXCEPTION '0028-T7 FAILED: expected 12 decision_log rows, got %', v_n;
     END IF;
     SELECT count(*) INTO v_n FROM decision_log WHERE application_id = v_app AND fired;
     IF v_n <> 3 THEN

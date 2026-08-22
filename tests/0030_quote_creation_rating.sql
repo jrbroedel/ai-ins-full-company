@@ -47,15 +47,17 @@ BEGIN
           tstzrange('2000-01-01 00:00:00+00', '2100-01-01 00:00:00+00', '[)'))
   RETURNING record_id INTO rating_id;
 
-  INSERT INTO applicants (first_name, last_name)
-  VALUES ('Test', '0030-' || p_tag) RETURNING applicant_id INTO v_applicant;
+  -- DH-04-relevant fields (ADR 0037) populated so the completeness gate does not
+  -- fire on these quote/rating fixtures - they test create_quote, not DH-04.
+  INSERT INTO applicants (first_name, last_name, date_of_birth, license_status, years_licensed)
+  VALUES ('Test', '0030-' || p_tag, DATE '1980-01-01', 'valid', 20) RETURNING applicant_id INTO v_applicant;
 
   INSERT INTO applications (applicant_id, status, garaging_state)
   VALUES (v_applicant, 'submitted', p_state) RETURNING application_id INTO app_id;
 
   FOR i IN 1..p_n LOOP
-    INSERT INTO vehicles (application_id, year, make, model, vehicle_category, garaging_state, current_appraised_value)
-    VALUES (app_id, 2022, 'Ferrari', 'SF90-' || i, p_category, p_state, p_value);
+    INSERT INTO vehicles (application_id, year, make, model, vin, vehicle_category, garaging_state, garaging_street, current_appraised_value)
+    VALUES (app_id, 2022, 'Ferrari', 'SF90-' || i, 'VIN0030' || p_tag || i, p_category, p_state, '1 Test St', p_value);
   END LOOP;
 END;
 $fx$ LANGUAGE plpgsql;

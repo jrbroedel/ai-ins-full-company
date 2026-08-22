@@ -7,7 +7,7 @@
 -- automatic bindable quote unless that disposition is <= AUTO_PROCEED_WITH_FLAG.
 --
 --   T1  submit_application: clean app -> AUTO_PROCEED, status becomes submitted,
---       submitted_at stamped, 5 decision_log rows, current_referral_action agrees
+--       submitted_at stamped, 12 decision_log rows, current_referral_action agrees
 --   T2  end-to-end: a cleared application quotes successfully after submission
 --   T3  blocked: a DUI application -> MANUAL_REVIEW_SENIOR, create_quote refused
 --       with QUOTE_APPLICATION_NOT_CLEAR_TO_QUOTE, no quote
@@ -43,14 +43,17 @@ BEGIN
           tstzrange('2000-01-01 00:00:00+00', '2100-01-01 00:00:00+00', '[)'))
   RETURNING record_id INTO rating_id;
 
-  INSERT INTO applicants (first_name, last_name)
-  VALUES ('Test', '0031-' || p_tag) RETURNING applicant_id INTO v_applicant;
+  -- DH-04-relevant fields (ADR 0037) populated so a clean gate fixture is also
+  -- complete - submit_application sets status to 'submitted' before evaluating,
+  -- so DH-04 would otherwise fire on these on first submission.
+  INSERT INTO applicants (first_name, last_name, date_of_birth, license_status, years_licensed)
+  VALUES ('Test', '0031-' || p_tag, DATE '1980-01-01', 'valid', 20) RETURNING applicant_id INTO v_applicant;
 
   INSERT INTO applications (applicant_id, status, garaging_state)
   VALUES (v_applicant, 'draft', p_state) RETURNING application_id INTO app_id;
 
-  INSERT INTO vehicles (application_id, year, make, model, vehicle_category, garaging_state, current_appraised_value)
-  VALUES (app_id, 2022, 'Ferrari', 'SF90', 'exotic', p_state, p_value);
+  INSERT INTO vehicles (application_id, year, make, model, vin, vehicle_category, garaging_state, garaging_street, current_appraised_value)
+  VALUES (app_id, 2022, 'Ferrari', 'SF90', 'VIN0031' || p_tag, 'exotic', p_state, '1 Test St', p_value);
 END;
 $fx$ LANGUAGE plpgsql;
 
@@ -61,7 +64,7 @@ $fx$ LANGUAGE sql;
 
 -- ---------------------------------------------------------------------------
 -- T1  submit_application on a clean application: AUTO_PROCEED, the draft->
---     submitted transition and submitted_at stamp, five decision_log rows, and
+--     submitted transition and submitted_at stamp, twelve decision_log rows, and
 --     current_referral_action() reporting the same disposition.
 -- ---------------------------------------------------------------------------
 DO $$
@@ -85,8 +88,8 @@ BEGIN
     END IF;
 
     SELECT count(*) INTO v_n FROM decision_log WHERE application_id = v_app;
-    IF v_n <> 5 THEN
-      RAISE EXCEPTION '0031-T1 FAILED: expected 5 decision_log rows after submission, got %', v_n;
+    IF v_n <> 12 THEN
+      RAISE EXCEPTION '0031-T1 FAILED: expected 12 decision_log rows after submission, got %', v_n;
     END IF;
 
     v_cur := current_referral_action(v_app);
@@ -98,7 +101,7 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'ROLLBACK_CASE' THEN RAISE; END IF;
   END;
-  RAISE NOTICE '0031-T1 pass: submit_application clears a clean app (AUTO_PROCEED), transitions to submitted with submitted_at, logs 5 rows';
+  RAISE NOTICE '0031-T1 pass: submit_application clears a clean app (AUTO_PROCEED), transitions to submitted with submitted_at, logs 12 rows';
 END $$;
 
 -- ---------------------------------------------------------------------------
@@ -202,7 +205,7 @@ END $$;
 --     data changes (a DUI conviction arrives); re-submit. submit_application is
 --     re-runnable and re-evaluates the CURRENT data, returning the new
 --     disposition (MANUAL_REVIEW_SENIOR), and decision_log retains both runs
---     (10 rows, append-only), status still 'submitted'. (That the *gate* then
+--     (24 rows, append-only), status still 'submitted'. (That the *gate* then
 --     reads the newest run is T6: within one test transaction now() is frozen, so
 --     two real submissions collide on created_at and cannot be told apart by the
 --     latest-per-rule read - the same harness reality ADR 0029 documented. In
@@ -234,8 +237,8 @@ BEGIN
 
     -- Both runs retained (append-only), and still 'submitted'.
     SELECT count(*) INTO v_n FROM decision_log WHERE application_id = v_app;
-    IF v_n <> 10 THEN
-      RAISE EXCEPTION '0031-T5 FAILED: expected 10 decision_log rows across two evaluations, got %', v_n;
+    IF v_n <> 24 THEN
+      RAISE EXCEPTION '0031-T5 FAILED: expected 24 decision_log rows across two evaluations, got %', v_n;
     END IF;
     SELECT status INTO v_status FROM applications WHERE application_id = v_app;
     IF v_status IS DISTINCT FROM 'submitted' THEN
@@ -246,7 +249,7 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'ROLLBACK_CASE' THEN RAISE; END IF;
   END;
-  RAISE NOTICE '0031-T5 pass: re-submission re-evaluates current data (AUTO_PROCEED -> MANUAL_REVIEW_SENIOR after a DUI), both runs retained (10 rows), still submitted';
+  RAISE NOTICE '0031-T5 pass: re-submission re-evaluates current data (AUTO_PROCEED -> MANUAL_REVIEW_SENIOR after a DUI), both runs retained (24 rows), still submitted';
 END $$;
 
 -- ---------------------------------------------------------------------------

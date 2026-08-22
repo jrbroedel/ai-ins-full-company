@@ -49,10 +49,15 @@ BEGIN
   END IF;
   SELECT record_id INTO v_rating FROM state_rating_table_versions WHERE state = 'T0' AND effective_range @> now() LIMIT 1;
 
-  INSERT INTO applicants (first_name, last_name) VALUES ('Test', '0033-' || p_tag) RETURNING applicant_id INTO v_applicant;
+  -- date_of_birth / license_status / years_licensed (applicant) and garaging_street
+  -- (vehicle) populated so DH-04 (ADR 0037) does not fire - and copy_application_
+  -- for_renewal reuses this applicant and copies the vehicle's garaging_street/vin,
+  -- so the renewal application stays complete too.
+  INSERT INTO applicants (first_name, last_name, date_of_birth, license_status, years_licensed)
+  VALUES ('Test', '0033-' || p_tag, DATE '1980-01-01', 'valid', 20) RETURNING applicant_id INTO v_applicant;
   INSERT INTO applications (applicant_id, status, garaging_state) VALUES (v_applicant, 'draft', 'T0') RETURNING application_id INTO v_app;
-  INSERT INTO vehicles (application_id, year, make, model, vin, vehicle_category, garaging_state, current_appraised_value)
-  VALUES (v_app, 2022, 'Ferrari', 'SF90', 'VIN0033' || p_tag, 'exotic', 'T0', 600000);
+  INSERT INTO vehicles (application_id, year, make, model, vin, vehicle_category, garaging_state, garaging_street, current_appraised_value)
+  VALUES (v_app, 2022, 'Ferrari', 'SF90', 'VIN0033' || p_tag, 'exotic', 'T0', '1 Test St', 600000);
 
   PERFORM submit_application(v_app, 'test');
   v_quote := create_quote(v_app, 'retail', 10, v_rating, NULL, 'test');
@@ -309,7 +314,7 @@ END $$;
 
 -- ---------------------------------------------------------------------------
 -- T7  Re-rating and re-referral actually fire on the renewal (not merely a quote
---     appearing): the renewal application has the 5 decision_log rows a submission
+--     appearing): the renewal application has the 12 decision_log rows a submission
 --     writes, and the renewal quote carries a v1 rating_basis.
 -- ---------------------------------------------------------------------------
 DO $$
@@ -330,10 +335,10 @@ BEGIN
       RAISE EXCEPTION '0033-T7 FAILED: the renewal reused the predecessor application instead of a fresh copy';
     END IF;
 
-    -- Re-referral fired: submit_application wrote the 5 decision_log rows.
+    -- Re-referral fired: submit_application wrote the 12 decision_log rows.
     SELECT count(*) INTO v_n FROM decision_log WHERE application_id = v_ren_app;
-    IF v_n <> 5 THEN
-      RAISE EXCEPTION '0033-T7 FAILED: renewal application has % decision_log rows, expected 5 (re-referral did not fire)', v_n;
+    IF v_n <> 12 THEN
+      RAISE EXCEPTION '0033-T7 FAILED: renewal application has % decision_log rows, expected 12 (re-referral did not fire)', v_n;
     END IF;
 
     -- Re-rating fired: the renewal quote carries a v1 rating_basis.
@@ -346,7 +351,7 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'ROLLBACK_CASE' THEN RAISE; END IF;
   END;
-  RAISE NOTICE '0033-T7 pass: the renewal pipeline really runs - a fresh copied application with 5 decision_log rows (re-referral) and a v1 rating_basis (re-rating)';
+  RAISE NOTICE '0033-T7 pass: the renewal pipeline really runs - a fresh copied application with 12 decision_log rows (re-referral) and a v1 rating_basis (re-rating)';
 END $$;
 
 -- ---------------------------------------------------------------------------

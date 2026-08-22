@@ -179,7 +179,7 @@ import psycopg2
 BASELINE = {
     "tables": 35,
     "types": 21,
-    "functions": 61,
+    "functions": 68,
     "views": 13,
     "triggers": 28,
     "not_null_columns": 9,

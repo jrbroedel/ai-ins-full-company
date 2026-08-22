@@ -1,7 +1,11 @@
 {
   "schema_name": "Luxury Auto Referral Matrix",
-  "version": "1.2",
+  "version": "1.3",
   "changelog": [
+    {
+      "version": "1.3",
+      "summary": "ADR 0037 - seven more rules implemented in the referral engine (evaluate_<rule>() functions, wired into evaluate_application_referrals(); the orchestrator now composes twelve rules, one decision_log row each): VV-03, VV-04, DH-03, DH-04, AL-02, CP-01, PC-01. All read only fields already present in the application schema. Notes: VV-03 implements the currency/staleness limb only (missing/stale appraisal when agreed value is requested); the '115% of appraised value' limb is deferred because there is no requested agreed-value AMOUNT field in the schema (only the boolean agreed_value_requested and current_appraised_value). VV-03 reads the reappraisal interval live from state_rating_table_versions.agreed_value_rules.reappraisal_interval_years for the garaging state, falling back to a 3-year national default when the state is not onboarded or the value is null/'TBD'. CP-01's heuristic is concrete: pleasure/commute annual_mileage >= 20000, OR a commercial-driving occupation keyword with a single pleasure vehicle. PC-01 fires on a garaging-state != mailing-state mismatch; its territory_rating_basis state_override_hook is descriptive metadata, not rule logic. DH-04 gates only submitted (not draft) applications - submit_application was reordered (ADR 0031 -> 0037) to set status before evaluating so first submissions are checked. Still unimplemented (need external data sources): VV-01, VV-02, DH-02, PC-02 (sanctions/OFAC), PC-04."
+    },
     {
       "version": "1.2",
       "summary": "ADR 0036 - two independent rule-logic changes from different sources. (1) DH-01 (source: insurance-domain colleague's email, 'same five year look to keep it simple'): reckless-driving convictions now fire DH-01 on the same 5-year look-back and the same MANUAL_REVIEW_SENIOR severity as DUI, with a type-aware reason_code (DH01_DUI_WITHIN_LOOKBACK / DH01_RECKLESS_WITHIN_LOOKBACK, DUI precedence when both present, still one decision_log row per rule). (2) PC-03 (source: founder directive, reframed around the all-50-states v1 rollout): out-of-territory routes to AUTO_PROCEED_WITH_FLAG instead of MANUAL_REVIEW_REQUIRED - it still fires and still logs its reason_code (rule 4), but no longer blocks on a human for a not-yet-onboarded state; this does not make such a state quotable. Resolves the open_items PC-03 entry (soft-warn)."
@@ -62,7 +66,8 @@
         "rationale": "Agreed value is only meaningful with a current, credible valuation basis. This is a completeness/currency gate, not a risk judgment - resolve it before it reaches an underwriter.",
         "state_override_hook": "agreed_value_rules.reappraisal_interval_years",
         "test_case_reference": null,
-        "reason_code": "VV03_STALE_OR_UNSUPPORTED_AGREED_VALUE"
+        "reason_code": "VV03_STALE_OR_UNSUPPORTED_AGREED_VALUE",
+        "implementation": "ADR 0037: implemented as evaluate_vv03() - the missing/stale-appraisal limb only (fires INFORMATION_REQUEST when a vehicle requests agreed value and its appraisal_date is null or older than the reappraisal interval). The '115% of appraised value' limb is NOT implemented: no requested agreed-value amount field exists. Interval read live from agreed_value_rules.reappraisal_interval_years, 3-year national default fallback."
       },
       {
         "rule_id": "VV-04",
@@ -73,7 +78,8 @@
         "rationale": "Modifications change both theft/collision severity and the correct agreed value basis - mirrors the moderate-risk sample profile already in your test set.",
         "state_override_hook": null,
         "test_case_reference": "Sample application: moderate-risk young driver with modified performance vehicle",
-        "reason_code": "VV04_UNDECLARED_MODIFICATION_IMPACT"
+        "reason_code": "VV04_UNDECLARED_MODIFICATION_IMPACT",
+        "implementation": "ADR 0037: implemented as evaluate_vv04() - fires when a vehicle has a non-blank modifications value but vehicle_category is still production_luxury."
       }
     ],
     "driver_and_household": [
@@ -108,7 +114,8 @@
         "rationale": "Mirrors the high-risk sample profile in your existing test set (suspended additional driver + poor claims history) - this combination has historically been one of the clearest hard-stop patterns in HNW auto underwriting.",
         "state_override_hook": null,
         "test_case_reference": "Sample application: high-risk applicant with poor claims history and suspended additional driver",
-        "reason_code": "DH03_SUSPENDED_OR_REVOKED_LICENSE"
+        "reason_code": "DH03_SUSPENDED_OR_REVOKED_LICENSE",
+        "implementation": "ADR 0037: implemented as evaluate_dh03() - fires MANUAL_REVIEW_SENIOR when applicant or any additional driver has license_status suspended or revoked (expired does not count)."
       },
       {
         "rule_id": "DH-04",
@@ -119,7 +126,8 @@
         "rationale": "The pipeline must not default-fill or silently proceed on missing risk-critical fields - it must explicitly ask, not guess. This is the completeness gate your incomplete-application edge case was specifically built to exercise.",
         "state_override_hook": null,
         "test_case_reference": "Edge case: incomplete application with widespread null fields (APP-0008)",
-        "reason_code": "DH04_INSUFFICIENT_DATA_FOR_RISK_COMPUTATION"
+        "reason_code": "DH04_INSUFFICIENT_DATA_FOR_RISK_COMPUTATION",
+        "implementation": "ADR 0037: implemented as evaluate_dh04() - fires INFORMATION_REQUEST on a SUBMITTED (not draft) application missing applicant date_of_birth/license_status/years_licensed or any vehicle's vin/garaging_street. submit_application sets status before evaluating so first submissions are gated."
       }
     ],
     "account_and_loss_history": [
@@ -143,7 +151,8 @@
         "rationale": "Why a carrier chose not to renew is exactly the kind of context a model shouldn't resolve unilaterally - the reason matters more than the fact.",
         "state_override_hook": null,
         "test_case_reference": null,
-        "reason_code": "AL02_PRIOR_NONRENEWAL_OR_CANCELLATION"
+        "reason_code": "AL02_PRIOR_NONRENEWAL_OR_CANCELLATION",
+        "implementation": "ADR 0037: implemented as evaluate_al02() - fires when prior_insurance.any_nonrenewal_or_cancellation_history is true; a missing prior_insurance row is not a trigger."
       }
     ],
     "coverage_and_pricing": [
@@ -156,7 +165,8 @@
         "rationale": "Business-use misrepresentation changes the entire coverage form that should apply, not just the price - a personal auto policy may not respond to a business-use loss at all.",
         "state_override_hook": null,
         "test_case_reference": "Edge case: business-use misrepresentation",
-        "reason_code": "CP01_SUSPECTED_UNDISCLOSED_BUSINESS_USE"
+        "reason_code": "CP01_SUSPECTED_UNDISCLOSED_BUSINESS_USE",
+        "implementation": "ADR 0037: implemented as evaluate_cp01() - fires MANUAL_REVIEW_REQUIRED on EITHER a pleasure/commute vehicle with annual_mileage >= 20000, OR a commercial-driving occupation keyword (rideshare/uber/lyft/livery/taxi/chauffeur/courier/delivery/real estate/realtor) with a single pleasure vehicle. Thresholds/keywords are tunable knobs."
       },
       {
         "rule_id": "CP-02",
@@ -191,7 +201,8 @@
         "rationale": "Territory is one of the most heavily-weighted rating variables in every state reviewed - an unexplained mismatch is the single highest-value rate-evasion signal available before a human even looks at the file.",
         "state_override_hook": "territory_rating_basis",
         "test_case_reference": "Edge case: garaging address mismatch/rate evasion",
-        "reason_code": "PC01_GARAGING_ADDRESS_MISMATCH"
+        "reason_code": "PC01_GARAGING_ADDRESS_MISMATCH",
+        "implementation": "ADR 0037: implemented as evaluate_pc01() - fires when applications.garaging_state differs from applicants.mailing_state (null mailing_state -> not fired). territory_rating_basis is descriptive metadata, not a gate. The 'documented reason' exception is not yet representable; the human reviewer weighs it."
       },
       {
         "rule_id": "PC-02",

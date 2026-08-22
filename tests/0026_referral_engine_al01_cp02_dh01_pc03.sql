@@ -23,8 +23,11 @@ CREATE FUNCTION pg_temp.mk_app(p_tag TEXT, p_state CHAR(2), p_submitted TIMESTAM
 RETURNS UUID AS $fx$
 DECLARE v_applicant UUID; v_app UUID;
 BEGIN
-  INSERT INTO applicants (first_name, last_name)
-  VALUES ('Test', '0026-' || p_tag) RETURNING applicant_id INTO v_applicant;
+  -- date_of_birth / license_status / years_licensed populated so DH-04 (ADR 0037)
+  -- does not fire on these fixtures - they exercise other rules, not the
+  -- completeness gate.
+  INSERT INTO applicants (first_name, last_name, date_of_birth, license_status, years_licensed)
+  VALUES ('Test', '0026-' || p_tag, DATE '1980-01-01', 'valid', 20) RETURNING applicant_id INTO v_applicant;
   INSERT INTO applications (applicant_id, status, garaging_state, submitted_at)
   VALUES (v_applicant, 'submitted', p_state, p_submitted) RETURNING application_id INTO v_app;
   RETURN v_app;
@@ -34,8 +37,9 @@ $fx$ LANGUAGE plpgsql;
 CREATE FUNCTION pg_temp.add_vehicle(p_app UUID, p_value NUMERIC)
 RETURNS VOID AS $fx$
 BEGIN
-  INSERT INTO vehicles (application_id, year, make, model, vehicle_category, garaging_state, current_appraised_value)
-  VALUES (p_app, 2024, 'Ferrari', 'SF90', 'exotic', 'CA', p_value);
+  -- vin / garaging_street populated for the same DH-04 reason.
+  INSERT INTO vehicles (application_id, year, make, model, vin, vehicle_category, garaging_state, garaging_street, current_appraised_value)
+  VALUES (p_app, 2024, 'Ferrari', 'SF90', 'VIN0026' || left(md5(random()::text), 10), 'exotic', 'CA', '1 Test St', p_value);
 END;
 $fx$ LANGUAGE plpgsql;
 
@@ -293,7 +297,7 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
--- T5  Orchestrator: exactly four decision_log rows per call (one per rule,
+-- T5  Orchestrator: exactly twelve decision_log rows per call (one per rule,
 --     fired or not), and the most-severe action wins across two combinations.
 -- ---------------------------------------------------------------------------
 DO $$
@@ -314,11 +318,11 @@ BEGIN
       RAISE EXCEPTION '0026-T5 FAILED: combo 1 returned %, expected MANUAL_REVIEW_SENIOR (most severe of SENIOR/WITH_FLAG)', v_action;
     END IF;
 
-    -- One row per rule (five since ADR 0028 added EL-01), with the expected
+    -- One row per rule (twelve since ADR 0037 added seven), with the expected
     -- fired flags on the four ADR 0026 rules.
     SELECT count(*) INTO v_n FROM decision_log WHERE application_id = v_app;
-    IF v_n <> 5 THEN
-      RAISE EXCEPTION '0026-T5 FAILED: expected 5 decision_log rows from one orchestrator call, got %', v_n;
+    IF v_n <> 12 THEN
+      RAISE EXCEPTION '0026-T5 FAILED: expected 12 decision_log rows from one orchestrator call, got %', v_n;
     END IF;
     SELECT (SELECT fired FROM decision_log WHERE application_id = v_app AND rule_id = 'AL-01'),
            (SELECT fired FROM decision_log WHERE application_id = v_app AND rule_id = 'CP-02'),
@@ -329,8 +333,9 @@ BEGIN
       RAISE EXCEPTION '0026-T5 FAILED: combo 1 fired flags AL/CP/DH/PC = %/%/%/%, expected false/false/true/true', v_al, v_cp, v_dh, v_pc;
     END IF;
 
-    -- Combo 2: clean application, licensed state -> nothing fires -> AUTO_PROCEED,
-    -- five rows all fired=false (AL/CP/DH/PC/EL).
+    -- Combo 2: clean, complete application, licensed state -> nothing fires ->
+    -- AUTO_PROCEED, all twelve rows fired=false (the enriched fixture also clears
+    -- DH-04's completeness gate, ADR 0037).
     v_app := pg_temp.mk_app('T5b', 'QQ');
     PERFORM pg_temp.add_vehicle(v_app, 500000);
     INSERT INTO state_rating_table_versions
@@ -343,15 +348,15 @@ BEGIN
       RAISE EXCEPTION '0026-T5 FAILED: a clean, licensed application returned %, expected AUTO_PROCEED', v_action;
     END IF;
     SELECT count(*) INTO v_n FROM decision_log WHERE application_id = v_app AND NOT fired;
-    IF v_n <> 5 THEN
-      RAISE EXCEPTION '0026-T5 FAILED: expected 5 non-fired decision_log rows for a clean application, got %', v_n;
+    IF v_n <> 12 THEN
+      RAISE EXCEPTION '0026-T5 FAILED: expected 12 non-fired decision_log rows for a clean application, got %', v_n;
     END IF;
 
     RAISE EXCEPTION 'ROLLBACK_CASE';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'ROLLBACK_CASE' THEN RAISE; END IF;
   END;
-  RAISE NOTICE '0026-T5 pass: the orchestrator writes 4 rows per call and returns the most-severe fired action';
+  RAISE NOTICE '0026-T5 pass: the orchestrator writes 12 rows per call and returns the most-severe fired action';
 END $$;
 
 -- ---------------------------------------------------------------------------

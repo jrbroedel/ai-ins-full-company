@@ -114,10 +114,14 @@ BEGIN
                            'SERFF-QS-ILLUSTRATIVE', tstzrange('2026-01-01 00:00:00+00', '2100-01-01 00:00:00+00', '[)'),
                            1.0500, 'illustrative test PD territory factor');
 
-    INSERT INTO applicants (first_name, last_name) VALUES ('Test', '0035-QS') RETURNING applicant_id INTO v_applicant;
+    -- Complete applicant + vehicle (date_of_birth/license_status/years_licensed,
+    -- vin/garaging_street) so the ADR 0037 DH-04 completeness gate stays clear and
+    -- this stays a clean AUTO_PROCEED end-to-end onboarding check.
+    INSERT INTO applicants (first_name, last_name, date_of_birth, license_status, years_licensed)
+    VALUES ('Test', '0035-QS', DATE '1980-01-01', 'valid', 20) RETURNING applicant_id INTO v_applicant;
     INSERT INTO applications (applicant_id, status, garaging_state) VALUES (v_applicant, 'draft', 'QS') RETURNING application_id INTO v_app;
-    INSERT INTO vehicles (application_id, year, make, model, vehicle_category, garaging_state, current_appraised_value)
-    VALUES (v_app, 2022, 'Ferrari', 'SF90', 'exotic', 'QS', 600000);
+    INSERT INTO vehicles (application_id, year, make, model, vin, vehicle_category, garaging_state, garaging_street, current_appraised_value)
+    VALUES (v_app, 2022, 'Ferrari', 'SF90', 'VIN0035QS', 'exotic', 'QS', '1 Test St', 600000);
 
     -- PC-03 clears because QS is now onboarded -> AUTO_PROCEED.
     v_action := submit_application(v_app, 'test');

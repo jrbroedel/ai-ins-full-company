@@ -65,12 +65,15 @@ CREATE FUNCTION pg_temp.mk_app(p_tag TEXT, p_state CHAR(2), p_value NUMERIC, OUT
 AS $fx$
 DECLARE v_applicant UUID;
 BEGIN
-  INSERT INTO applicants (first_name, last_name)
-  VALUES ('Test', '0029-' || p_tag) RETURNING applicant_id INTO v_applicant;
+  -- date_of_birth/license_status/years_licensed + vin/garaging_street so DH-04
+  -- (ADR 0037) does not fire on the real-orchestrator fixtures below - keeps the
+  -- fired-rule set exactly the intended rules (EL-01/DH-01/PC-03).
+  INSERT INTO applicants (first_name, last_name, date_of_birth, license_status, years_licensed)
+  VALUES ('Test', '0029-' || p_tag, DATE '1980-01-01', 'valid', 20) RETURNING applicant_id INTO v_applicant;
   INSERT INTO applications (applicant_id, status, garaging_state)
   VALUES (v_applicant, 'submitted', p_state) RETURNING application_id INTO app_id;
-  INSERT INTO vehicles (application_id, year, make, model, vehicle_category, garaging_state, current_appraised_value)
-  VALUES (app_id, 2022, 'Ferrari', 'SF90', 'exotic', p_state, p_value)
+  INSERT INTO vehicles (application_id, year, make, model, vin, vehicle_category, garaging_state, garaging_street, current_appraised_value)
+  VALUES (app_id, 2022, 'Ferrari', 'SF90', 'VIN0029' || p_tag, 'exotic', p_state, '1 Test St', p_value)
   RETURNING vehicle_id INTO veh_id;
 END;
 $fx$ LANGUAGE plpgsql;
@@ -235,9 +238,9 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
--- T3  Decision-log detail view: every logged row appears (5 per orchestrator
---     call), with the right fired/action per rule, and the five id hashes are
---     distinct (no collision across a handful of rows).
+-- T3  Decision-log detail view: every logged row appears (12 per orchestrator
+--     call, ADR 0037), with the right fired/action per rule, and the twelve id
+--     hashes are distinct (no collision across a handful of rows).
 -- ---------------------------------------------------------------------------
 DO $$
 DECLARE v_app UUID; v_veh UUID; v_n INT; v_fired BOOLEAN; v_action referral_action_t;
@@ -247,12 +250,12 @@ BEGIN
     PERFORM evaluate_application_referrals(v_app);
 
     SELECT count(*) INTO v_n FROM luxauto_decision_log_view WHERE application_id = v_app;
-    IF v_n <> 5 THEN
-      RAISE EXCEPTION '0029-T3 FAILED: expected 5 decision-log view rows, got %', v_n;
+    IF v_n <> 12 THEN
+      RAISE EXCEPTION '0029-T3 FAILED: expected 12 decision-log view rows, got %', v_n;
     END IF;
     SELECT count(DISTINCT id) INTO v_n FROM luxauto_decision_log_view WHERE application_id = v_app;
-    IF v_n <> 5 THEN
-      RAISE EXCEPTION '0029-T3 FAILED: the 5 decision-log rows do not have 5 distinct id hashes (got % distinct)', v_n;
+    IF v_n <> 12 THEN
+      RAISE EXCEPTION '0029-T3 FAILED: the 12 decision-log rows do not have 12 distinct id hashes (got % distinct)', v_n;
     END IF;
 
     SELECT fired, action_taken INTO v_fired, v_action
@@ -265,7 +268,7 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'ROLLBACK_CASE' THEN RAISE; END IF;
   END;
-  RAISE NOTICE '0029-T3 pass: decision-log detail view returns every row with correct fired/action and 5 distinct id hashes';
+  RAISE NOTICE '0029-T3 pass: decision-log detail view returns every row with correct fired/action and 12 distinct id hashes';
 END $$;
 
 -- ---------------------------------------------------------------------------
@@ -274,7 +277,7 @@ END $$;
 --   A) Derivation via max(action_taken), with NO orchestrator call. The
 --      below-floor + DUI scenario from 0028 T7 (EL-01 DECLINE, DH-01 SENIOR,
 --      PC-03 REQUIRED all fire) run once through the real orchestrator: the
---      summary must read DECLINE_RECOMMENDED / 3 fired / 5 rules, and SELECTing
+--      summary must read DECLINE_RECOMMENDED / 3 fired / 12 rules, and SELECTing
 --      from the view must write no new decision_log rows (proving the summary
 --      derives from stored rows, never by calling evaluate_application_referrals).
 --
@@ -308,8 +311,8 @@ BEGIN
       RAISE EXCEPTION '0029-T4 FAILED: reading the summary view wrote decision_log rows (% -> %) - it must not call the orchestrator', v_before, v_after;
     END IF;
     IF (r.id, r.most_severe_action, r.fired_rule_count, r.rule_count)
-       IS DISTINCT FROM (pg_temp.hash_id(v_app), 'DECLINE_RECOMMENDED'::referral_action_t, 3::bigint, 5::bigint) THEN
-      RAISE EXCEPTION '0029-T4 FAILED: summary (part A) is id=%/action=%/fired=%/rules=%, expected hash/DECLINE_RECOMMENDED/3/5',
+       IS DISTINCT FROM (pg_temp.hash_id(v_app), 'DECLINE_RECOMMENDED'::referral_action_t, 3::bigint, 12::bigint) THEN
+      RAISE EXCEPTION '0029-T4 FAILED: summary (part A) is id=%/action=%/fired=%/rules=%, expected hash/DECLINE_RECOMMENDED/3/12',
         r.id, r.most_severe_action, r.fired_rule_count, r.rule_count;
     END IF;
 

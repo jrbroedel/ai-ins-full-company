@@ -31,14 +31,17 @@ BEGIN
           tstzrange('2000-01-01 00:00:00+00', '2100-01-01 00:00:00+00', '[)'))
   RETURNING record_id INTO v_rating;
 
-  INSERT INTO applicants (first_name, last_name)
-  VALUES ('Test', '0027-' || p_tag) RETURNING applicant_id INTO v_applicant;
+  -- date_of_birth / license_status / years_licensed (applicant) and garaging_street
+  -- (vehicle) populated so DH-04 (ADR 0037) does not fire - this suite tests
+  -- vehicle-category behaviour, not the completeness gate.
+  INSERT INTO applicants (first_name, last_name, date_of_birth, license_status, years_licensed)
+  VALUES ('Test', '0027-' || p_tag, DATE '1980-01-01', 'valid', 20) RETURNING applicant_id INTO v_applicant;
 
   INSERT INTO applications (applicant_id, status, garaging_state)
   VALUES (v_applicant, 'submitted', p_state) RETURNING application_id INTO app_id;
 
-  INSERT INTO vehicles (application_id, year, make, model, vin, vehicle_category, garaging_state)
-  VALUES (app_id, 1938, 'Bugatti', 'Type 57', 'VIN0027' || p_tag, p_category, p_state)
+  INSERT INTO vehicles (application_id, year, make, model, vin, vehicle_category, garaging_state, garaging_street)
+  VALUES (app_id, 1938, 'Bugatti', 'Type 57', 'VIN0027' || p_tag, p_category, p_state, '1 Test St')
   RETURNING vehicle_id INTO v_vehicle;
 
   INSERT INTO additional_drivers (application_id, name, date_of_birth)
@@ -128,8 +131,8 @@ BEGIN
       RAISE EXCEPTION '0027-T3 FAILED: a clean pre_war_vintage application returned %, expected AUTO_PROCEED (no rule branches on category)', v_action;
     END IF;
     SELECT count(*) INTO v_n FROM decision_log WHERE application_id = v_app;
-    IF v_n <> 5 THEN
-      RAISE EXCEPTION '0027-T3 FAILED: expected 5 decision_log rows (AL/CP/DH/PC/EL), got % - a new category must not disturb the referral pass', v_n;
+    IF v_n <> 12 THEN
+      RAISE EXCEPTION '0027-T3 FAILED: expected 12 decision_log rows (all rules, ADR 0037), got % - a new category must not disturb the referral pass', v_n;
     END IF;
 
     RAISE EXCEPTION 'ROLLBACK_CASE';

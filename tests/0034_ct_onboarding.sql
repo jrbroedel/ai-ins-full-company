@@ -126,16 +126,24 @@ DECLARE
   v_quote UUID; v_prem NUMERIC; v_exp NUMERIC; r RECORD; v_policy UUID; v_status policy_status_t;
 BEGIN
   BEGIN
-    -- APP-0001's actual data.
-    INSERT INTO applicants (first_name, last_name, date_of_birth, email, phone, mailing_city, mailing_state)
-    VALUES ('Miriam', 'Ostrander', DATE '1971-03-14', 'm.ostrander@example.com', '555-010-0001', 'Greenwich', 'CT')
+    -- APP-0001's actual data. license_status/years_licensed (applicant) and
+    -- garaging_street + a current appraisal (vehicle) are populated so the ADR
+    -- 0037 completeness (DH-04) and stale-agreed-value (VV-03) rules stay clear -
+    -- APP-0001 requests agreed value, so it needs a non-stale appraisal to be a
+    -- clean AUTO_PROCEED. mailing_state = garaging_state = CT, so PC-01 clears too.
+    INSERT INTO applicants (first_name, last_name, date_of_birth, license_status, years_licensed,
+      email, phone, mailing_city, mailing_state)
+    VALUES ('Miriam', 'Ostrander', DATE '1971-03-14', 'valid', 32, 'm.ostrander@example.com',
+      '555-010-0001', 'Greenwich', 'CT')
     RETURNING applicant_id INTO v_applicant;
     INSERT INTO applications (applicant_id, status, garaging_state)
     VALUES (v_applicant, 'draft', 'CT') RETURNING application_id INTO v_app;
     INSERT INTO vehicles (application_id, year, make, model, trim, vin, vehicle_category,
-      purchase_price, current_appraised_value, agreed_value_requested, annual_mileage, primary_use, garaging_state)
+      purchase_price, current_appraised_value, appraisal_date, appraisal_source,
+      agreed_value_requested, annual_mileage, primary_use, garaging_state, garaging_street)
     VALUES (v_app, 2023, 'Porsche', '911', 'Turbo S', 'WP0AA0000PS000001', 'production_luxury',
-      231000, 215000, true, 3200, 'pleasure', 'CT');
+      231000, 215000, (now() - interval '6 months')::date, 'independent appraisal',
+      true, 3200, 'pleasure', 'CT', '10 Greenwich Ave');
 
     -- (2) submit -> AUTO_PROCEED (clean risk, CT now licensed, well above the floor).
     v_action := submit_application(v_app, 'APP-0001');
