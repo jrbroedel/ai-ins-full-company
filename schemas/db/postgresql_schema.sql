@@ -2930,9 +2930,19 @@ RETURNS TABLE (
     AND pp.effective_range @> p_as_of;
 $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
 
--- Original entrypoint: now a thin wrapper over the overload above. Same
--- signature, same behavior - luxauto_premium_waterfall_view and
--- luxauto_settlement_view keep working unchanged.
+-- Quote entrypoint. ADR 0039 wired the acquisition layer in here: the panel now
+-- cedes premium NET of broker + MGA acquisition commission, not gross - the
+-- ADR 0007 waterfall's `gross - broker - MGA = net to capacity -> split among the
+-- panel`. The net-of-acquisition factor is read from the quote's own frozen rates
+-- (1 - (broker_commission_rate + mga_commission_rate)/100), never a hardcoded
+-- 0.70: mga = 30 - broker makes the sum 30 today, but reading the columns keeps
+-- this correct-by-construction if the cap ever changes. The raw (program_id,
+-- amount, as_of) overload above is untouched - it stays a pure distributor with no
+-- acquisition awareness; the acquisition deduction lives only in the entrypoints
+-- that can see the quote (this one, calculate_endorsement_waterfall,
+-- calculate_cancellation_waterfall). See calculate_commission_waterfall() for the
+-- broker/MGA dollar breakdown that sits above this. luxauto_premium_waterfall_view
+-- and luxauto_settlement_view now show net-of-acquisition panel figures.
 CREATE OR REPLACE FUNCTION calculate_premium_waterfall(p_quote_id UUID)
 RETURNS TABLE (
   participant_id      UUID,
@@ -2946,7 +2956,41 @@ RETURNS TABLE (
 ) AS $$
   SELECT w.*
   FROM quotes q
-  CROSS JOIN LATERAL calculate_premium_waterfall(q.program_id, q.premium_amount, q.quoted_at) w
+  CROSS JOIN LATERAL calculate_premium_waterfall(
+    q.program_id,
+    q.premium_amount * (1 - (q.broker_commission_rate + q.mga_commission_rate) / 100),
+    q.quoted_at) w
+  WHERE q.quote_id = p_quote_id;
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Acquisition-layer breakdown for a quote (ADR 0039): the top of the ADR 0007
+-- waterfall, one row per quote - broker and MGA acquisition commission on gross
+-- premium, and the net premium that flows down to the panel. Broker and MGA are
+-- NOT panel participants (participant_type_t is capacity_provider/reinsurer/
+-- mga_retention), so they are deliberately a separate per-quote surface, not rows
+-- in calculate_premium_waterfall(). Reads the quote's frozen rates; amounts are
+-- computed on read, not stored (the decided fact - the rate - is already stored
+-- and immutable-once-bound on the quote). SECURITY DEFINER read gateway with a
+-- pinned search_path, same pattern as calculate_premium_waterfall().
+CREATE OR REPLACE FUNCTION calculate_commission_waterfall(p_quote_id UUID)
+RETURNS TABLE (
+  gross_premium              NUMERIC(14,2),
+  broker_channel             broker_channel_t,
+  broker_commission_rate     NUMERIC(5,2),
+  broker_commission_amount   NUMERIC(14,2),
+  mga_commission_rate        NUMERIC(5,2),
+  mga_commission_amount      NUMERIC(14,2),
+  net_premium_to_panel       NUMERIC(14,2)
+) AS $$
+  SELECT
+    q.premium_amount AS gross_premium,
+    q.broker_channel,
+    q.broker_commission_rate,
+    ROUND(q.premium_amount * q.broker_commission_rate / 100, 2) AS broker_commission_amount,
+    q.mga_commission_rate,
+    ROUND(q.premium_amount * q.mga_commission_rate / 100, 2) AS mga_commission_amount,
+    ROUND(q.premium_amount * (1 - (q.broker_commission_rate + q.mga_commission_rate) / 100), 2) AS net_premium_to_panel
+  FROM quotes q
   WHERE q.quote_id = p_quote_id;
 $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
 
@@ -3350,7 +3394,15 @@ RETURNS TABLE (
   FROM policy_endorsements pe
   JOIN policies p ON p.policy_id = pe.policy_id
   JOIN quotes q ON q.quote_id = p.quote_id
-  CROSS JOIN LATERAL calculate_premium_waterfall(q.program_id, pe.premium_delta, lower(pe.effective_range)) w
+  -- ADR 0039: an endorsement's additional/return premium carries acquisition
+  -- commission too, so the panel splits it NET of broker + MGA - the same
+  -- net-of-acquisition factor (from the quote's frozen rates) the quote entrypoint
+  -- applies. Uniform across new business, endorsements, and cancellations so the
+  -- panel is never ceded gross for one and net for another.
+  CROSS JOIN LATERAL calculate_premium_waterfall(
+    q.program_id,
+    pe.premium_delta * (1 - (q.broker_commission_rate + q.mga_commission_rate) / 100),
+    lower(pe.effective_range)) w
   WHERE pe.endorsement_id = p_endorsement_id
     AND pe.premium_delta IS NOT NULL;
 $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
@@ -4390,7 +4442,16 @@ RETURNS TABLE (
   FROM policy_cancellations c
   JOIN policies p ON p.policy_id = c.policy_id
   JOIN quotes q ON q.quote_id = p.quote_id
-  CROSS JOIN LATERAL calculate_premium_waterfall(q.program_id, c.return_premium, lower(c.effective_range)) w
+  -- ADR 0039: the return premium claws back acquisition commission pro-rata too,
+  -- so the panel returns its NET-of-acquisition share, not the gross refund. The
+  -- gross refund the insured receives (policy_cancellations.return_premium) is
+  -- unchanged; this waterfall now shows only the panel's portion of it, with the
+  -- broker/MGA claw-back accounted for at the acquisition layer
+  -- (calculate_commission_waterfall). Same factor from the quote's frozen rates.
+  CROSS JOIN LATERAL calculate_premium_waterfall(
+    q.program_id,
+    c.return_premium * (1 - (q.broker_commission_rate + q.mga_commission_rate) / 100),
+    lower(c.effective_range)) w
   WHERE c.cancellation_id = p_cancellation_id
     AND NOT isempty(c.effective_range);
 $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp;
@@ -5525,9 +5586,22 @@ SELECT
   w.commission_rate,
   w.gross_share,
   w.commission_amount,
-  w.net_due
+  w.net_due,
+  -- ADR 0039 acquisition layer, appended (CREATE OR REPLACE VIEW cannot reorder
+  -- or rename existing columns, and dropping the view would drop its grants). The
+  -- panel figures above (gross_share/commission_amount/net_due) are now NET of
+  -- acquisition; these expose the broker/MGA acquisition that was taken off the
+  -- top, per quote. Repeated on every participant row of the quote - the layer is
+  -- per-quote, not per-participant.
+  cw.broker_channel,
+  cw.broker_commission_rate,
+  cw.broker_commission_amount,
+  cw.mga_commission_rate,
+  cw.mga_commission_amount,
+  cw.net_premium_to_panel
 FROM quotes q
-CROSS JOIN LATERAL calculate_premium_waterfall(q.quote_id) w;
+CROSS JOIN LATERAL calculate_premium_waterfall(q.quote_id) w
+CROSS JOIN LATERAL calculate_commission_waterfall(q.quote_id) cw;
 
 -- Settlement report (ADR 0013): every bound policy's per-participant
 -- waterfall, joined through its bind event in policy_events rather than
@@ -5849,6 +5923,7 @@ GRANT SELECT ON luxauto_quote_commission_view TO odoo;
 GRANT SELECT ON luxauto_quote_rating_view TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID) TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID, NUMERIC, TIMESTAMPTZ) TO odoo;
+GRANT EXECUTE ON FUNCTION calculate_commission_waterfall(UUID) TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_endorsement_waterfall(UUID) TO odoo;
 -- ADR 0024 widened this to a four-argument form (optional inception date); the
 -- three-argument grant is gone with the three-argument function.

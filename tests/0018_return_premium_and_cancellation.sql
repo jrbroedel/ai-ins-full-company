@@ -203,18 +203,22 @@ BEGIN
     END IF;
 
     -- The refund reaches the panel through the shared waterfall core, in
-    -- proportion and with the sign intact (ADR 0018 section 3).
+    -- proportion and with the sign intact (ADR 0018 section 3). ADR 0039: the
+    -- panel now returns its NET-of-acquisition share - the return premium
+    -- (-27500.00) claws back the 30% broker+MGA acquisition too, so the panel's
+    -- portion is -27500.00 * 0.70 = -19250.00 (retail/10 -> broker 10 + MGA 20 =
+    -- 30). The broker/MGA claw-back (-8250.00) sits at the acquisition layer.
     SELECT count(*), SUM(gross_share) INTO v_n, v_sum
     FROM calculate_cancellation_waterfall(v_cx);
     IF v_n <> 2 THEN
       RAISE EXCEPTION '0018-T1 FAILED: expected the 2-participant panel in the refund waterfall, got %', v_n;
     END IF;
-    IF v_sum IS DISTINCT FROM -27500.00 THEN
-      RAISE EXCEPTION '0018-T1 FAILED: the participant shares sum to % rather than the return premium -27500.00', v_sum;
+    IF v_sum IS DISTINCT FROM -19250.00 THEN
+      RAISE EXCEPTION '0018-T1 FAILED: the panel shares sum to % rather than the net-of-acquisition refund -19250.00 (-27500.00 * 0.70)', v_sum;
     END IF;
     IF (SELECT gross_share FROM calculate_cancellation_waterfall(v_cx)
-         WHERE participant_name = 'Fronting Co') IS DISTINCT FROM -16500.00 THEN
-      RAISE EXCEPTION '0018-T1 FAILED: the 60%% participant''s share of -27500.00 is not -16500.00';
+         WHERE participant_name = 'Fronting Co') IS DISTINCT FROM -11550.00 THEN
+      RAISE EXCEPTION '0018-T1 FAILED: the 60%% participant''s share of the net-of-acquisition -19250.00 is not -11550.00';
     END IF;
 
     -- And the ADR 0018 addendum's own read side shows it, unsuperseded.
@@ -279,9 +283,12 @@ BEGIN
       tstzrange('2026-02-01 00:00:00+00', '2027-01-01 00:00:00+00', '[)'),
       'premium_adjustment', -6000, 'coverage reduced mid-term', '0018-suite');
 
+    -- ADR 0039: the endorsement entrypoint cedes the delta NET of acquisition, so
+    -- the panel splits -6000 * 0.70 = -4200.00 (the direct raw-overload calls above
+    -- stay -3600.00 - the raw overload is a pure distributor, unchanged).
     SELECT SUM(gross_share) INTO v_sum FROM calculate_endorsement_waterfall(v_end);
-    IF v_sum IS DISTINCT FROM -6000.00 THEN
-      RAISE EXCEPTION '0018-T2 FAILED: the per-participant shares of a -6000 endorsement sum to %, not -6000.00', v_sum;
+    IF v_sum IS DISTINCT FROM -4200.00 THEN
+      RAISE EXCEPTION '0018-T2 FAILED: the panel shares of a -6000 endorsement sum to %, not the net-of-acquisition -4200.00', v_sum;
     END IF;
     IF EXISTS (
       SELECT 1 FROM calculate_endorsement_waterfall(v_end)
@@ -333,8 +340,9 @@ BEGIN
     IF v_delta IS DISTINCT FROM -6500.00 THEN
       RAISE EXCEPTION '0018-T3 FAILED: the corrected delta is %, expected -6500.00', v_delta;
     END IF;
-    IF (SELECT SUM(gross_share) FROM calculate_endorsement_waterfall(v_new)) IS DISTINCT FROM -6500.00 THEN
-      RAISE EXCEPTION '0018-T3 FAILED: the corrected negative endorsement does not split to -6500.00';
+    -- ADR 0039: net-of-acquisition, so the panel splits -6500 * 0.70 = -4550.00.
+    IF (SELECT SUM(gross_share) FROM calculate_endorsement_waterfall(v_new)) IS DISTINCT FROM -4550.00 THEN
+      RAISE EXCEPTION '0018-T3 FAILED: the corrected negative endorsement does not split to the net-of-acquisition -4550.00';
     END IF;
 
     RAISE EXCEPTION 'ROLLBACK_CASE';
@@ -447,11 +455,15 @@ BEGIN
 
     -- The emptied row is never owed: the settlement report drops it, and the
     -- read-side view keeps it visible but flagged (ADR 0018's addendum).
+    -- ADR 0039: the settlement report's return-premium leg reads
+    -- calculate_cancellation_waterfall, so the panel rows are net of acquisition:
+    -- -33400.00 * 0.70 = -23380.00 (the -33400.00 gross refund is unchanged on the
+    -- cancellation row itself, asserted above; the panel settles its net share).
     SELECT count(*), COALESCE(SUM(gross_share), 0) INTO v_n, v_sum
     FROM luxauto_settlement_view
     WHERE policy_id = v_policy AND transaction_type = 'return_premium';
-    IF v_n <> 2 OR v_sum IS DISTINCT FROM -33400.00 THEN
-      RAISE EXCEPTION '0018-T4 FAILED: the settlement report shows % return-premium rows summing to %, expected 2 rows (one per participant) summing to -33400.00 - the emptied cancellation must not appear',
+    IF v_n <> 2 OR v_sum IS DISTINCT FROM -23380.00 THEN
+      RAISE EXCEPTION '0018-T4 FAILED: the settlement report shows % return-premium rows summing to %, expected 2 rows (one per participant) summing to the net-of-acquisition -23380.00 - the emptied cancellation must not appear',
         v_n, v_sum;
     END IF;
     SELECT count(*) INTO v_n FROM luxauto_policy_cancellation_view
