@@ -552,18 +552,31 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
--- DH-01: DUI conviction within 5 years. Spans the applicant and every additional
--- driver (person_violations is application-scoped: subject_driver_id NULL is the
--- applicant, otherwise an additional driver). DUI ONLY - reckless driving is
--- deliberately NOT included pending a business answer (ADR 0026); a
--- reckless_driving-only record must not fire. Convictions only (the threshold is
--- "conviction"). Look-back measured from the application date.
+-- DH-01: DUI OR reckless-driving conviction within 5 years. Spans the applicant
+-- and every additional driver (person_violations is application-scoped:
+-- subject_driver_id NULL is the applicant, otherwise an additional driver).
+-- Reckless driving was folded in at ADR 0036 - same 5-year look-back, same
+-- MANUAL_REVIEW_SENIOR severity as DUI (the insurance colleague's confirmation:
+-- "same five year look to keep it simple"), no separate threshold. Convictions
+-- only (the threshold is "conviction"). Look-back measured from the application
+-- date.
+--
+-- Type-aware reason_code, still ONE decision_log row per rule (the invariant the
+-- orchestrator, the read views' latest-per-rule dedup, and the row-count
+-- assertions all rely on - a second 'DH-01' row would break all three). DUI
+-- takes precedence over reckless driving when both are present within the window;
+-- the matched type(s) are recorded in notes. A non-firing audit row keeps the
+-- rule's canonical DUI code.
 CREATE OR REPLACE FUNCTION evaluate_dh01(p_application_id UUID, p_decided_by TEXT DEFAULT 'system')
 RETURNS referral_action_t AS $$
 DECLARE
   v_ref TIMESTAMPTZ;
+  v_dui BOOLEAN;
+  v_reckless BOOLEAN;
   v_fired BOOLEAN;
   v_action referral_action_t;
+  v_reason TEXT;
+  v_matched TEXT;
 BEGIN
   SELECT COALESCE(submitted_at, now()) INTO v_ref
   FROM applications WHERE application_id = p_application_id;
@@ -571,30 +584,57 @@ BEGIN
     RAISE EXCEPTION 'evaluate_dh01: application % does not exist', p_application_id;
   END IF;
 
-  v_fired := EXISTS (
-    SELECT 1 FROM person_violations pv
-    WHERE pv.application_id = p_application_id
-      AND pv.violation_type = 'DUI'
-      AND pv.conviction
-      AND pv.violation_date >= (v_ref - interval '5 years')::date
-  );
+  -- Which serious conviction types matched inside the 5-year window (bool_or over
+  -- the empty set is NULL, hence the COALESCE to false).
+  SELECT bool_or(pv.violation_type = 'DUI'),
+         bool_or(pv.violation_type = 'reckless_driving')
+    INTO v_dui, v_reckless
+  FROM person_violations pv
+  WHERE pv.application_id = p_application_id
+    AND pv.violation_type IN ('DUI', 'reckless_driving')
+    AND pv.conviction
+    AND pv.violation_date >= (v_ref - interval '5 years')::date;
+
+  v_dui := COALESCE(v_dui, false);
+  v_reckless := COALESCE(v_reckless, false);
+  v_fired := v_dui OR v_reckless;
+
+  v_reason := CASE
+                WHEN v_dui THEN 'DH01_DUI_WITHIN_LOOKBACK'          -- DUI precedence
+                WHEN v_reckless THEN 'DH01_RECKLESS_WITHIN_LOOKBACK'
+                ELSE 'DH01_DUI_WITHIN_LOOKBACK'                      -- non-firing audit row
+              END;
+  v_matched := concat_ws(',',
+                 CASE WHEN v_dui THEN 'DUI' END,
+                 CASE WHEN v_reckless THEN 'reckless_driving' END);
+
   v_action := CASE WHEN v_fired THEN 'MANUAL_REVIEW_SENIOR'::referral_action_t
                    ELSE 'AUTO_PROCEED'::referral_action_t END;
 
   INSERT INTO decision_log (application_id, rule_id, reason_code, action_taken, fired, decided_by, notes)
-  VALUES (p_application_id, 'DH-01', 'DH01_DUI_WITHIN_LOOKBACK', v_action, v_fired, p_decided_by,
-          format('dui_conviction_within_5yr=%s (DUI only; reckless driving excluded pending confirmation)', v_fired));
+  VALUES (p_application_id, 'DH-01', v_reason, v_action, v_fired, p_decided_by,
+          format('serious_conviction_within_5yr=%s, matched_types=[%s] (DUI or reckless driving; ADR 0036)',
+                 v_fired, v_matched));
   RETURN v_action;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- PC-03: out-of-licensed-territory. The application's garaging_state has no
 -- state_rating_table_versions record active at now(). Routes to
--- MANUAL_REVIEW_REQUIRED (confirmed decision; the matrix JSON was corrected to
--- match): a missing record usually means the compliance data has not been built
--- out yet, not that the MGA is unlicensed, so a human confirms rather than a
--- decline being recommended. NOTE: state_rating_table_versions is empty today,
--- so this fires on EVERY application until states are onboarded - expected.
+-- AUTO_PROCEED_WITH_FLAG (ADR 0036, changed from MANUAL_REVIEW_REQUIRED): the
+-- platform's v1 scope is all 50 US states and onboarding is a rollout in
+-- progress, so "no active rating record" is the expected interim state for any
+-- state not yet onboarded, not a licensing red flag. The rule still FIRES and
+-- still writes its reason_code (PC03_OUT_OF_LICENSED_TERRITORY) to the decision
+-- log per the matrix's rule 4 - the flag is attached to the file for later
+-- review, it just no longer routes to a human before proceeding.
+--
+-- This does NOT make an un-onboarded state quotable: create_quote() still needs
+-- a real rating record + territory factor and fails with
+-- TERRITORY_FACTOR_NOT_CONFIGURED for any state that hasn't gone through
+-- onboard_state() (ADR 0035). PC-03 firing <=> no rating data <=> that same
+-- create_quote() failure downstream - so the change affects the disposition a
+-- flagged application shows, not whether it can produce a quote.
 CREATE OR REPLACE FUNCTION evaluate_pc03(p_application_id UUID, p_decided_by TEXT DEFAULT 'system')
 RETURNS referral_action_t AS $$
 DECLARE
@@ -612,7 +652,7 @@ BEGIN
     SELECT 1 FROM state_rating_table_versions s
     WHERE s.state = v_state AND s.effective_range @> now()
   );
-  v_action := CASE WHEN v_fired THEN 'MANUAL_REVIEW_REQUIRED'::referral_action_t
+  v_action := CASE WHEN v_fired THEN 'AUTO_PROCEED_WITH_FLAG'::referral_action_t
                    ELSE 'AUTO_PROCEED'::referral_action_t END;
 
   INSERT INTO decision_log (application_id, rule_id, reason_code, action_taken, fired, decided_by, notes)
@@ -668,9 +708,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 -- That ordering is an invariant of the enum's definition; tests/0026 asserts it,
 -- so a future reorder of the enum fails a test rather than silently mis-routing.
 -- GREATEST already handles the full taxonomy, including the values these rules
--- still do not produce (INFORMATION_REQUEST, AUTO_PROCEED_WITH_FLAG,
--- HARD_DECLINE_COMPLIANCE - EL-01 now produces DECLINE_RECOMMENDED), for when the
--- remaining rules are added.
+-- still do not produce (INFORMATION_REQUEST, HARD_DECLINE_COMPLIANCE - EL-01
+-- produces DECLINE_RECOMMENDED, and PC-03 produces AUTO_PROCEED_WITH_FLAG since
+-- ADR 0036), for when the remaining rules are added.
 CREATE OR REPLACE FUNCTION evaluate_application_referrals(p_application_id UUID, p_decided_by TEXT DEFAULT 'system')
 RETURNS referral_action_t AS $$
 DECLARE

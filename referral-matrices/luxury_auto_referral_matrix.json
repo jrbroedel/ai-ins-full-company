@@ -1,7 +1,11 @@
 {
   "schema_name": "Luxury Auto Referral Matrix",
-  "version": "1.1",
+  "version": "1.2",
   "changelog": [
+    {
+      "version": "1.2",
+      "summary": "ADR 0036 - two independent rule-logic changes from different sources. (1) DH-01 (source: insurance-domain colleague's email, 'same five year look to keep it simple'): reckless-driving convictions now fire DH-01 on the same 5-year look-back and the same MANUAL_REVIEW_SENIOR severity as DUI, with a type-aware reason_code (DH01_DUI_WITHIN_LOOKBACK / DH01_RECKLESS_WITHIN_LOOKBACK, DUI precedence when both present, still one decision_log row per rule). (2) PC-03 (source: founder directive, reframed around the all-50-states v1 rollout): out-of-territory routes to AUTO_PROCEED_WITH_FLAG instead of MANUAL_REVIEW_REQUIRED - it still fires and still logs its reason_code (rule 4), but no longer blocks on a human for a not-yet-onboarded state; this does not make such a state quotable. Resolves the open_items PC-03 entry (soft-warn)."
+    },
     {
       "version": "1.1",
       "summary": "source_fields updated to point at the formal enrichment_computed section added to the application schema in v1.1, replacing the ad hoc 'external: ...' placeholders used in v1.0. No rule logic changed - only the field paths these rules read from."
@@ -75,14 +79,14 @@
     "driver_and_household": [
       {
         "rule_id": "DH-01",
-        "trigger": "DUI or reckless-driving conviction within the state's applicable look-back period",
-        "illustrative_threshold": "Any DUI conviction within dui_lookback_years for the garaging state (national default: 5 years if state value unset)",
+        "trigger": "DUI or reckless-driving conviction within the applicable look-back period",
+        "illustrative_threshold": "Any DUI OR reckless-driving conviction within a 5-year look-back (national default). Reckless driving was folded into the same 5-year look-back and the same MANUAL_REVIEW_SENIOR severity as DUI in ADR 0036 (v1.2) - no separate threshold ('same five year look to keep it simple'). Convictions only.",
         "source_fields": ["enrichment_computed.applicant_enrichment.violation_history", "enrichment_computed.additional_driver_enrichment[].violation_history"],
         "action": "MANUAL_REVIEW_SENIOR",
-        "rationale": "DUI is treated as a hard referral in every HNW carrier program reviewed for this build, regardless of how clean the rest of the profile is (see the sample application where an otherwise strong applicant with a DUI required SR-22/FR-44 and non-standard routing).",
+        "rationale": "DUI is treated as a hard referral in every HNW carrier program reviewed for this build, regardless of how clean the rest of the profile is (see the sample application where an otherwise strong applicant with a DUI required SR-22/FR-44 and non-standard routing). Reckless-driving convictions are treated identically as of ADR 0036 on the same rationale.",
         "state_override_hook": "referral_thresholds_state_specific.dui_lookback_years, referral_thresholds_state_specific.sr22_fr44_required",
         "test_case_reference": "Edge case: DUI history requiring hard referral routing (APP-0007)",
-        "reason_code": "DH01_DUI_WITHIN_LOOKBACK"
+        "reason_code": "DH01_DUI_WITHIN_LOOKBACK for a DUI conviction, DH01_RECKLESS_WITHIN_LOOKBACK for a reckless-driving conviction; DUI takes precedence in the code when both are present within the window, and the matched type(s) are recorded in the decision-log notes (one decision_log row per rule regardless)"
       },
       {
         "rule_id": "DH-02",
@@ -205,8 +209,8 @@
         "trigger": "Application is out-of-territory for the program (garaging state not currently licensed/active for this product)",
         "illustrative_threshold": "Garaging state has no active state_rating_table record",
         "source_fields": ["vehicles[].garaging_address.state"],
-        "action": "MANUAL_REVIEW_REQUIRED",
-        "rationale": "Not a risk judgment - a licensing fact. Routed to MANUAL_REVIEW_REQUIRED, not a decline: a missing active state_rating_table record usually means the compliance data for that state has not been built out yet, not that the MGA is actually unlicensed there, so a human confirms the licensing position rather than the pipeline recommending the applicant be turned away.",
+        "action": "AUTO_PROCEED_WITH_FLAG",
+        "rationale": "Not a risk judgment - a licensing fact. Routed to AUTO_PROCEED_WITH_FLAG as of ADR 0036 (v1.2), changed from MANUAL_REVIEW_REQUIRED: the platform's v1 scope is all 50 US states and onboarding is a rollout in progress, so 'no active state_rating_table record' is the expected interim state for any state not yet onboarded, not a licensing red flag. The rule still fires and still writes its reason_code to the decision log (rule 4) - the flag is attached to the file for later review, it just no longer routes to a human before proceeding. NOTE: this does NOT make an un-onboarded state quotable - create_quote() still requires a real rating record + territory factor and fails with TERRITORY_FACTOR_NOT_CONFIGURED for any state that has not gone through onboard_state() (ADR 0035). The 50-state rollout is tracked as a separate initiative.",
         "state_override_hook": "existence of an active record for the state in question",
         "test_case_reference": null,
         "reason_code": "PC03_OUT_OF_LICENSED_TERRITORY"
@@ -227,6 +231,6 @@
   "open_items_for_underwriting_leadership": [
     "Set actual numeric thresholds for AL-01 (loss ratio/claim frequency trigger) and CP-02 (aggregate TIV authority cap) - these were left illustrative because they're business risk-appetite decisions, not something derivable from regulation.",
     "Confirm whether DH-01's national 5-year DUI look-back default is correct, or whether it should simply require a per-state value with no fallback (safer, but blocks quoting in any state not yet in the registry).",
-    "Decide whether PC-03 (out-of-territory) should hard-block or soft-warn during early build-out, when the state_rating_table registry will legitimately be incomplete for states you haven't launched yet - as written it currently assumes 'no record' always means 'not licensed,' which won't be true during rollout."
+    "RESOLVED (ADR 0036, v1.2): PC-03 (out-of-territory) is soft-warn, not hard-block. It now routes to AUTO_PROCEED_WITH_FLAG rather than MANUAL_REVIEW_REQUIRED - the platform's v1 scope is all 50 US states with onboarding in progress, so a missing state_rating_table record is the expected interim state during rollout rather than 'not licensed.' The rule still fires and still logs its reason_code. This does not make an un-onboarded state quotable: create_quote() still fails with TERRITORY_FACTOR_NOT_CONFIGURED until the state goes through onboard_state()."
   ]
 }

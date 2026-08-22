@@ -129,20 +129,28 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
--- T3  DH-01: DUI conviction within 5 years, spanning applicant and additional
---     drivers; reckless-driving-only does NOT fire (current narrow scope);
---     non-convicted DUI does not fire; look-back boundary mutation-tested.
+-- T3  DH-01: DUI OR reckless-driving conviction within 5 years (ADR 0036 folded
+--     reckless driving into the same look-back and MANUAL_REVIEW_SENIOR severity),
+--     spanning applicant and additional drivers; non-convicted does not fire for
+--     either type; look-back boundary mutation-tested for both types; the
+--     reason_code is type-aware, with DUI taking precedence over reckless when
+--     both are present.
 -- ---------------------------------------------------------------------------
 DO $$
-DECLARE v_app UUID; v_driver UUID;
+DECLARE v_app UUID; v_driver UUID; v_reason TEXT;
 BEGIN
   BEGIN
-    -- (a) applicant DUI conviction, 1 year ago -> fires MANUAL_REVIEW_SENIOR.
+    -- (a) applicant DUI conviction, 1 year ago -> fires MANUAL_REVIEW_SENIOR,
+    --     reason_code DH01_DUI_WITHIN_LOOKBACK.
     v_app := pg_temp.mk_app('T3a', 'CA');
     INSERT INTO person_violations (application_id, subject_driver_id, violation_date, violation_type, conviction, source)
     VALUES (v_app, NULL, (now() - interval '1 year')::date, 'DUI', true, 'MVR');
     IF evaluate_dh01(v_app) IS DISTINCT FROM 'MANUAL_REVIEW_SENIOR' THEN
       RAISE EXCEPTION '0026-T3 FAILED: an applicant DUI conviction did not fire DH-01 as MANUAL_REVIEW_SENIOR';
+    END IF;
+    SELECT reason_code INTO v_reason FROM decision_log WHERE application_id = v_app AND rule_id = 'DH-01';
+    IF v_reason IS DISTINCT FROM 'DH01_DUI_WITHIN_LOOKBACK' THEN
+      RAISE EXCEPTION '0026-T3 FAILED: a DUI conviction logged reason_code %, expected DH01_DUI_WITHIN_LOOKBACK', v_reason;
     END IF;
 
     -- (b) additional driver's DUI conviction -> fires (spans all drivers).
@@ -154,12 +162,32 @@ BEGIN
       RAISE EXCEPTION '0026-T3 FAILED: an additional driver''s DUI conviction did not fire DH-01';
     END IF;
 
-    -- (c) reckless-driving-only conviction -> does NOT fire (DUI-only scope).
+    -- (c) reckless-driving-ONLY conviction -> now FIRES MANUAL_REVIEW_SENIOR
+    --     (ADR 0036), with the type-specific reason_code DH01_RECKLESS_WITHIN_LOOKBACK.
     v_app := pg_temp.mk_app('T3c', 'CA');
     INSERT INTO person_violations (application_id, subject_driver_id, violation_date, violation_type, conviction, source)
     VALUES (v_app, NULL, (now() - interval '1 year')::date, 'reckless_driving', true, 'MVR');
-    IF evaluate_dh01(v_app) IS DISTINCT FROM 'AUTO_PROCEED' THEN
-      RAISE EXCEPTION '0026-T3 FAILED: a reckless-driving-only record fired DH-01 (scope must be DUI-only for now)';
+    IF evaluate_dh01(v_app) IS DISTINCT FROM 'MANUAL_REVIEW_SENIOR' THEN
+      RAISE EXCEPTION '0026-T3 FAILED: a reckless-driving conviction did not fire DH-01 as MANUAL_REVIEW_SENIOR (ADR 0036 folded it in)';
+    END IF;
+    SELECT reason_code INTO v_reason FROM decision_log WHERE application_id = v_app AND rule_id = 'DH-01';
+    IF v_reason IS DISTINCT FROM 'DH01_RECKLESS_WITHIN_LOOKBACK' THEN
+      RAISE EXCEPTION '0026-T3 FAILED: a reckless-only conviction logged reason_code %, expected DH01_RECKLESS_WITHIN_LOOKBACK', v_reason;
+    END IF;
+
+    -- (c2) BOTH DUI and reckless convictions in-window -> fires; DUI takes
+    --      precedence in the reason_code (one row per rule, so the code names the
+    --      more serious trigger). matched_types in notes records both.
+    v_app := pg_temp.mk_app('T3c2', 'CA');
+    INSERT INTO person_violations (application_id, subject_driver_id, violation_date, violation_type, conviction, source)
+    VALUES (v_app, NULL, (now() - interval '1 year')::date, 'reckless_driving', true, 'MVR'),
+           (v_app, NULL, (now() - interval '2 years')::date, 'DUI', true, 'MVR');
+    IF evaluate_dh01(v_app) IS DISTINCT FROM 'MANUAL_REVIEW_SENIOR' THEN
+      RAISE EXCEPTION '0026-T3 FAILED: a DUI+reckless combination did not fire DH-01';
+    END IF;
+    SELECT reason_code INTO v_reason FROM decision_log WHERE application_id = v_app AND rule_id = 'DH-01';
+    IF v_reason IS DISTINCT FROM 'DH01_DUI_WITHIN_LOOKBACK' THEN
+      RAISE EXCEPTION '0026-T3 FAILED: with both DUI and reckless present, reason_code was %, expected DH01_DUI_WITHIN_LOOKBACK (DUI precedence)', v_reason;
     END IF;
 
     -- (d) non-convicted DUI -> does NOT fire (threshold is conviction).
@@ -170,7 +198,15 @@ BEGIN
       RAISE EXCEPTION '0026-T3 FAILED: a non-convicted DUI fired DH-01 (must require conviction)';
     END IF;
 
-    -- (e) look-back boundary: DUI exactly 5 years ago fires; one day earlier does not.
+    -- (d2) non-convicted reckless driving -> does NOT fire (same conviction threshold).
+    v_app := pg_temp.mk_app('T3d2', 'CA');
+    INSERT INTO person_violations (application_id, subject_driver_id, violation_date, violation_type, conviction, source)
+    VALUES (v_app, NULL, (now() - interval '1 year')::date, 'reckless_driving', false, 'MVR');
+    IF evaluate_dh01(v_app) IS DISTINCT FROM 'AUTO_PROCEED' THEN
+      RAISE EXCEPTION '0026-T3 FAILED: a non-convicted reckless-driving record fired DH-01 (must require conviction)';
+    END IF;
+
+    -- (e) DUI look-back boundary: exactly 5 years ago fires; one day earlier does not.
     v_app := pg_temp.mk_app('T3e_in', 'CA');
     INSERT INTO person_violations (application_id, subject_driver_id, violation_date, violation_type, conviction, source)
     VALUES (v_app, NULL, (now() - interval '5 years')::date, 'DUI', true, 'MVR');
@@ -185,29 +221,62 @@ BEGIN
       RAISE EXCEPTION '0026-T3 FAILED: a DUI 5 years + 1 day ago fired (outside the look-back)';
     END IF;
 
+    -- (e2) reckless look-back boundary: the SAME 5-year window (ADR 0036 - "same
+    --      five year look"). Exactly 5 years ago fires; one day earlier does not.
+    v_app := pg_temp.mk_app('T3e2_in', 'CA');
+    INSERT INTO person_violations (application_id, subject_driver_id, violation_date, violation_type, conviction, source)
+    VALUES (v_app, NULL, (now() - interval '5 years')::date, 'reckless_driving', true, 'MVR');
+    IF evaluate_dh01(v_app) IS DISTINCT FROM 'MANUAL_REVIEW_SENIOR' THEN
+      RAISE EXCEPTION '0026-T3 FAILED: a reckless conviction exactly 5 years ago did not fire (window is inclusive at 5 years)';
+    END IF;
+
+    v_app := pg_temp.mk_app('T3e2_out', 'CA');
+    INSERT INTO person_violations (application_id, subject_driver_id, violation_date, violation_type, conviction, source)
+    VALUES (v_app, NULL, (now() - interval '5 years' - interval '1 day')::date, 'reckless_driving', true, 'MVR');
+    IF evaluate_dh01(v_app) IS DISTINCT FROM 'AUTO_PROCEED' THEN
+      RAISE EXCEPTION '0026-T3 FAILED: a reckless conviction 5 years + 1 day ago fired (outside the look-back)';
+    END IF;
+
     RAISE EXCEPTION 'ROLLBACK_CASE';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'ROLLBACK_CASE' THEN RAISE; END IF;
   END;
-  RAISE NOTICE '0026-T3 pass: DH-01 fires on applicant/additional-driver DUI convictions, ignores reckless-only and non-convicted, boundary exact at 5 years';
+  RAISE NOTICE '0026-T3 pass: DH-01 fires MANUAL_REVIEW_SENIOR on applicant/additional-driver DUI or reckless-driving convictions within 5 years (type-aware reason_code, DUI precedence), ignores non-convicted, boundary exact at 5 years for both types';
 END $$;
 
 -- ---------------------------------------------------------------------------
--- T4  PC-03: fires when the garaging state has no active rating-table record;
---     clears once one exists.
+-- T4  PC-03: fires when the garaging state has no active rating-table record,
+--     now routing to AUTO_PROCEED_WITH_FLAG (ADR 0036, was MANUAL_REVIEW_REQUIRED)
+--     while still firing and still logging its reason_code; clears once a record
+--     exists.
 -- ---------------------------------------------------------------------------
 DO $$
-DECLARE v_app UUID;
+DECLARE v_app UUID; v_n INT; v_fired BOOLEAN; v_act referral_action_t; v_reason TEXT;
 BEGIN
   BEGIN
-    -- 'ZZ' is unlicensed (no rating table) -> fires MANUAL_REVIEW_REQUIRED.
+    -- 'ZZ' is unlicensed (no rating table) -> fires AUTO_PROCEED_WITH_FLAG (ADR
+    -- 0036). The rule still FIRES and still writes its reason_code per the
+    -- matrix's rule 4 - it just no longer routes to a human before proceeding.
     v_app := pg_temp.mk_app('T4', 'ZZ');
-    IF evaluate_pc03(v_app) IS DISTINCT FROM 'MANUAL_REVIEW_REQUIRED' THEN
-      RAISE EXCEPTION '0026-T4 FAILED: an unlicensed garaging state did not fire PC-03 as MANUAL_REVIEW_REQUIRED';
+    IF evaluate_pc03(v_app) IS DISTINCT FROM 'AUTO_PROCEED_WITH_FLAG' THEN
+      RAISE EXCEPTION '0026-T4 FAILED: an unlicensed garaging state did not route PC-03 to AUTO_PROCEED_WITH_FLAG (ADR 0036)';
     END IF;
 
-    -- Onboard 'ZZ' (active now) -> PC-03 clears. (Also seeds the short-rate factor,
-    -- ADR 0025 - harmless here.)
+    -- fired=true alongside AUTO_PROCEED_WITH_FLAG is a combination no rule emitted
+    -- before ADR 0036 - assert it explicitly on the logged row (not just via the
+    -- return value): exactly one PC-03 row, fired, the new action, and the
+    -- unredacted reason_code present (rule 4).
+    SELECT count(*) INTO v_n FROM decision_log WHERE application_id = v_app AND rule_id = 'PC-03';
+    SELECT fired, action_taken, reason_code INTO v_fired, v_act, v_reason
+      FROM decision_log WHERE application_id = v_app AND rule_id = 'PC-03';
+    IF (v_n, v_fired, v_act, v_reason)
+       IS DISTINCT FROM (1, true, 'AUTO_PROCEED_WITH_FLAG'::referral_action_t, 'PC03_OUT_OF_LICENSED_TERRITORY') THEN
+      RAISE EXCEPTION '0026-T4 FAILED: PC-03 fired row is rows=%/fired=%/action=%/reason=%, expected 1/true/AUTO_PROCEED_WITH_FLAG/PC03_OUT_OF_LICENSED_TERRITORY',
+        v_n, v_fired, v_act, v_reason;
+    END IF;
+
+    -- Onboard 'ZZ' (active now) -> PC-03 clears to AUTO_PROCEED. (Also seeds the
+    -- short-rate factor, ADR 0025 - harmless here.)
     INSERT INTO state_rating_table_versions
       (state, regulator_name, filing_status, line_of_business_code, serff_filing_tracking_number, effective_range)
     VALUES ('ZZ', 'ZZ DOI', 'file_and_use', 'PPA-LUX', 'SERFF-0026-T4',
@@ -220,7 +289,7 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'ROLLBACK_CASE' THEN RAISE; END IF;
   END;
-  RAISE NOTICE '0026-T4 pass: PC-03 fires with no active rating table and clears once one exists';
+  RAISE NOTICE '0026-T4 pass: PC-03 fires AUTO_PROCEED_WITH_FLAG (fired, reason_code logged) with no active rating table and clears to AUTO_PROCEED once one exists';
 END $$;
 
 -- ---------------------------------------------------------------------------
@@ -232,8 +301,9 @@ DECLARE v_app UUID; v_action referral_action_t; v_n INT;
         v_al BOOLEAN; v_cp BOOLEAN; v_dh BOOLEAN; v_pc BOOLEAN;
 BEGIN
   BEGIN
-    -- Combo 1: DUI (DH-01 -> SENIOR) + unlicensed state (PC-03 -> REQUIRED),
-    -- small single vehicle, no claims. Most severe = MANUAL_REVIEW_SENIOR.
+    -- Combo 1: DUI (DH-01 -> SENIOR) + unlicensed state (PC-03 -> WITH_FLAG since
+    -- ADR 0036), small single vehicle, no claims. Most severe = MANUAL_REVIEW_SENIOR
+    -- (DH-01 still dominates; the PC-03 severity drop does not change the winner).
     v_app := pg_temp.mk_app('T5a', 'ZZ');
     PERFORM pg_temp.add_vehicle(v_app, 500000);
     INSERT INTO person_violations (application_id, subject_driver_id, violation_date, violation_type, conviction, source)
@@ -241,7 +311,7 @@ BEGIN
 
     v_action := evaluate_application_referrals(v_app);
     IF v_action IS DISTINCT FROM 'MANUAL_REVIEW_SENIOR' THEN
-      RAISE EXCEPTION '0026-T5 FAILED: combo 1 returned %, expected MANUAL_REVIEW_SENIOR (most severe of SENIOR/REQUIRED)', v_action;
+      RAISE EXCEPTION '0026-T5 FAILED: combo 1 returned %, expected MANUAL_REVIEW_SENIOR (most severe of SENIOR/WITH_FLAG)', v_action;
     END IF;
 
     -- One row per rule (five since ADR 0028 added EL-01), with the expected
@@ -337,18 +407,21 @@ BEGIN
         AND 'AUTO_PROCEED_WITH_FLAG'::referral_action_t > 'AUTO_PROCEED'::referral_action_t) THEN
       RAISE EXCEPTION '0026-T7 FAILED: referral_action_t is not in ascending severity order - the orchestrator''s GREATEST-based routing is broken';
     END IF;
-    -- GREATEST over the three values today's rules actually produce.
+    -- GREATEST over a representative low-severity subset (AL-01 emits
+    -- MANUAL_REVIEW_REQUIRED, DH-01/CP-02 emit MANUAL_REVIEW_SENIOR).
     IF GREATEST('AUTO_PROCEED'::referral_action_t, 'MANUAL_REVIEW_REQUIRED'::referral_action_t,
                 'MANUAL_REVIEW_SENIOR'::referral_action_t, 'AUTO_PROCEED'::referral_action_t)
        IS DISTINCT FROM 'MANUAL_REVIEW_SENIOR'::referral_action_t THEN
       RAISE EXCEPTION '0026-T7 FAILED: GREATEST over referral_action_t did not select the most severe value';
     END IF;
 
-    -- GREATEST exercised across the FOUR values no current rule emits
-    -- (HARD_DECLINE_COMPLIANCE, DECLINE_RECOMMENDED, INFORMATION_REQUEST,
-    -- AUTO_PROCEED_WITH_FLAG), so the full-enum routing the orchestrator relies on
-    -- is verified now - while only 3 of 7 values are load-bearing - rather than
-    -- when a future rule first produces one of them.
+    -- GREATEST exercised structurally across the full taxonomy - including
+    -- INFORMATION_REQUEST and HARD_DECLINE_COMPLIANCE, which no current rule
+    -- emits - so the full-enum routing the orchestrator relies on is verified now
+    -- rather than when a future rule first produces one of them. (Of the seven,
+    -- AUTO_PROCEED, AUTO_PROCEED_WITH_FLAG (PC-03 since ADR 0036),
+    -- MANUAL_REVIEW_REQUIRED, MANUAL_REVIEW_SENIOR and DECLINE_RECOMMENDED (EL-01)
+    -- are load-bearing today.)
     IF GREATEST('HARD_DECLINE_COMPLIANCE'::referral_action_t, 'AUTO_PROCEED_WITH_FLAG'::referral_action_t)
        IS DISTINCT FROM 'HARD_DECLINE_COMPLIANCE'::referral_action_t
     OR GREATEST('DECLINE_RECOMMENDED'::referral_action_t, 'MANUAL_REVIEW_SENIOR'::referral_action_t)
@@ -369,7 +442,7 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'ROLLBACK_CASE' THEN RAISE; END IF;
   END;
-  RAISE NOTICE '0026-T7 pass: referral_action_t ascending-severity verified across all 7 values; GREATEST selects correctly including the 4 not yet produced by any rule';
+  RAISE NOTICE '0026-T7 pass: referral_action_t ascending-severity verified across all 7 values; GREATEST selects correctly across the full taxonomy, including the values no current rule yet produces';
 END $$;
 
 ROLLBACK;
