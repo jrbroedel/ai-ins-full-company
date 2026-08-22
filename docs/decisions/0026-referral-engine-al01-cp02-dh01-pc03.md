@@ -1,6 +1,7 @@
 # ADR 0026: Referral engine — first four rules (AL-01, CP-02, DH-01, PC-03)
 
-**Status:** Decided; implemented
+**Status:** Decided; implemented — **superseded in part by [ADR 0036](0036-dh01-reckless-pc03-soft-flag.md)**
+**Superseded in part by:** ADR 0036 changed two rule dispositions recorded here: DH-01 now also fires on reckless-driving convictions (this ADR's "DUI-only for now, reckless excluded pending confirmation" is resolved), and PC-03 now routes to `AUTO_PROCEED_WITH_FLAG` rather than `MANUAL_REVIEW_REQUIRED`. AL-01, CP-02, the engine/orchestrator structure, and everything else here still stand. The specific statements below about DH-01's DUI-only scope and PC-03's action are historical as of this ADR's date; see ADR 0036 for current behavior.
 **Date:** 2026-08-18
 **Follows from:** ADR 0005 (the application-intake schema, `decision_log`, and the `referral_action_t` taxonomy this builds on), the referral matrix `referral-matrices/luxury_auto_referral_matrix.json`, ADR 0025 (PC-03's licensed-state source of truth is `state_rating_table_versions`, which the seed trigger populates on onboarding)
 
