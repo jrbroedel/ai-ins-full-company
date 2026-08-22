@@ -5840,6 +5840,64 @@ SELECT
 FROM latest_per_rule lpr
 GROUP BY lpr.application_id;
 
+-- Underwriter roster (ADR 0040): the underwriters reference table surfaced for
+-- Odoo, which needs an integer id (the table is UUID-keyed). Same _auto=False
+-- read-view pattern as every ADR 0029 model. underwriter_id is carried through so
+-- the override wizard can pass it to authorize_referral_override(); name/
+-- authority_level/active drive the roster list and the active-only picker. Writes
+-- go through add_underwriter()/update_underwriter() (ADR 0032/0038), never this view.
+CREATE OR REPLACE VIEW luxauto_underwriter_view AS
+SELECT
+  ('x' || substr(md5(u.underwriter_id::text), 1, 8))::bit(32)::int AS id,
+  u.underwriter_id,
+  u.name,
+  u.authority_level,
+  -- Exposed as is_active, NOT active: an Odoo field literally named `active`
+  -- triggers archive magic (inactive rows hidden by default), which would hide
+  -- deactivated underwriters from the roster-management screen that exists
+  -- precisely to see and reactivate them (ADR 0040).
+  u.active AS is_active,
+  u.created_at
+FROM underwriters u;
+
+-- Underwriter review queue (ADR 0040): one row per application whose CURRENT
+-- disposition is overridable (MANUAL_REVIEW_REQUIRED / MANUAL_REVIEW_SENIOR /
+-- DECLINE_RECOMMENDED - exactly the referral_overrides whitelist), with whether a
+-- valid supervised override has already released it. "Released" matches the same
+-- (application_id, overridden_action, evaluated_at) triple create_quote()'s gate
+-- checks - so a later re-evaluation moves evaluated_at and the row flips back to
+-- pending, exactly as the gate would re-block it. Built ON TOP of
+-- luxauto_application_referral_view (that view derives most_severe_action without
+-- re-running the orchestrator) rather than re-deriving the disposition. This is
+-- what makes the demo's "authorize an override, see it reflected" work on one
+-- screen: pending -> released.
+CREATE OR REPLACE VIEW luxauto_underwriter_review_view AS
+SELECT
+  ('x' || substr(md5(r.application_id::text), 1, 8))::bit(32)::int AS id,
+  r.application_id,
+  r.most_severe_action,
+  r.evaluated_at,
+  r.fired_rule_count,
+  r.rule_count,
+  CASE WHEN o.override_id IS NOT NULL THEN 'released' ELSE 'pending' END AS override_status,
+  o.override_id,
+  o.reason AS override_reason,
+  o.created_at AS overridden_at,
+  u.name AS authorized_by_name,
+  u.authority_level AS authorized_by_authority
+FROM luxauto_application_referral_view r
+LEFT JOIN LATERAL (
+  SELECT ro.override_id, ro.reason, ro.created_at, ro.authorized_by_underwriter_id
+  FROM referral_overrides ro
+  WHERE ro.application_id = r.application_id
+    AND ro.overridden_action = r.most_severe_action
+    AND ro.evaluated_at = r.evaluated_at
+  ORDER BY ro.created_at DESC
+  LIMIT 1
+) o ON true
+LEFT JOIN underwriters u ON u.underwriter_id = o.authorized_by_underwriter_id
+WHERE r.most_severe_action IN ('MANUAL_REVIEW_REQUIRED', 'MANUAL_REVIEW_SENIOR', 'DECLINE_RECOMMENDED');
+
 -- Commission (ADR 0007 addendum): broker channel and both commission rates,
 -- decided at quote time and inherited by the bound policy via quote_id. Quote
 -- grain (single-column hash on quote_id) so an unbound quote is covered too;
@@ -5919,6 +5977,8 @@ GRANT SELECT ON luxauto_policy_reinstatement_view TO odoo;
 GRANT SELECT ON luxauto_short_rate_factor_view TO odoo;
 GRANT SELECT ON luxauto_decision_log_view TO odoo;
 GRANT SELECT ON luxauto_application_referral_view TO odoo;
+GRANT SELECT ON luxauto_underwriter_view TO odoo;
+GRANT SELECT ON luxauto_underwriter_review_view TO odoo;
 GRANT SELECT ON luxauto_quote_commission_view TO odoo;
 GRANT SELECT ON luxauto_quote_rating_view TO odoo;
 GRANT EXECUTE ON FUNCTION calculate_premium_waterfall(UUID) TO odoo;

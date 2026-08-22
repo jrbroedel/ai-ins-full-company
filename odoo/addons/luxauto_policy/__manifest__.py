@@ -81,6 +81,11 @@ wizard, rather than writing to the pipeline tables directly.
         'views/luxauto_quote_commission_views.xml',
         'views/luxauto_quote_rating_views.xml',
         'views/luxauto_bind_wizard_views.xml',
+        # ADR 0040 underwriter override UI (actions before menus).
+        'views/luxauto_underwriter_review_views.xml',
+        'views/luxauto_underwriter_views.xml',
+        'views/luxauto_override_wizard_views.xml',
+        'views/luxauto_underwriter_wizard_views.xml',
         'views/luxauto_menus.xml',
     ],
     'installable': True,

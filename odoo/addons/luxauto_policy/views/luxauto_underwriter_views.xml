@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_luxauto_underwriter_list" model="ir.ui.view">
+        <field name="name">luxauto.underwriter.list</field>
+        <field name="model">luxauto.underwriter</field>
+        <field name="arch" type="xml">
+            <list create="false" edit="false" delete="false" import="false"
+                  decoration-muted="not is_active">
+                <field name="name"/>
+                <field name="authority_level"/>
+                <field name="is_active"/>
+                <field name="created_at"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_luxauto_underwriter_form" model="ir.ui.view">
+        <field name="name">luxauto.underwriter.form</field>
+        <field name="model">luxauto.underwriter</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false" delete="false">
+                <sheet>
+                    <group string="Underwriter">
+                        <field name="name"/>
+                        <field name="authority_level"/>
+                        <field name="is_active"/>
+                        <field name="created_at"/>
+                        <field name="underwriter_id"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_luxauto_underwriter" model="ir.actions.act_window">
+        <field name="name">Underwriters</field>
+        <field name="res_model">luxauto.underwriter</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

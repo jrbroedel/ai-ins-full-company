@@ -27,6 +27,9 @@ MODELS = [
     # waterfall/settlement above, so the same search_read probe covers them.
     'luxauto.policy.reinstatement', 'luxauto.short.rate.factor', 'luxauto.decision.log',
     'luxauto.application.referral', 'luxauto.quote.commission', 'luxauto.quote.rating',
+    # ADR 0040 underwriter override UI: two more _auto=False view-backed read
+    # models (the roster and the review queue), same probe.
+    'luxauto.underwriter', 'luxauto.underwriter.review',
 ]
 # The fs.storage record attachments are supposed to land in (ADR 0009).
 EXPECTED_ATTACHMENT_STORAGE = 'azure_blob_documents'

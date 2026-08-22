@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_luxauto_underwriter_review_list" model="ir.ui.view">
+        <field name="name">luxauto.underwriter.review.list</field>
+        <field name="model">luxauto.underwriter.review</field>
+        <field name="arch" type="xml">
+            <list create="false" edit="false" delete="false" import="false"
+                  decoration-warning="override_status == 'pending'"
+                  decoration-success="override_status == 'released'">
+                <field name="application_id"/>
+                <field name="most_severe_action"/>
+                <field name="override_status"/>
+                <field name="authorized_by_name"/>
+                <field name="evaluated_at"/>
+                <button name="action_open_override_wizard" type="object"
+                        string="Authorize Override" class="btn-primary"
+                        invisible="override_status == 'released'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_luxauto_underwriter_review_form" model="ir.ui.view">
+        <field name="name">luxauto.underwriter.review.form</field>
+        <field name="model">luxauto.underwriter.review</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false" delete="false">
+                <header>
+                    <button name="action_open_override_wizard" type="object"
+                            string="Authorize Override" class="btn-primary"
+                            invisible="override_status == 'released'"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group string="Referral">
+                            <field name="application_id"/>
+                            <field name="most_severe_action"/>
+                            <field name="fired_rule_count"/>
+                            <field name="rule_count"/>
+                            <field name="evaluated_at"/>
+                        </group>
+                        <group string="Override">
+                            <field name="override_status"/>
+                            <field name="authorized_by_name"/>
+                            <field name="authorized_by_authority"/>
+                            <field name="override_reason"/>
+                            <field name="overridden_at"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_luxauto_underwriter_review_search" model="ir.ui.view">
+        <field name="name">luxauto.underwriter.review.search</field>
+        <field name="model">luxauto.underwriter.review</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="application_id"/>
+                <field name="most_severe_action"/>
+                <filter name="pending" string="Pending" domain="[('override_status', '=', 'pending')]"/>
+                <filter name="released" string="Released" domain="[('override_status', '=', 'released')]"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_luxauto_underwriter_review" model="ir.actions.act_window">
+        <field name="name">Underwriter Review Queue</field>
+        <field name="res_model">luxauto.underwriter.review</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_luxauto_underwriter_review_search"/>
+        <!-- Default the queue to the pending items - the ones needing action. -->
+        <field name="context">{'search_default_pending': 1}</field>
+    </record>
+
+</odoo>

@@ -180,7 +180,7 @@ BASELINE = {
     "tables": 35,
     "types": 21,
     "functions": 70,
-    "views": 13,
+    "views": 15,
     "triggers": 28,
     "not_null_columns": 9,
 }

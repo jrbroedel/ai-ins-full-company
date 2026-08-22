@@ -14,3 +14,8 @@ access_luxauto_quote_rating,luxauto.quote.rating,model_luxauto_quote_rating,base
 access_luxauto_bind_wizard,luxauto.bind.wizard,model_luxauto_bind_wizard,base.group_user,1,1,1,1
 access_luxauto_cancel_wizard,luxauto.cancel.wizard,model_luxauto_cancel_wizard,base.group_user,1,1,1,1
 access_luxauto_settlement,luxauto.settlement,model_luxauto_settlement,luxauto_policy.group_settlement_viewer,1,0,0,0
+access_luxauto_underwriter,luxauto.underwriter,model_luxauto_underwriter,base.group_user,1,0,0,0
+access_luxauto_underwriter_review,luxauto.underwriter.review,model_luxauto_underwriter_review,base.group_user,1,0,0,0
+access_luxauto_override_wizard,luxauto.override.wizard,model_luxauto_override_wizard,base.group_user,1,1,1,1
+access_luxauto_underwriter_add_wizard,luxauto.underwriter.add.wizard,model_luxauto_underwriter_add_wizard,base.group_user,1,1,1,1
+access_luxauto_underwriter_update_wizard,luxauto.underwriter.update.wizard,model_luxauto_underwriter_update_wizard,base.group_user,1,1,1,1
