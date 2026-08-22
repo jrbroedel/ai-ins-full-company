@@ -1195,6 +1195,55 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
+-- The counterpart write path add_underwriter() anticipated (ADR 0038): promote/
+-- demote (authority_level), (de/re)activate (active), and rename (name) an
+-- existing roster row. Partial update - a NULL argument leaves that field
+-- unchanged (COALESCE) - so a caller changes only what it means to. underwriter_id
+-- and created_at are immutable (identity and the creation record never change).
+-- Same conventions as add_underwriter: SECURITY DEFINER, UPPER_SNAKE error codes,
+-- granted to odoo. Like add_underwriter it is the sanctioned wrapper, NOT a lock:
+-- underwriters is a deliberately mutable roster (no append-only trigger), so a
+-- direct UPDATE is still possible - this just gives one validated place to do it.
+--
+-- Demotion is allowed. It does NOT retroactively invalidate a past override: a
+-- referral_overrides row is append-only and proves valid authorization AT INSERT
+-- (the authority trigger enforced it then); create_quote()'s gate reads that row's
+-- existence, never the authorizer's current level. The only residual is that a
+-- live join of referral_overrides -> underwriters shows the authorizer's CURRENT
+-- roster status, not their status at authorization time - an accepted, separately
+-- tracked audit gap (a future authorized_by_authority_level snapshot column on
+-- referral_overrides, out of scope here because it changes ADR 0032's append-only
+-- table). See ADR 0038.
+CREATE OR REPLACE FUNCTION update_underwriter(
+  p_underwriter_id UUID,
+  p_name TEXT DEFAULT NULL,
+  p_authority_level underwriter_authority_t DEFAULT NULL,
+  p_active BOOLEAN DEFAULT NULL
+) RETURNS UUID AS $$
+DECLARE v_id UUID;
+BEGIN
+  IF p_name IS NULL AND p_authority_level IS NULL AND p_active IS NULL THEN
+    RAISE EXCEPTION 'UPDATE_UNDERWRITER_NO_CHANGES: at least one of name, authority_level, or active must be supplied';
+  END IF;
+  IF p_name IS NOT NULL AND length(btrim(p_name)) = 0 THEN
+    RAISE EXCEPTION 'UPDATE_UNDERWRITER_NAME_REQUIRED: an underwriter name cannot be blank';
+  END IF;
+
+  UPDATE underwriters
+  SET name            = COALESCE(p_name, name),
+      authority_level = COALESCE(p_authority_level, authority_level),
+      active          = COALESCE(p_active, active)
+  WHERE underwriter_id = p_underwriter_id
+  RETURNING underwriter_id INTO v_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'UPDATE_UNDERWRITER_NOT_FOUND: underwriter % does not exist', p_underwriter_id;
+  END IF;
+
+  RETURN v_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
 -- The supervised-release audit record. Append-only, like decision_log /
 -- policy_reinstatements. The whitelist CHECK is the STRUCTURAL guarantee that
 -- HARD_DECLINE_COMPLIANCE is never overridable - a row overriding it cannot
@@ -5829,6 +5878,7 @@ GRANT EXECUTE ON FUNCTION current_referral_action(UUID) TO odoo;
 -- underwriter wizard would call it); current_referral_evaluated_at is the
 -- staleness-pin read helper, granted for completeness.
 GRANT EXECUTE ON FUNCTION add_underwriter(TEXT, underwriter_authority_t) TO odoo;
+GRANT EXECUTE ON FUNCTION update_underwriter(UUID, TEXT, underwriter_authority_t, BOOLEAN) TO odoo;
 GRANT EXECUTE ON FUNCTION authorize_referral_override(UUID, referral_action_t, TEXT, UUID) TO odoo;
 GRANT EXECUTE ON FUNCTION current_referral_evaluated_at(UUID) TO odoo;
 -- ADR 0028: the rating-engine entry point (v1 indicative premium). The per-rule
