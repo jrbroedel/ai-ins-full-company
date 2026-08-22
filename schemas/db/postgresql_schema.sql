@@ -3536,6 +3536,51 @@ CREATE OR REPLACE TRIGGER state_rating_versions_seed_short_rate
   AFTER INSERT ON state_rating_table_versions
   FOR EACH ROW EXECUTE FUNCTION seed_short_rate_factor_for_state();
 
+-- ============================================================================
+-- CONNECTICUT - FIRST ILLUSTRATIVE STATE ONBOARDING (ADR 0034)
+-- The first real-named state onboarded end to end, chosen so the existing
+-- sample APP-0001 (Miriam Ostrander, Greenwich CT) can flow through the real
+-- pipeline. DIRECTIONAL/ILLUSTRATIVE ONLY - same status as
+-- sample-data/state_rating_tables_sample.json's 8-state skeleton (which does NOT
+-- include CT). No real vendor/compliance relationship exists; nothing here traces
+-- to a filed CT rate manual. Placed AFTER the ADR 0025 seed trigger above ON
+-- PURPOSE: inserting the state_rating_table_versions row fires that trigger and
+-- auto-seeds a CT short_rate_factors row (flat 10% holdback) - the first time
+-- that trigger runs for a real state rather than a test fixture.
+--
+-- The ai_governance documentation bar is built to the NY DFS Circular Letter
+-- 2024-7 standard by default (this project's baseline design principle: every
+-- state is a subset of NY's standard, not a special case). credit_based_insurance
+-- _score is marked permitted because no CT credit-score ban is documented in this
+-- project's research - to be verified, not asserted. Everything not researched is
+-- marked TBD/illustrative, exactly like the skeleton states.
+INSERT INTO state_rating_table_versions (
+  state, regulator_name, filing_status, line_of_business_code,
+  serff_filing_tracking_number, rate_manual_reference, effective_range,
+  approved_rating_variables, prohibited_variables, state_specific_application_fields,
+  credit_based_insurance_score, territory_rating_basis, agreed_value_rules,
+  referral_thresholds_state_specific, ai_governance, documentation)
+SELECT
+  'CT', 'Connecticut Insurance Department', 'prior_approval', 'Private Passenger Auto',
+  'TBD-ILLUSTRATIVE', 'TBD - illustrative onboarding (ADR 0034), not a filed manual',
+  tstzrange('2026-01-01 00:00:00+00', '2100-01-01 00:00:00+00', '[)'),
+  '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
+  $json${"permitted": true, "usage_context": ["new_business", "renewal", "tiering"], "notes": "No CT credit-based-score ban is documented in this project research; permitted pending verification. Any model using it falls under AI/algorithmic governance (see ai_governance)."}$json$::jsonb,
+  'TBD - PD territory factor loaded separately in territory_factors (1.12, illustrative)',
+  $json${"max_annual_mileage_for_agreed_value": null, "pleasure_use_required": true, "reappraisal_interval_years": 2, "notes": "Illustrative defaults matching the skeleton-state pattern; verify against CT filed rules."}$json$::jsonb,
+  $json${"dui_lookback_years": null, "sr22_fr44_required": false, "salvage_title_disclosure_rule": "TBD", "notes": "TBD - illustrative."}$json$::jsonb,
+  $json${"naic_model_bulletin_adopted": true, "naic_model_bulletin_adoption_date": "TBD - verify current NAIC tracker for CT", "state_specific_ai_law": null, "documentation_required": ["bias_testing_records", "vendor_audit_rights", "internal_governance_log", "explainability_for_adverse_outcomes"], "citation": "Built to the NY DFS Circular Letter 2024-7 documentation standard by default (this project baseline: every state is a subset, not a special case). CT-specific AI guidance not yet researched."}$json$::jsonb,
+  $json${"source_urls": [], "last_verified_date": "2026-08-19", "verified_by": "Illustrative onboarding (ADR 0034) - demo/design, NOT a compliance verification", "note": "DIRECTIONAL/ILLUSTRATIVE ONLY, same status as sample-data/state_rating_tables_sample.json's skeleton states."}$json$::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM state_rating_table_versions WHERE state = 'CT');
+
+-- CT PD territory factor: 1.12, from the Exotic/Collector rating workbook's
+-- Territory Factors sheet (illustrative). A manual load, per ADR 0028 (territory
+-- factors are never auto-seeded, unlike the flat short-rate default above).
+INSERT INTO territory_factors (state, pd_territory_factor, effective_range, source_reference)
+SELECT 'CT', 1.1200, tstzrange('2026-01-01 00:00:00+00', '2100-01-01 00:00:00+00', '[)'),
+       'Illustrative PD territory factor from the Exotic/Collector rating workbook Territory Factors sheet (ADR 0034); demo onboarding, not a filed factor'
+WHERE NOT EXISTS (SELECT 1 FROM territory_factors WHERE state = 'CT');
+
 -- Pro-rata unearned premium for a policy as of an instant: every premium
 -- amount in force is earned evenly across its OWN effective period, and what
 -- has not been earned by p_as_of is unearned. That means the quote's written
