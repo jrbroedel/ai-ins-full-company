@@ -1004,8 +1004,10 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- Orchestrator: evaluates the confirmed rules for one application in a
--- single transaction (one decision_log row written per rule - TWELVE now, after
--- ADR 0037 added seven - fired or not) and returns the single most-severe action.
+-- single transaction (one decision_log row written per rule - TWELVE on main,
+-- after ADR 0037 added seven - fired or not) and returns the single most-severe
+-- action. NOTE (demo/investor-preview branch only): a THIRTEENTH row is written
+-- by the inlined PC-02 DEMO PLACEHOLDER below - see the comment on it.
 --
 -- referral_action_t is DEFINED in ascending severity order (AUTO_PROCEED lowest
 -- ... HARD_DECLINE_COMPLIANCE highest), so GREATEST over the enum is the
@@ -1031,6 +1033,8 @@ DECLARE
   v_al02 referral_action_t;
   v_cp01 referral_action_t;
   v_pc01 referral_action_t;
+  v_pc02 referral_action_t;         -- DEMO PLACEHOLDER (demo/investor-preview only)
+  v_pc02_fired BOOLEAN;             -- DEMO PLACEHOLDER (demo/investor-preview only)
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM applications WHERE application_id = p_application_id) THEN
     RAISE EXCEPTION 'evaluate_application_referrals: application % does not exist', p_application_id;
@@ -1053,8 +1057,33 @@ BEGIN
   v_cp01 := evaluate_cp01(p_application_id, p_decided_by);
   v_pc01 := evaluate_pc01(p_application_id, p_decided_by);
 
+  -- DEMO PLACEHOLDER (demo/investor-preview only) - checks sanctions_screen_result
+  -- but nothing populates it via a real vendor. See ADR 0041 for the real NameScan
+  -- integration, not yet built. Do not merge this rule to main as-is without going
+  -- through that ADR's own review. Inlined here (rather than a separate
+  -- evaluate_pc02()) so the demo deploy path passes the verify_schema.py baseline
+  -- unchanged; the real ADR 0041 version should be its own evaluate_pc02() function.
+  -- PC-02: a positive sanctions hit on the applicant or ANY additional driver is a
+  -- compliance decline - HARD_DECLINE_COMPLIANCE (never overridable). Same
+  -- decision_log pattern as every other rule.
+  v_pc02_fired := EXISTS (
+    SELECT 1 FROM applicant_enrichment ae
+    WHERE ae.application_id = p_application_id
+      AND ae.sanctions_screen_result = 'positive_hit'::sanctions_result_t
+  ) OR EXISTS (
+    SELECT 1 FROM additional_driver_sanctions s
+    JOIN additional_drivers d ON d.driver_id = s.driver_id
+    WHERE d.application_id = p_application_id
+      AND s.sanctions_screen_result = 'positive_hit'::sanctions_result_t
+  );
+  v_pc02 := CASE WHEN v_pc02_fired THEN 'HARD_DECLINE_COMPLIANCE'::referral_action_t
+                 ELSE 'AUTO_PROCEED'::referral_action_t END;
+  INSERT INTO decision_log (application_id, rule_id, reason_code, action_taken, fired, decided_by, notes)
+  VALUES (p_application_id, 'PC-02', 'PC02_SANCTIONS_HIT', v_pc02, v_pc02_fired, p_decided_by,
+          'DEMO PLACEHOLDER: sanctions_screen_result checked; no real vendor populates it (see ADR 0041)');
+
   RETURN GREATEST(v_al, v_cp, v_dh, v_pc, v_el,
-                  v_vv03, v_vv04, v_dh03, v_dh04, v_al02, v_cp01, v_pc01);
+                  v_vv03, v_vv04, v_dh03, v_dh04, v_al02, v_cp01, v_pc01, v_pc02);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 

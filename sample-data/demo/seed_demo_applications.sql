@@ -177,3 +177,46 @@ BEGIN
   v_action := submit_application(v_app, 'demo/investor-preview seed');
   RAISE NOTICE 'Profile 4 Nandakumar (CA) app % -> %', v_app, v_action;
 END $$;
+
+-- ---- Profile 5: PC-02 DEMO PLACEHOLDER - sanctions positive-hit -> HARD_DECLINE_COMPLIANCE ----
+-- Added with the PC-02 demo placeholder rule (demo/investor-preview only; NOT ADR 0041).
+-- Obviously-fictional applicant, re-homed to TX. applicant_enrichment.sanctions_screen_result
+-- is manually seeded to 'positive_hit' BEFORE submission (the placeholder - no real vendor
+-- call), so submit_application() lands it naturally on HARD_DECLINE_COMPLIANCE via PC-02.
+DO $$
+DECLARE v_app UUID; v_appl UUID; v_action referral_action_t;
+BEGIN
+  IF EXISTS (SELECT 1 FROM applicants WHERE email = 'g.marchetti@example.com') THEN
+    RAISE NOTICE 'Profile 5 (TX, sanctions) already seeded - skipping'; RETURN;
+  END IF;
+  INSERT INTO applicants (first_name, last_name, date_of_birth, ssn_last4, email, phone,
+    mailing_street, mailing_city, mailing_state, mailing_zip, occupation, years_licensed,
+    license_number_state, license_status, credit_based_insurance_score_band)
+  VALUES ('Grigor','Marchetti','1979-06-11','0000','g.marchetti@example.com','555-010-0005',
+    '2200 McKinney Ave','Dallas','TX','75201','Import/Export Broker',25,'TX','valid','good')
+  RETURNING applicant_id INTO v_appl;
+
+  INSERT INTO applications (applicant_id, status, garaging_state)
+  VALUES (v_appl,'draft','TX') RETURNING application_id INTO v_app;
+
+  INSERT INTO vehicles (application_id, year, make, model, trim, vin, vehicle_category,
+    purchase_price, current_appraised_value, appraisal_date, appraisal_source, agreed_value_requested,
+    annual_mileage, primary_use, garaging_street, garaging_city, garaging_state, garaging_zip,
+    garage_type, security_features, existing_liens)
+  VALUES (v_app,2020,'Lamborghini','Huracan','EVO','ZHWUC0000LLA00005','exotic',
+    280000,265000,'2026-02-20','Independent appraiser',true,
+    2600,'pleasure','2200 McKinney Ave','Dallas','TX','75201','attached_locked',
+    ARRAY['alarm','GPS_tracker','immobilizer'],false);
+
+  INSERT INTO coverage_requested (application_id, liability_bodily_injury_limits, liability_property_damage_limit,
+    uninsured_underinsured_motorist, comprehensive_deductible, collision_deductible, agreed_value_endorsement,
+    spare_parts_coverage, roadside_transport_flatbed_only, umbrella_policy_requested, umbrella_limit)
+  VALUES (v_app,'500/500',500000,true,2500,2500,true,false,true,true,3000000);
+
+  -- The PLACEHOLDER: manually seed a positive sanctions hit (no real vendor call).
+  INSERT INTO applicant_enrichment (application_id, sanctions_screen_result, enriched_at)
+  VALUES (v_app,'positive_hit', now());
+
+  v_action := submit_application(v_app, 'demo/investor-preview seed');
+  RAISE NOTICE 'Profile 5 Marchetti (TX, sanctions positive_hit) app % -> %', v_app, v_action;
+END $$;

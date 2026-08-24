@@ -40,6 +40,40 @@ Two SQL scripts, applied against `luxauto_demo` only (never `luxauto`):
 The schema itself is deployed unmodified from `main`
 (`schemas/db/postgresql_schema.sql`) — see the first implementation report.
 
+## PC-02 sanctions rule — DEMO PLACEHOLDER (first code divergence from `main`)
+
+**This is the first change on this branch that touches code, not just data.**
+Every prior piece (states, applications) was data only —
+`schemas/db/postgresql_schema.sql` was byte-identical to `main`. This addition
+changes the schema file, so the branch's code now diverges from `main`. That is
+intentional, but do not mistake it for a reviewed production design.
+
+What was added: a **PC-02** rule, inlined into `evaluate_application_referrals()`,
+that returns `HARD_DECLINE_COMPLIANCE` (reason code `PC02_SANCTIONS_HIT`) when
+`applicant_enrichment.sanctions_screen_result = 'positive_hit'`, or when any
+`additional_driver_sanctions` row for the application is `positive_hit`. It
+follows the same decision_log pattern as the other rules and changes no other
+rule's behaviour.
+
+- **Placeholder, not production.** The rule logic is legitimate (it only reads a
+  field's value), but **nothing populates that field via a real vendor** on this
+  branch. For the demo the field is seeded by hand.
+- **The real path is ADR 0041** (real NameScan integration, on `main`) — a
+  separate effort, **not yet built**, with its own scoping still to come
+  (including the still-open question of whether a not-yet-screened application
+  should also block quoting; this placeholder does **not** answer that).
+- **Do not merge this rule to `main` as-is** without going through ADR 0041's own
+  review. It is inlined (rather than a separate `evaluate_pc02()` function)
+  specifically so the demo deploy passes the `verify_schema.py` baseline
+  unchanged; the real ADR 0041 version should be its own function.
+
+Fifth demo application seeded to exercise it: an obviously-fictional applicant
+(Grigor Marchetti, TX) whose `applicant_enrichment.sanctions_screen_result` is
+manually set to `'positive_hit'` before submission, landing on
+`HARD_DECLINE_COMPLIANCE`. The demo now spans the full spectrum:
+`AUTO_PROCEED` → `MANUAL_REVIEW_REQUIRED` → `MANUAL_REVIEW_SENIOR` →
+`HARD_DECLINE_COMPLIANCE`.
+
 ## Scope boundaries
 
 - Does **not** touch `main`, the production `luxauto` database, or
