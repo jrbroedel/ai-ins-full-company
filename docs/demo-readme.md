@@ -26,19 +26,41 @@ territory factors so the investor audience sees geographic breadth now.
 
 ## What the build does
 
-Two SQL scripts, applied against `luxauto_demo` only (never `luxauto`):
+SQL scripts, applied against `luxauto_demo` only (never `luxauto`):
 
 - [`sample-data/demo/onboard_demo_states.sql`](../sample-data/demo/onboard_demo_states.sql)
-  — onboards CA, NY, TX, FL through the sanctioned `onboard_state()` path, all
-  DEMO-flagged, filling the skeleton's `TBD`/null fields with plausible synthetic
-  values.
+  — onboards the four Tier A states (CA, NY, TX, FL) through the sanctioned
+  `onboard_state()` path, all DEMO-flagged, filling the skeleton's `TBD`/null
+  fields with plausible synthetic values.
+- [`sample-data/demo/onboard_demo_states_tier_bc.sql`](../sample-data/demo/onboard_demo_states_tier_bc.sql)
+  — the 50-state expansion: Tier B (CO, MA, HI, MI) hand-written from the research
+  skeleton, and Tier C (the remaining 41 states) bulk-generated in a loop. Also
+  via `onboard_state()` only, no raw inserts.
 - [`sample-data/demo/seed_demo_applications.sql`](../sample-data/demo/seed_demo_applications.sql)
-  — seeds the four `luxury_auto_sample_applications.json` profiles, each re-homed
-  into one of the four demo states, and submits each through
-  `submit_application()` so they move through the referral matrix.
+  — seeds the five demo application profiles, each re-homed into a demo state, and
+  submits each through `submit_application()` so they move through the referral
+  matrix.
 
-The schema itself is deployed unmodified from `main`
-(`schemas/db/postgresql_schema.sql`) — see the first implementation report.
+The schema itself is deployed from `main` **except** for the PC-02 demo
+placeholder rule documented below (`schemas/db/postgresql_schema.sql`).
+
+## State coverage — all 50 states, three tiers
+
+`luxauto_demo` holds **all 50 US states** in `state_rating_table_versions`, every
+one onboarded via `onboard_state()` (no raw inserts). The three tiers reflect how
+much real basis each row has, and the distinction is preserved in the data
+(`documentation.tier` and `documentation.verified_by`):
+
+| Tier | States | Basis | `documentation.verified_by` |
+|------|--------|-------|------------------------------|
+| A | CA, NY, TX, FL (4) | First demo states, plausible synthetic | *"...illustrative data only, not sourced from a real filing"* |
+| B | CO, MA, HI, MI (4) | Onboarded from the 2026-08-08 research skeleton (`state_rating_tables_sample.json`); researched fields (credit-score bans, AI-governance citations, MI PIP) preserved | *"...based on the 2026-08-08 design-session research skeleton, illustrative data only, not a filed rate"* |
+| C | remaining 41 | Bulk-generated placeholders, **no state-specific research**; formulaic-but-varied territory factors, standard defaults | *"...bulk-generated illustrative placeholder for 50-state demo breadth, no state-specific research performed, not a filed rate"* |
+
+Plus **CT**, the schema's own baked-in illustrative seed (present since the first
+deploy; not part of any tier). All Tier A/B/C rows carry the `DEMO-SYNTHETIC-`
+SERFF prefix and `-DEMO` record_id suffix. None of it is real filed data — the
+platform holds no real filed rating data for any state (CT included).
 
 ## PC-02 sanctions rule — DEMO PLACEHOLDER (first code divergence from `main`)
 
