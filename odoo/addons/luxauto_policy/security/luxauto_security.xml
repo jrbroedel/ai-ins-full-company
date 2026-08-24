@@ -6,4 +6,9 @@
         <field name="comment">Read access to the capacity-provider settlement report (luxauto.settlement, ADR 0013). Exposes commission rates and participant splits, which is more sensitive than the other Luxury Auto models, so this is deliberately not part of base.group_user. No user is added to this group by default - who gets access is a business decision made elsewhere, not assumed here.</field>
     </record>
 
+    <record id="group_underwriting" model="res.groups">
+        <field name="name">Underwriting</field>
+        <field name="comment">Gates the underwriter override UI (ADR 0040 addendum, 2026-08-24): the review queue (luxauto.underwriter.review), the roster (luxauto.underwriter), and the override/add/update wizards. These screens drive authorize_referral_override/add_underwriter/update_underwriter, so they are deliberately not part of base.group_user - the same posture as group_settlement_viewer above. No user is added to this group by default - who gets access is a business decision made elsewhere, not assumed here. Note: the database triggers (enforce_referral_override_authority, the active-authorizer check) remain the real enforcement boundary regardless of Odoo group; this group gates the Odoo surface on top of that.</field>
+    </record>
+
 </odoo>

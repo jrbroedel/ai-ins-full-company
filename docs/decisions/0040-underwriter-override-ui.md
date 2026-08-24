@@ -45,3 +45,47 @@ The roster view exposes `underwriters.active` **as `is_active`**, and the Odoo f
 - The override mechanism is now usable end to end in Odoo: see a flagged application, authorize an override as a named underwriter, see it flip to released; manage the roster (add + full update).
 - Two read views added; no new write surface. The DB remains the system of record and the real enforcement boundary; every Odoo write goes through a `SECURITY DEFINER` function via a wizard, never to a base table.
 - **Two tracked follow-ups, deliberately deferred:** a `group_underwriting` security group (real access control vs. tonight's `base.group_user`), and a `res_users ↔ underwriter` identity link (so the authorizer need not be picked from a list).
+
+## Addendum (2026-08-24): lock the underwriter UI to `group_underwriting`
+
+**Status:** Decided; implemented. Targets `main`.
+
+Closes the first of the two follow-ups above — the access-control gap this ADR
+itself flagged as "a deliberate demo-speed tradeoff, explicitly not the final
+access-control posture."
+
+**What changed:**
+- New `res.groups` record `group_underwriting` in
+  `odoo/addons/luxauto_policy/security/luxauto_security.xml`, mirroring
+  `group_settlement_viewer` (ADR 0013): excluded from `base.group_user`, no
+  default members, an explicit comment stating membership is a business decision
+  made elsewhere.
+- The five underwriter-UI rows in `security/ir.model.access.csv`
+  (`luxauto.underwriter`, `luxauto.underwriter.review`, `luxauto.override.wizard`,
+  `luxauto.underwriter.add.wizard`, `luxauto.underwriter.update.wizard`) moved
+  from `base.group_user` to `luxauto_policy.group_underwriting`. **This is the
+  real enforcement boundary** — a non-member cannot read or act on these models
+  regardless of the menu.
+- The four underwriter menu items in `views/luxauto_menus.xml` gained
+  `groups="luxauto_policy.group_underwriting"`. This is UX polish (hiding the
+  items for non-members) layered on top of the CSV access rights — belt and
+  suspenders, not a substitute — the same pattern the settlement menu uses.
+- The stale "all open to base.group_user for now" comment in `luxauto_menus.xml`
+  was replaced to say the group now gates these screens.
+- `scripts/lib/smoke_test.py`: the disposable smoke-test user now also joins
+  `group_underwriting` (it already joined `group_settlement_viewer` for the same
+  reason). Without this the post-deploy `search_read` probe of
+  `luxauto.underwriter`/`luxauto.underwriter.review` would fail an access check
+  and break the deploy — exactly mirroring how the settlement group is handled.
+
+**Why:** the DB triggers (`enforce_referral_override_authority`, the active-
+authorizer check) were always the true control, but any logged-in user could see
+and drive the override/roster screens. Gating the Odoo surface to a dedicated
+group brings the UI posture in line with the sensitivity of the action.
+
+**Still open — NOT fixed here (`res_users` ↔ `underwriter` link):** `underwriters`
+still has no `res_users`/login column (see "Identity" above). So
+`group_underwriting` **membership is assigned manually**, per user, and is **not
+derived from the roster** — being an `underwriter` row does not make you a group
+member, and vice versa. Wiring group membership to the roster is deliberately out
+of scope for this addendum and remains the second tracked follow-up.

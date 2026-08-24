@@ -79,7 +79,7 @@ def check_attachment_storage():
     return 'PASS'
 
 
-group_ids = [env.ref(x).id for x in ['base.group_user', 'luxauto_policy.group_settlement_viewer']]
+group_ids = [env.ref(x).id for x in ['base.group_user', 'luxauto_policy.group_settlement_viewer', 'luxauto_policy.group_underwriting']]
 user = env['res.users'].sudo().create({
     'name': 'Deploy Smoke Test',
     'login': LOGIN,

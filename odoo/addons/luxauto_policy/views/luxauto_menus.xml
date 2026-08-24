@@ -10,31 +10,38 @@
               sequence="5"/>
 
     <!-- ADR 0040 underwriter override UI. The review queue leads (it is the
-         actionable screen); the roster and its add/update wizards sit lower. All
-         open to base.group_user for now - a dedicated underwriting group is a
-         tracked follow-up (see ADR 0040). -->
+         actionable screen); the roster and its add/update wizards sit lower.
+         Gated to group_underwriting (ADR 0040 addendum, 2026-08-24), closing the
+         dedicated-group follow-up ADR 0040 flagged. As with the settlement menu
+         below, groups= hides these menu items for non-members on top of the
+         model-level access rights (ir.model.access.csv) that are the real
+         enforcement boundary - belt and suspenders, not a substitute. -->
     <menuitem id="menu_luxauto_underwriter_review"
               name="Underwriter Review Queue"
               parent="menu_luxauto_root"
               action="action_luxauto_underwriter_review"
+              groups="luxauto_policy.group_underwriting"
               sequence="6"/>
 
     <menuitem id="menu_luxauto_underwriter"
               name="Underwriters"
               parent="menu_luxauto_root"
               action="action_luxauto_underwriter"
+              groups="luxauto_policy.group_underwriting"
               sequence="42"/>
 
     <menuitem id="menu_luxauto_underwriter_add"
               name="Add Underwriter"
               parent="menu_luxauto_root"
               action="action_luxauto_underwriter_add_wizard"
+              groups="luxauto_policy.group_underwriting"
               sequence="43"/>
 
     <menuitem id="menu_luxauto_underwriter_update"
               name="Update Underwriter"
               parent="menu_luxauto_root"
               action="action_luxauto_underwriter_update_wizard"
+              groups="luxauto_policy.group_underwriting"
               sequence="44"/>
 
     <menuitem id="menu_luxauto_insured"
