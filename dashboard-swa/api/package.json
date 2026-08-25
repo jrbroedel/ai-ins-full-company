@@ -1,0 +1,14 @@
+{
+  "name": "luxauto-dashboard-api",
+  "version": "1.0.0",
+  "description": "Read-only API for the luxauto demo dashboard: serves snapshot.json from a private blob via managed identity.",
+  "main": "src/functions/*.js",
+  "scripts": {
+    "start": "func start"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.0",
+    "@azure/identity": "^4.5.0",
+    "@azure/storage-blob": "^12.26.0"
+  }
+}

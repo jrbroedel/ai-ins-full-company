@@ -21,3 +21,18 @@ node_modules/
 *.pem
 *api_key*
 *secret*
+
+# dashboard-swa build/runtime artifacts
+dashboard-swa/api/node_modules/
+dashboard-swa/**/node_modules/
+dashboard-swa/deploy/api.zip
+dashboard-swa/**/*.zip
+
+# secrets - belt-and-suspenders, nothing secret should ever be committed
+*.env
+.env
+**/local.settings.json
+*secret*
+*SECRET*
+*.pfx
+*.pem

@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<!-- saved from url=(0053)file:///C:/Users/JoshuaBroedel/Downloads/index_1.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IronCliff Vertex — Program Operations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com/">
+<link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
+<link href="./index_files/css2" rel="stylesheet">
+<style>
+  :root{
+    --ground:#141b26;        /* deep slate-navy */
+    --ground-2:#1b2430;      /* raised panel */
+    --ground-3:#222d3b;      /* card */
+    --line:#2c3947;          /* hairline */
+    --ivory:#f2ede3;         /* warm ivory text */
+    --muted:#8f9bab;         /* secondary text */
+    --faint:#5d6b7c;         /* tertiary */
+    --brass:#c9a24b;         /* HNW accent */
+    --brass-dim:#8f7433;
+    --proceed:#7fa780;       /* sage */
+    --review:#d6a24e;        /* amber */
+    --senior:#c77b47;        /* deep amber */
+    --decline:#b45b52;       /* clay red */
+    --sim:#6b7c92;           /* simulated marker */
+    --radius:10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(201,162,75,.06), transparent 60%),
+      var(--ground);
+    color:var(--ivory);
+    font-family:'Inter',system-ui,sans-serif;
+    font-size:14px;line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  .wrap{max-width:1480px;margin:0 auto;padding:22px 28px 40px}
+
+  /* ---- Masthead ---- */
+  header.masthead{
+    display:flex;align-items:baseline;justify-content:space-between;
+    padding-bottom:16px;margin-bottom:20px;border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex;align-items:baseline;gap:14px}
+  .brand .mark{
+    font-family:'Fraunces',serif;font-weight:600;font-size:22px;letter-spacing:.02em;
+    color:var(--ivory);
+  }
+  .brand .mark b{color:var(--brass);font-weight:600}
+  .brand .sub{font-size:12px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase}
+  .status-cluster{display:flex;align-items:center;gap:22px}
+  .live-pill{
+    display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);
+  }
+  .live-dot{width:8px;height:8px;border-radius:50%;background:var(--proceed);
+    box-shadow:0 0 0 0 rgba(127,167,128,.6);animation:pulse 2.4s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(127,167,128,.5)}70%{box-shadow:0 0 0 9px rgba(127,167,128,0)}100%{box-shadow:0 0 0 0 rgba(127,167,128,0)}}
+  .clock{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--muted)}
+
+  /* ---- Hero: pipeline ---- */
+  .hero{
+    background:linear-gradient(180deg,var(--ground-2),rgba(27,36,48,.4));
+    border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px 22px 26px;margin-bottom:20px;position:relative;overflow:hidden;
+  }
+  .hero-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+  .hero-title{font-family:'Fraunces',serif;font-size:17px;font-weight:600;letter-spacing:.01em}
+  .hero-title .eyebrow{
+    display:block;font-family:'Inter';font-size:11px;font-weight:600;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--brass);margin-bottom:4px;
+  }
+  .legend{display:flex;gap:18px;font-size:11px;color:var(--muted)}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+  .legend .real{background:var(--brass)}
+  .legend .simd{background:var(--sim);position:relative}
+  .legend .simd::after{content:"";position:absolute;inset:0;
+    background-image:repeating-linear-gradient(45deg,transparent,transparent 2px,rgba(20,27,38,.6) 2px,rgba(20,27,38,.6) 4px)}
+
+  .pipeline{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;position:relative}
+  .stage{
+    background:var(--ground-3);border:1px solid var(--line);border-radius:8px;
+    min-height:210px;padding:12px 10px;display:flex;flex-direction:column;position:relative;
+  }
+  .stage.simulated{border-color:var(--line)}
+  .stage.simulated .stage-num{color:var(--sim)}
+  .sim-tag{
+    font-size:8px;letter-spacing:.1em;color:var(--faint);font-weight:500;
+    border:1px solid var(--line);border-radius:3px;padding:1px 4px;margin-left:auto;
+    text-transform:uppercase;opacity:.7;
+  }
+  .stage-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .stage-num{font-family:'JetBrains Mono';font-size:11px;color:var(--brass);font-weight:500}
+  .stage-name{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ivory)}
+  .stage-desc{font-size:10.5px;color:var(--faint);margin-bottom:10px;min-height:26px}
+  .stage-lane{flex:1;display:flex;flex-direction:column;gap:6px;justify-content:flex-start}
+
+  .appcard{
+    background:linear-gradient(180deg,#26313f,#212b38);
+    border:1px solid var(--line);border-left:3px solid var(--brass);
+    border-radius:6px;padding:7px 9px;font-size:11px;
+    animation:cardin .5s ease;position:relative;
+  }
+  .appcard.d-proceed{border-left-color:var(--proceed)}
+  .appcard.d-review{border-left-color:var(--review)}
+  .appcard.d-senior{border-left-color:var(--senior)}
+  .appcard.d-decline{border-left-color:var(--decline)}
+  @keyframes cardin{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+  .appcard .name{font-weight:600;color:var(--ivory);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .appcard .veh{color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .appcard .foot{display:flex;justify-content:space-between;align-items:center;margin-top:3px}
+  .appcard .state{font-family:'JetBrains Mono';font-size:9.5px;color:var(--faint)}
+  .appcard .tag{font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;padding:1px 5px;border-radius:3px;font-weight:600}
+  .tag.proceed{background:rgba(127,167,128,.16);color:var(--proceed)}
+  .tag.review{background:rgba(214,162,78,.16);color:var(--review)}
+  .tag.senior{background:rgba(199,123,71,.18);color:var(--senior)}
+  .tag.decline{background:rgba(180,91,82,.18);color:var(--decline)}
+
+  .enrich-checks{display:flex;flex-direction:column;gap:4px;margin-top:2px}
+  .echk{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted)}
+  .echk .box{width:12px;height:12px;border-radius:3px;border:1px solid var(--sim);
+    display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--sim)}
+  .echk.done .box{background:rgba(107,124,146,.25)}
+
+  /* ---- Band: totals ---- */
+  .totals{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px}
+  .tile{
+    background:var(--ground-2);border:1px solid var(--line);border-radius:var(--radius);
+    padding:15px 16px;position:relative;overflow:hidden;
+  }
+  .tile .label{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:9px}
+  .tile .val{font-family:'Fraunces',serif;font-size:30px;font-weight:600;line-height:1;letter-spacing:-.01em}
+  .tile .val.small{font-size:23px}
+  .tile .delta{font-size:10.5px;color:var(--faint);margin-top:6px}
+  .tile .delta b{color:var(--proceed);font-weight:600}
+  .tile::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--brass);opacity:.5}
+
+  /* ---- Lower grid ---- */
+  .lower{display:grid;grid-template-columns:1.1fr 1.4fr 1.1fr;gap:20px}
+  .panel{
+    background:var(--ground-2);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 20px;
+  }
+  .panel h3{
+    font-family:'Inter';font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--brass);margin-bottom:16px;
+  }
+
+  /* donut */
+  .donut-wrap{display:flex;align-items:center;gap:20px}
+  .donut{width:130px;height:130px;flex-shrink:0}
+  .donut-legend{display:flex;flex-direction:column;gap:9px;font-size:12px;flex:1}
+  .dl-row{display:flex;align-items:center;gap:9px}
+  .dl-row i{width:11px;height:11px;border-radius:3px}
+  .dl-row .dl-name{color:var(--muted);flex:1}
+  .dl-row .dl-val{font-family:'JetBrains Mono';font-weight:500;color:var(--ivory)}
+
+  /* map */
+  .mapbox{position:relative}
+  .mapbox svg{width:100%;height:auto;display:block}
+  .st{fill:var(--ground-3);stroke:var(--ground);stroke-width:1.1;transition:fill .6s}
+  .st.a1{fill:rgba(201,162,75,.30)}
+  .st.a2{fill:rgba(201,162,75,.55)}
+  .st.a3{fill:rgba(201,162,75,.82)}
+  .map-cap{font-size:10.5px;color:var(--faint);margin-top:10px;text-align:center}
+
+  /* feed */
+  .feed{display:flex;flex-direction:column;gap:0;max-height:300px;overflow:hidden}
+  .fitem{display:flex;gap:11px;padding:10px 0;border-bottom:1px solid var(--line);animation:cardin .5s ease}
+  .fitem:last-child{border-bottom:none}
+  .fdot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0}
+  .fdot.proceed{background:var(--proceed)}.fdot.review{background:var(--review)}
+  .fdot.senior{background:var(--senior)}.fdot.decline{background:var(--decline)}
+  .ftext{font-size:12px;line-height:1.35}
+  .ftext .ff{color:var(--ivory);font-weight:500}
+  .ftext .fs{color:var(--muted)}
+  .ftime{font-family:'JetBrains Mono';font-size:9.5px;color:var(--faint);margin-top:2px}
+
+  .footnote{margin-top:22px;padding-top:14px;border-top:1px solid var(--line);
+    font-size:10.5px;color:var(--faint);display:flex;justify-content:space-between}
+  .footnote .sim-note{color:var(--sim)}
+
+  @media(max-width:1200px){
+    .totals{grid-template-columns:repeat(3,1fr)}
+    .lower{grid-template-columns:1fr}
+    .pipeline{grid-template-columns:repeat(5,1fr);font-size:10px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="brand">
+      <span class="mark">IRONCLIFF <b>VERTEX</b></span>
+      <span class="sub">Luxury Auto · Program Operations</span>
+    </div>
+    <div class="status-cluster">
+      <span class="clock" id="clock">Aug 25 · 03:33:19 PM</span>
+      <span class="live-pill"><span class="live-dot"></span>Live · updated <span id="ago">5s</span> ago</span>
+    </div>
+  </header>
+
+  <!-- HERO PIPELINE -->
+  <section class="hero">
+    <div class="hero-head">
+      <div class="hero-title">
+        <span class="eyebrow">Underwriting Pipeline</span>
+        Applications flowing through the program, in real time
+      </div>
+      <div class="legend">
+        <span><i class="real"></i>Live platform stage</span>
+        <span><i class="simd"></i>Simulated (integration pending)</span>
+      </div>
+    </div>
+    <div class="pipeline">
+      <div class="stage" data-stage="intake">
+        <div class="stage-head"><span class="stage-num">01</span><span class="stage-name">Intake</span></div>
+        <div class="stage-desc">Application received &amp; validated</div>
+        <div class="stage-lane" id="lane-intake"></div>
+      </div>
+      <div class="stage simulated" data-stage="enrich">
+        <div class="stage-head"><span class="stage-num">02</span><span class="stage-name">Enrichment</span><span class="sim-tag">simulated</span></div>
+        <div class="stage-desc">VIN · title · household · sanctions</div>
+        <div class="stage-lane" id="lane-enrich"></div>
+      </div>
+      <div class="stage" data-stage="underwrite">
+        <div class="stage-head"><span class="stage-num">03</span><span class="stage-name">Referral Eval</span></div>
+        <div class="stage-desc">Rules engine &amp; disposition logic</div>
+        <div class="stage-lane" id="lane-underwrite"><div class="appcard d-proceed"><div class="name">Rourke Vandermeer</div><div class="veh">Range Rover Autobiography</div>
+    <div class="foot"><span class="state">WV</span><span></span></div></div></div>
+      </div>
+      <div class="stage" data-stage="disposition">
+        <div class="stage-head"><span class="stage-num">04</span><span class="stage-name">Disposition</span></div>
+        <div class="stage-desc">Auto-proceed or route to underwriter</div>
+        <div class="stage-lane" id="lane-disposition"><div class="appcard d-proceed"><div class="name">Thea Delaine</div><div class="veh">McLaren 720S</div>
+    <div class="foot"><span class="state">SC</span><span class="tag proceed">Auto-proceed</span></div></div></div>
+      </div>
+      <div class="stage" data-stage="quote">
+        <div class="stage-head"><span class="stage-num">05</span><span class="stage-name">Quote</span></div>
+        <div class="stage-desc">Indicative premium issued</div>
+        <div class="stage-lane" id="lane-quote"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TOTALS -->
+  <section class="totals">
+    <div class="tile"><div class="label">Applications Today</div><div class="val" id="t-apps">55</div><div class="delta"><b id="t-apps-d">+34</b> in last hour</div></div>
+    <div class="tile"><div class="label">In Underwriting</div><div class="val" id="t-uw">18</div><div class="delta">awaiting review</div></div>
+    <div class="tile"><div class="label">Quotes Issued</div><div class="val" id="t-quotes">31</div><div class="delta"><b id="t-bind">61%</b> bind ratio</div></div>
+    <div class="tile"><div class="label">Bound</div><div class="val" id="t-bound">19</div><div class="delta">policies in force</div></div>
+    <div class="tile"><div class="label">Total Insured Value</div><div class="val small" id="t-tiv">$14.9M</div><div class="delta">across active book</div></div>
+    <div class="tile"><div class="label">Avg Premium</div><div class="val small" id="t-avg">$38,778</div><div class="delta">indicative, annual</div></div>
+  </section>
+
+  <!-- LOWER -->
+  <section class="lower">
+    <div class="panel">
+      <h3>Disposition Mix</h3>
+      <div class="donut-wrap">
+        <svg class="donut" viewBox="0 0 42 42">
+          <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--ground-3)" stroke-width="6"></circle>
+          <circle id="arc-proceed" cx="21" cy="21" r="15.9" fill="none" stroke="var(--proceed)" stroke-width="6" stroke-dasharray="57.252427184466015 42.747572815533985" stroke-dashoffset="25" transform="rotate(-90 21 21)"></circle>
+          <circle id="arc-review" cx="21" cy="21" r="15.9" fill="none" stroke="var(--review)" stroke-width="6" stroke-dasharray="22.300970873786408 77.69902912621359" stroke-dashoffset="-33.252427184466015" transform="rotate(-90 21 21)"></circle>
+          <circle id="arc-senior" cx="21" cy="21" r="15.9" fill="none" stroke="var(--senior)" stroke-width="6" stroke-dasharray="9.679611650485436 90.32038834951456" stroke-dashoffset="-56.55339805825243" transform="rotate(-90 21 21)"></circle>
+          <circle id="arc-decline" cx="21" cy="21" r="15.9" fill="none" stroke="var(--decline)" stroke-width="6" stroke-dasharray="6.766990291262135 93.23300970873787" stroke-dashoffset="-67.23300970873787" transform="rotate(-90 21 21)"></circle>
+        </svg>
+        <div class="donut-legend">
+          <div class="dl-row"><i style="background:var(--proceed)"></i><span class="dl-name">Auto-proceed</span><span class="dl-val" id="m-proceed">60</span></div>
+          <div class="dl-row"><i style="background:var(--review)"></i><span class="dl-name">Manual review</span><span class="dl-val" id="m-review">24</span></div>
+          <div class="dl-row"><i style="background:var(--senior)"></i><span class="dl-name">Senior review</span><span class="dl-val" id="m-senior">11</span></div>
+          <div class="dl-row"><i style="background:var(--decline)"></i><span class="dl-name">Decline / compliance</span><span class="dl-val" id="m-decline">8</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>National Footprint</h3>
+      <div class="mapbox" id="mapbox"><svg viewBox="0 0 319 261" xmlns="http://www.w3.org/2000/svg"><g><rect class="st a1" x="290" y="0" width="26" height="26" rx="4"><title>ME · 3 applications · file_and_use · DEMO-SYNTHETIC-ME-01 (synthetic)</title></rect><text x="303" y="16" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">ME</text></g><g><rect class="st a1" x="261" y="29" width="26" height="26" rx="4"><title>VT · 4 applications · file_and_use · DEMO-SYNTHETIC-VT-01 (synthetic)</title></rect><text x="274" y="45" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">VT</text></g><g><rect class="st a1" x="290" y="29" width="26" height="26" rx="4"><title>NH · 2 applications · file_and_use · DEMO-SYNTHETIC-NH-01 (synthetic)</title></rect><text x="303" y="45" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">NH</text></g><g><rect class="st a1" x="0" y="58" width="26" height="26" rx="4"><title>WA · 3 applications · file_and_use · DEMO-SYNTHETIC-WA-01 (synthetic)</title></rect><text x="13" y="74" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">WA</text></g><g><rect class="st a1" x="29" y="58" width="26" height="26" rx="4"><title>MT · 3 applications · file_and_use · DEMO-SYNTHETIC-MT-01 (synthetic)</title></rect><text x="42" y="74" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">MT</text></g><g><rect class="st a1" x="58" y="58" width="26" height="26" rx="4"><title>ND · 2 applications · file_and_use · DEMO-SYNTHETIC-ND-01 (synthetic)</title></rect><text x="71" y="74" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">ND</text></g><g><rect class="st a2" x="87" y="58" width="26" height="26" rx="4"><title>MN · 5 applications · file_and_use · DEMO-SYNTHETIC-MN-01 (synthetic)</title></rect><text x="100" y="74" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">MN</text></g><g><rect class="st a1" x="203" y="58" width="26" height="26" rx="4"><title>WI · 2 applications · file_and_use · DEMO-SYNTHETIC-WI-01 (synthetic)</title></rect><text x="216" y="74" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">WI</text></g><g><rect class="st a2" x="232" y="58" width="26" height="26" rx="4"><title>MI · 7 applications · file_and_use · DEMO-SYNTHETIC-MI-01 (synthetic)</title></rect><text x="245" y="74" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">MI</text></g><g><rect class="st a3" x="261" y="58" width="26" height="26" rx="4"><title>NY · 9 applications · prior_approval · DEMO-SYNTHETIC-NY-01 (synthetic)</title></rect><text x="274" y="74" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">NY</text></g><g><rect class="st a2" x="290" y="58" width="26" height="26" rx="4"><title>MA · 5 applications · prior_approval · DEMO-SYNTHETIC-MA-01 (synthetic)</title></rect><text x="303" y="74" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">MA</text></g><g><rect class="st a1" x="0" y="87" width="26" height="26" rx="4"><title>OR · 2 applications · file_and_use · DEMO-SYNTHETIC-OR-01 (synthetic)</title></rect><text x="13" y="103" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">OR</text></g><g><rect class="st" x="29" y="87" width="26" height="26" rx="4"><title>ID · 0 applications · file_and_use · DEMO-SYNTHETIC-ID-01 (synthetic)</title></rect><text x="42" y="103" text-anchor="middle" font-size="8" fill="#4a5766" font-family="JetBrains Mono">ID</text></g><g><rect class="st a1" x="58" y="87" width="26" height="26" rx="4"><title>SD · 4 applications · file_and_use · DEMO-SYNTHETIC-SD-01 (synthetic)</title></rect><text x="71" y="103" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">SD</text></g><g><rect class="st a1" x="87" y="87" width="26" height="26" rx="4"><title>IA · 2 applications · file_and_use · DEMO-SYNTHETIC-IA-01 (synthetic)</title></rect><text x="100" y="103" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">IA</text></g><g><rect class="st a1" x="116" y="87" width="26" height="26" rx="4"><title>IL · 4 applications · file_and_use · DEMO-SYNTHETIC-IL-01 (synthetic)</title></rect><text x="129" y="103" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">IL</text></g><g><rect class="st a1" x="145" y="87" width="26" height="26" rx="4"><title>IN · 3 applications · file_and_use · DEMO-SYNTHETIC-IN-01 (synthetic)</title></rect><text x="158" y="103" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">IN</text></g><g><rect class="st a1" x="174" y="87" width="26" height="26" rx="4"><title>OH · 1 application · file_and_use · DEMO-SYNTHETIC-OH-01 (synthetic)</title></rect><text x="187" y="103" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">OH</text></g><g><rect class="st a1" x="203" y="87" width="26" height="26" rx="4"><title>PA · 1 application · file_and_use · DEMO-SYNTHETIC-PA-01 (synthetic)</title></rect><text x="216" y="103" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">PA</text></g><g><rect class="st a1" x="232" y="87" width="26" height="26" rx="4"><title>NJ · 4 applications · file_and_use · DEMO-SYNTHETIC-NJ-01 (synthetic)</title></rect><text x="245" y="103" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">NJ</text></g><g><rect class="st a2" x="261" y="87" width="26" height="26" rx="4"><title>CT · 6 applications · prior_approval · TBD-ILLUSTRATIVE (synthetic)</title></rect><text x="274" y="103" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">CT</text></g><g><rect class="st" x="290" y="87" width="26" height="26" rx="4"><title>RI · 0 applications · file_and_use · DEMO-SYNTHETIC-RI-01 (synthetic)</title></rect><text x="303" y="103" text-anchor="middle" font-size="8" fill="#4a5766" font-family="JetBrains Mono">RI</text></g><g><rect class="st a1" x="0" y="116" width="26" height="26" rx="4"><title>NV · 3 applications · file_and_use · DEMO-SYNTHETIC-NV-01 (synthetic)</title></rect><text x="13" y="132" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">NV</text></g><g><rect class="st a1" x="29" y="116" width="26" height="26" rx="4"><title>WY · 3 applications · file_and_use · DEMO-SYNTHETIC-WY-01 (synthetic)</title></rect><text x="42" y="132" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">WY</text></g><g><rect class="st a2" x="58" y="116" width="26" height="26" rx="4"><title>NE · 7 applications · file_and_use · DEMO-SYNTHETIC-NE-01 (synthetic)</title></rect><text x="71" y="132" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">NE</text></g><g><rect class="st a1" x="87" y="116" width="26" height="26" rx="4"><title>MO · 2 applications · file_and_use · DEMO-SYNTHETIC-MO-01 (synthetic)</title></rect><text x="100" y="132" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">MO</text></g><g><rect class="st a1" x="116" y="116" width="26" height="26" rx="4"><title>KY · 3 applications · file_and_use · DEMO-SYNTHETIC-KY-01 (synthetic)</title></rect><text x="129" y="132" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">KY</text></g><g><rect class="st a1" x="145" y="116" width="26" height="26" rx="4"><title>WV · 3 applications · file_and_use · DEMO-SYNTHETIC-WV-01 (synthetic)</title></rect><text x="158" y="132" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">WV</text></g><g><rect class="st a1" x="174" y="116" width="26" height="26" rx="4"><title>VA · 3 applications · file_and_use · DEMO-SYNTHETIC-VA-01 (synthetic)</title></rect><text x="187" y="132" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">VA</text></g><g><rect class="st a1" x="203" y="116" width="26" height="26" rx="4"><title>MD · 3 applications · file_and_use · DEMO-SYNTHETIC-MD-01 (synthetic)</title></rect><text x="216" y="132" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">MD</text></g><g><rect class="st a1" x="232" y="116" width="26" height="26" rx="4"><title>DE · 1 application · file_and_use · DEMO-SYNTHETIC-DE-01 (synthetic)</title></rect><text x="245" y="132" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">DE</text></g><g><rect class="st a3" x="0" y="145" width="26" height="26" rx="4"><title>CA · 13 applications · prior_approval · DEMO-SYNTHETIC-CA-01 (synthetic)</title></rect><text x="13" y="161" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">CA</text></g><g><rect class="st a1" x="29" y="145" width="26" height="26" rx="4"><title>UT · 3 applications · file_and_use · DEMO-SYNTHETIC-UT-01 (synthetic)</title></rect><text x="42" y="161" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">UT</text></g><g><rect class="st a2" x="58" y="145" width="26" height="26" rx="4"><title>CO · 7 applications · file_and_use · DEMO-SYNTHETIC-CO-01 (synthetic)</title></rect><text x="71" y="161" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">CO</text></g><g><rect class="st a1" x="87" y="145" width="26" height="26" rx="4"><title>KS · 3 applications · file_and_use · DEMO-SYNTHETIC-KS-01 (synthetic)</title></rect><text x="100" y="161" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">KS</text></g><g><rect class="st a1" x="116" y="145" width="26" height="26" rx="4"><title>TN · 3 applications · file_and_use · DEMO-SYNTHETIC-TN-01 (synthetic)</title></rect><text x="129" y="161" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">TN</text></g><g><rect class="st a1" x="145" y="145" width="26" height="26" rx="4"><title>NC · 1 application · file_and_use · DEMO-SYNTHETIC-NC-01 (synthetic)</title></rect><text x="158" y="161" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">NC</text></g><g><rect class="st a1" x="174" y="145" width="26" height="26" rx="4"><title>SC · 2 applications · file_and_use · DEMO-SYNTHETIC-SC-01 (synthetic)</title></rect><text x="187" y="161" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">SC</text></g><g><rect class="st" x="203" y="145" width="26" height="26" rx="4"><title>DC · not in program</title></rect><text x="216" y="161" text-anchor="middle" font-size="8" fill="#4a5766" font-family="JetBrains Mono">DC</text></g><g><rect class="st a1" x="0" y="174" width="26" height="26" rx="4"><title>AZ · 1 application · file_and_use · DEMO-SYNTHETIC-AZ-01 (synthetic)</title></rect><text x="13" y="190" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">AZ</text></g><g><rect class="st a1" x="29" y="174" width="26" height="26" rx="4"><title>NM · 2 applications · file_and_use · DEMO-SYNTHETIC-NM-01 (synthetic)</title></rect><text x="42" y="190" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">NM</text></g><g><rect class="st a1" x="58" y="174" width="26" height="26" rx="4"><title>OK · 1 application · file_and_use · DEMO-SYNTHETIC-OK-01 (synthetic)</title></rect><text x="71" y="190" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">OK</text></g><g><rect class="st a1" x="87" y="174" width="26" height="26" rx="4"><title>AR · 3 applications · file_and_use · DEMO-SYNTHETIC-AR-01 (synthetic)</title></rect><text x="100" y="190" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">AR</text></g><g><rect class="st a1" x="116" y="174" width="26" height="26" rx="4"><title>MS · 3 applications · file_and_use · DEMO-SYNTHETIC-MS-01 (synthetic)</title></rect><text x="129" y="190" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">MS</text></g><g><rect class="st a1" x="145" y="174" width="26" height="26" rx="4"><title>AL · 3 applications · file_and_use · DEMO-SYNTHETIC-AL-01 (synthetic)</title></rect><text x="158" y="190" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">AL</text></g><g><rect class="st a1" x="174" y="174" width="26" height="26" rx="4"><title>GA · 3 applications · file_and_use · DEMO-SYNTHETIC-GA-01 (synthetic)</title></rect><text x="187" y="190" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">GA</text></g><g><rect class="st a3" x="58" y="203" width="26" height="26" rx="4"><title>TX · 11 applications · file_and_use · DEMO-SYNTHETIC-TX-01 (synthetic)</title></rect><text x="71" y="219" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">TX</text></g><g><rect class="st a1" x="87" y="203" width="26" height="26" rx="4"><title>LA · 2 applications · file_and_use · DEMO-SYNTHETIC-LA-01 (synthetic)</title></rect><text x="100" y="219" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">LA</text></g><g><rect class="st a2" x="174" y="203" width="26" height="26" rx="4"><title>FL · 8 applications · flex_rating_band · DEMO-SYNTHETIC-FL-01 (synthetic)</title></rect><text x="187" y="219" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">FL</text></g><g><rect class="st a1" x="0" y="232" width="26" height="26" rx="4"><title>AK · 3 applications · file_and_use · DEMO-SYNTHETIC-AK-01 (synthetic)</title></rect><text x="13" y="248" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">AK</text></g><g><rect class="st a1" x="116" y="232" width="26" height="26" rx="4"><title>HI · 3 applications · prior_approval · DEMO-SYNTHETIC-HI-01 (synthetic)</title></rect><text x="129" y="248" text-anchor="middle" font-size="8" fill="#f2ede3" font-family="JetBrains Mono">HI</text></g></svg></div>
+      <div class="map-cap">Applications by garaging state · synthetic demo distribution across 50 states</div>
+    </div>
+
+    <div class="panel">
+      <h3>Recent Activity</h3>
+      <div class="feed" id="feed"><div class="fitem"><span class="fdot senior"></span>
+    <div><div class="ftext"><span class="ff">Referred to senior underwriter</span> <span class="fs">— undisclosed household driver, CT</span></div><div class="ftime">03:33:17 PM</div></div></div><div class="fitem"><span class="fdot decline"></span>
+    <div><div class="ftext"><span class="ff">Declined</span> <span class="fs">— out of licensed territory, WY</span></div><div class="ftime">03:33:14 PM</div></div></div><div class="fitem"><span class="fdot review"></span>
+    <div><div class="ftext"><span class="ff">Referred to underwriter</span> <span class="fs">— VIN decode mismatch, NM</span></div><div class="ftime">03:33:10 PM</div></div></div><div class="fitem"><span class="fdot proceed"></span>
+    <div><div class="ftext"><span class="ff">Quote issued</span> <span class="fs">— Lexus LC 500, WI · $25K</span></div><div class="ftime">03:33:05 PM</div></div></div><div class="fitem"><span class="fdot proceed"></span>
+    <div><div class="ftext"><span class="ff">Quote issued</span> <span class="fs">— Lamborghini Huracán, IA · $60K</span></div><div class="ftime">03:33:02 PM</div></div></div><div class="fitem"><span class="fdot decline"></span>
+    <div><div class="ftext"><span class="ff">Declined</span> <span class="fs">— sanctions screen — compliance hold, NE</span></div><div class="ftime">03:32:59 PM</div></div></div><div class="fitem"><span class="fdot review"></span>
+    <div><div class="ftext"><span class="ff">Referred to underwriter</span> <span class="fs">— suspected business use, SC</span></div><div class="ftime">03:32:54 PM</div></div></div><div class="fitem"><span class="fdot proceed"></span>
+    <div><div class="ftext"><span class="ff">Quote issued</span> <span class="fs">— Lexus LC 500, PA · $42K</span></div><div class="ftime">03:32:50 PM</div></div></div></div>
+    </div>
+  </section>
+
+  <div class="footnote">
+    <span>IronCliff Vertex Projects · Program operations surface · demo environment</span>
+    <span class="sim-note">Data synthetic · enrichment stages simulated pending integration</span>
+  </div>
+
+</div>
+
+<script>
+// ---------- synthetic demo data ----------
+const FIRST=["Miriam","Trevor","Dale","Priya","Wesley","Renata","Marcus","Yuki","Harold","Sandra","Anthony","Celeste","Rourke","Imogen","Dev","Larisa","Bennett","Odette","Marco","Thea"];
+const LAST=["Ostrander","Bianchi","Kirkwood","Nandakumar","Carmody","Foss","Delaine","Tanaka","Vance","Whitcombe","Reyes","Ashworth","Calloway","Vandermeer","Rao","Petrova","Hollis","Sarraf","Duarte","Lindqvist"];
+const VEH=["Porsche 911 Turbo S","Lamborghini Huracán","Bentley Continental GT","Ferrari 275 GTB/4","McLaren 720S","Rolls-Royce Ghost","Aston Martin DB11","Mercedes-AMG GT","Range Rover Autobiography","Nissan GT-R Nismo","Ferrari Roma","Bugatti Chiron","Porsche Taycan","Maserati MC20","Lexus LC 500"];
+// Real 50-state registry pulled from production luxauto_demo (state_rating_table_versions).
+// Every row is synthetic: DEMO-SYNTHETIC-<ST>-01, except CT which is the ADR 0034
+// illustrative onboarding seed (TBD-ILLUSTRATIVE). No DC row exists in the registry.
+// NOTE: application COUNTS below are still mock-driven for this preview; when the dashboard
+// is repointed to /api/snapshot, both the state universe AND the counts come from real data.
+const STATE_REGISTRY={AK:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-AK-01"},AL:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-AL-01"},AR:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-AR-01"},AZ:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-AZ-01"},CA:{fs:"prior_approval",serff:"DEMO-SYNTHETIC-CA-01"},CO:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-CO-01"},CT:{fs:"prior_approval",serff:"TBD-ILLUSTRATIVE"},DE:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-DE-01"},FL:{fs:"flex_rating_band",serff:"DEMO-SYNTHETIC-FL-01"},GA:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-GA-01"},HI:{fs:"prior_approval",serff:"DEMO-SYNTHETIC-HI-01"},IA:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-IA-01"},ID:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-ID-01"},IL:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-IL-01"},IN:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-IN-01"},KS:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-KS-01"},KY:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-KY-01"},LA:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-LA-01"},MA:{fs:"prior_approval",serff:"DEMO-SYNTHETIC-MA-01"},MD:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-MD-01"},ME:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-ME-01"},MI:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-MI-01"},MN:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-MN-01"},MO:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-MO-01"},MS:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-MS-01"},MT:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-MT-01"},NC:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-NC-01"},ND:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-ND-01"},NE:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-NE-01"},NH:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-NH-01"},NJ:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-NJ-01"},NM:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-NM-01"},NV:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-NV-01"},NY:{fs:"prior_approval",serff:"DEMO-SYNTHETIC-NY-01"},OH:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-OH-01"},OK:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-OK-01"},OR:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-OR-01"},PA:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-PA-01"},RI:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-RI-01"},SC:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-SC-01"},SD:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-SD-01"},TN:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-TN-01"},TX:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-TX-01"},UT:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-UT-01"},VA:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-VA-01"},VT:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-VT-01"},WA:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-WA-01"},WI:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-WI-01"},WV:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-WV-01"},WY:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-WY-01"}};
+const STATES=Object.keys(STATE_REGISTRY);
+const DISPO=[
+  {k:"proceed",tag:"Auto-proceed",cls:"proceed",w:52},
+  {k:"review",tag:"Manual review",cls:"review",w:26},
+  {k:"senior",tag:"Senior review",cls:"senior",w:14},
+  {k:"decline",tag:"Decline",cls:"decline",w:8},
+];
+const REFER_REASONS={
+  review:["undisclosed modification impact","suspected business use","VIN decode mismatch","stale agreed-value basis"],
+  senior:["undisclosed household driver","DUI within lookback","undisclosed title brand","authority limit exceeded"],
+  decline:["out of licensed territory","sanctions screen — compliance hold"]
+};
+const rand=a=>a[Math.floor(Math.random()*a.length)];
+function weightedDispo(){let r=Math.random()*100,c=0;for(const d of DISPO){c+=d.w;if(r<=c)return d;}return DISPO[0];}
+function money(n){return "$"+Math.round(n).toLocaleString();}
+function moneyK(n){return n>=1e6?"$"+(n/1e6).toFixed(1)+"M":"$"+Math.round(n/1e3)+"K";}
+
+// ---------- state ----------
+let totals={apps:14,uw:3,quotes:9,bound:6,tiv:11240000,premSum:214000,appsHr:0};
+let mix={proceed:38,review:14,senior:6,decline:4};
+// Mock activity spread: most states get light activity, the onboarded states run heavier,
+// so the national footprint reads populated. (Replaced by real by_state at repoint.)
+let stateCounts={}; STATES.forEach(s=>stateCounts[s]=Math.floor(Math.random()*4));
+stateCounts["CA"]=11;stateCounts["NY"]=9;stateCounts["TX"]=8;stateCounts["FL"]=7;stateCounts["CT"]=5;
+stateCounts["MI"]=6;stateCounts["MA"]=5;stateCounts["CO"]=4;stateCounts["HI"]=3;
+let feed=[];
+
+// ---------- pipeline motion ----------
+const lanes=["intake","enrich","underwrite","disposition","quote"];
+function makeApp(){
+  const d=weightedDispo();
+  return {
+    id:Math.random().toString(36).slice(2,8),
+    name:rand(FIRST)+" "+rand(LAST),
+    veh:rand(VEH),
+    state:rand(STATES),
+    dispo:d,
+    stage:0,
+    el:null
+  };
+}
+function cardHTML(app,stageIdx){
+  let inner=`<div class="name">${app.name}</div><div class="veh">${app.veh}</div>
+    <div class="foot"><span class="state">${app.state}</span>`;
+  if(stageIdx>=3){ inner+=`<span class="tag ${app.dispo.cls}">${app.dispo.tag}</span>`; }
+  else { inner+=`<span></span>`; }
+  inner+=`</div>`;
+  return inner;
+}
+function enrichHTML(){
+  const rows=[["VIN decode","done"],["Title history","done"],["Household check","run"],["Sanctions/OFAC","run"]];
+  return `<div class="enrich-checks">`+rows.map(([n,s])=>
+    `<div class="echk ${s==='done'?'done':''}"><span class="box">${s==='done'?'✓':'…'}</span>${n}</div>`).join("")+`</div>`;
+}
+function placeCard(app){
+  const lane=document.getElementById("lane-"+lanes[app.stage]);
+  const div=document.createElement("div");
+  div.className="appcard d-"+app.dispo.k;
+  if(app.stage===1){ div.innerHTML=cardHTML(app,app.stage)+enrichHTML(); }
+  else { div.innerHTML=cardHTML(app,app.stage); }
+  lane.prepend(div);
+  app.el=div;
+  // cap lane length
+  while(lane.children.length>3) lane.removeChild(lane.lastChild);
+}
+function advance(app){
+  if(app.el&&app.el.parentNode) app.el.parentNode.removeChild(app.el);
+  app.stage++;
+  if(app.stage>=lanes.length){
+    finalize(app);
+    return;
+  }
+  placeCard(app);
+  const dwell=app.stage===1?1800:1400+Math.random()*900;
+  setTimeout(()=>advance(app),dwell);
+}
+function finalize(app){
+  // update totals + mix + map + feed when an app completes the flow
+  totals.apps++;totals.appsHr++;
+  mix[app.dispo.k]++;
+  stateCounts[app.state]=(stateCounts[app.state]||0)+1;
+  if(app.dispo.k==="proceed"){
+    totals.quotes++;
+    if(Math.random()<0.7){totals.bound++;const p=18000+Math.random()*40000;totals.premSum+=p;totals.tiv+=120000+Math.random()*400000;}
+  } else if(app.dispo.k==="review"||app.dispo.k==="senior"){
+    totals.uw++;
+  }
+  pushFeed(app);
+  render();
+}
+function pushFeed(app){
+  let text,cls=app.dispo.k;
+  if(app.dispo.k==="proceed"){
+    text=`<span class="ff">Quote issued</span> <span class="fs">— ${app.veh}, ${app.state} · ${moneyK(20000+Math.random()*45000)}</span>`;
+  } else if(app.dispo.k==="decline"){
+    text=`<span class="ff">Declined</span> <span class="fs">— ${rand(REFER_REASONS.decline)}, ${app.state}</span>`;
+  } else {
+    const r=app.dispo.k==="senior"?rand(REFER_REASONS.senior):rand(REFER_REASONS.review);
+    text=`<span class="ff">Referred to ${app.dispo.k==="senior"?"senior ":""}underwriter</span> <span class="fs">— ${r}, ${app.state}</span>`;
+  }
+  feed.unshift({text,cls,t:new Date()});
+  if(feed.length>8)feed.pop();
+}
+
+// ---------- rendering ----------
+function render(){
+  document.getElementById("t-apps").textContent=totals.apps;
+  document.getElementById("t-apps-d").textContent="+"+totals.appsHr;
+  document.getElementById("t-uw").textContent=totals.uw;
+  document.getElementById("t-quotes").textContent=totals.quotes;
+  document.getElementById("t-bound").textContent=totals.bound;
+  document.getElementById("t-bind").textContent=Math.round(totals.bound/Math.max(totals.quotes,1)*100)+"%";
+  document.getElementById("t-tiv").textContent=moneyK(totals.tiv);
+  document.getElementById("t-avg").textContent=money(totals.premSum/Math.max(totals.bound,1));
+  // mix
+  const mt=mix.proceed+mix.review+mix.senior+mix.decline;
+  document.getElementById("m-proceed").textContent=mix.proceed;
+  document.getElementById("m-review").textContent=mix.review;
+  document.getElementById("m-senior").textContent=mix.senior;
+  document.getElementById("m-decline").textContent=mix.decline;
+  setArc("arc-proceed",mix.proceed/mt*100,0);
+  setArc("arc-review",mix.review/mt*100,mix.proceed/mt*100);
+  setArc("arc-senior",mix.senior/mt*100,(mix.proceed+mix.review)/mt*100);
+  setArc("arc-decline",mix.decline/mt*100,(mix.proceed+mix.review+mix.senior)/mt*100);
+  // feed
+  const f=document.getElementById("feed");
+  f.innerHTML=feed.map(x=>`<div class="fitem"><span class="fdot ${x.cls}"></span>
+    <div><div class="ftext">${x.text}</div><div class="ftime">${x.t.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}</div></div></div>`).join("");
+  renderMap();
+}
+function setArc(id,pct,offsetPct){
+  const el=document.getElementById(id);
+  const gap=1; const len=Math.max(pct-gap,0);
+  el.setAttribute("stroke-dasharray",`${len} ${100-len}`);
+  el.setAttribute("stroke-dashoffset",`${25-offsetPct}`);
+}
+
+// ---------- US map (simplified grid cartogram) ----------
+// A stylized state grid — not geographically exact, reads as "national coverage" for a C-level glance.
+const GRID=[
+["","","","","","","","","","","ME"],
+["","","","","","","","","","VT","NH"],
+["WA","MT","ND","MN","","","","WI","MI","NY","MA"],
+["OR","ID","SD","IA","IL","IN","OH","PA","NJ","CT","RI"],
+["NV","WY","NE","MO","KY","WV","VA","MD","DE","",""],
+["CA","UT","CO","KS","TN","NC","SC","DC","","",""],
+["AZ","NM","OK","AR","MS","AL","GA","","","",""],
+["","","TX","LA","","","FL","","","",""],
+["AK","","","","HI","","","","","",""]
+];
+function renderMap(){
+  const cell=26,gap=3;const cols=11,rows=GRID.length;
+  const w=cols*(cell+gap),h=rows*(cell+gap);
+  let svg=`<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">`;
+  const max=Math.max(...Object.values(stateCounts),1);
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const st=GRID[r][c];if(!st)continue;
+    const cnt=stateCounts[st]||0;
+    const reg=STATE_REGISTRY[st];
+    let cls="st";if(cnt>0){const ratio=cnt/max;cls+=ratio>0.66?" a3":ratio>0.33?" a2":" a1";}
+    const x=c*(cell+gap),y=r*(cell+gap);
+    // Honest tooltip: real filing status + synthetic SERFF marker; states not in the
+    // registry (e.g. DC) are labelled as outside the program rather than looking like a gap.
+    const tip=reg?`${st} · ${cnt} application${cnt===1?'':'s'} · ${reg.fs} · ${reg.serff} (synthetic)`:`${st} · not in program`;
+    svg+=`<g><rect class="${cls}" x="${x}" y="${y}" width="${cell}" height="${cell}" rx="4"><title>${tip}</title></rect>`;
+    svg+=`<text x="${x+cell/2}" y="${y+cell/2+3}" text-anchor="middle" font-size="8" fill="${cnt>0?'#f2ede3':'#4a5766'}" font-family="JetBrains Mono">${st}</text></g>`;
+  }
+  svg+=`</svg>`;
+  document.getElementById("mapbox").innerHTML=svg;
+}
+
+// ---------- clock + ago ----------
+function tick(){
+  const n=new Date();
+  document.getElementById("clock").textContent=n.toLocaleString([], {month:'short',day:'numeric'})+" · "+n.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+let agoS=2;
+setInterval(()=>{agoS=1;document.getElementById("ago").textContent=agoS+"s";},4000);
+setInterval(()=>{agoS++;if(agoS<60)document.getElementById("ago").textContent=agoS+"s";},1000);
+
+// ---------- boot ----------
+function spawn(){
+  const app=makeApp();
+  placeCard(app);
+  setTimeout(()=>advance(app),1300);
+}
+tick();setInterval(tick,1000);
+// seed initial feed + map so it doesn't start empty
+for(let i=0;i<5;i++){const a=makeApp();a.state=rand(STATES);pushFeed(a);}
+render();
+// stagger initial spawns, then steady cadence
+spawn();
+setTimeout(spawn,1600);
+setTimeout(spawn,3400);
+setInterval(spawn,3800);
+setInterval(()=>{totals.appsHr=Math.max(0,totals.appsHr-1);},20000); // decay "last hour" gently
+</script>
+
+
+</body></html>
