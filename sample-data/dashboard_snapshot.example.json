@@ -1,0 +1,389 @@
+{
+  "generated_at": "2026-08-25T18:53:06.402175+00:00",
+  "tiles": {
+    "applications_total": 5,
+    "in_underwriting": 3,
+    "quotes_issued": 0,
+    "bound": 0,
+    "bind_ratio": 0.0,
+    "total_insured_value": 4583000.0,
+    "tiv_basis": "submitted",
+    "avg_premium": null
+  },
+  "disposition_mix": {
+    "AUTO_PROCEED": 1,
+    "AUTO_PROCEED_WITH_FLAG": 0,
+    "INFORMATION_REQUEST": 0,
+    "MANUAL_REVIEW_REQUIRED": 1,
+    "MANUAL_REVIEW_SENIOR": 2,
+    "DECLINE_RECOMMENDED": 0,
+    "HARD_DECLINE_COMPLIANCE": 1
+  },
+  "by_state": [
+    {
+      "state": "TX",
+      "applications": 2
+    },
+    {
+      "state": "CA",
+      "applications": 1
+    },
+    {
+      "state": "FL",
+      "applications": 1
+    },
+    {
+      "state": "NY",
+      "applications": 1
+    }
+  ],
+  "states": [
+    {
+      "state": "AK",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-AK-01",
+      "synthetic": true
+    },
+    {
+      "state": "AL",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-AL-01",
+      "synthetic": true
+    },
+    {
+      "state": "AR",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-AR-01",
+      "synthetic": true
+    },
+    {
+      "state": "AZ",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-AZ-01",
+      "synthetic": true
+    },
+    {
+      "state": "CA",
+      "filing_status": "prior_approval",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-CA-01",
+      "synthetic": true
+    },
+    {
+      "state": "CO",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-CO-01",
+      "synthetic": true
+    },
+    {
+      "state": "CT",
+      "filing_status": "prior_approval",
+      "serff_filing_tracking_number": "TBD-ILLUSTRATIVE",
+      "synthetic": true
+    },
+    {
+      "state": "DE",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-DE-01",
+      "synthetic": true
+    },
+    {
+      "state": "FL",
+      "filing_status": "flex_rating_band",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-FL-01",
+      "synthetic": true
+    },
+    {
+      "state": "GA",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-GA-01",
+      "synthetic": true
+    },
+    {
+      "state": "HI",
+      "filing_status": "prior_approval",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-HI-01",
+      "synthetic": true
+    },
+    {
+      "state": "IA",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-IA-01",
+      "synthetic": true
+    },
+    {
+      "state": "ID",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-ID-01",
+      "synthetic": true
+    },
+    {
+      "state": "IL",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-IL-01",
+      "synthetic": true
+    },
+    {
+      "state": "IN",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-IN-01",
+      "synthetic": true
+    },
+    {
+      "state": "KS",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-KS-01",
+      "synthetic": true
+    },
+    {
+      "state": "KY",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-KY-01",
+      "synthetic": true
+    },
+    {
+      "state": "LA",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-LA-01",
+      "synthetic": true
+    },
+    {
+      "state": "MA",
+      "filing_status": "prior_approval",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-MA-01",
+      "synthetic": true
+    },
+    {
+      "state": "MD",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-MD-01",
+      "synthetic": true
+    },
+    {
+      "state": "ME",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-ME-01",
+      "synthetic": true
+    },
+    {
+      "state": "MI",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-MI-01",
+      "synthetic": true
+    },
+    {
+      "state": "MN",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-MN-01",
+      "synthetic": true
+    },
+    {
+      "state": "MO",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-MO-01",
+      "synthetic": true
+    },
+    {
+      "state": "MS",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-MS-01",
+      "synthetic": true
+    },
+    {
+      "state": "MT",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-MT-01",
+      "synthetic": true
+    },
+    {
+      "state": "NC",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-NC-01",
+      "synthetic": true
+    },
+    {
+      "state": "ND",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-ND-01",
+      "synthetic": true
+    },
+    {
+      "state": "NE",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-NE-01",
+      "synthetic": true
+    },
+    {
+      "state": "NH",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-NH-01",
+      "synthetic": true
+    },
+    {
+      "state": "NJ",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-NJ-01",
+      "synthetic": true
+    },
+    {
+      "state": "NM",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-NM-01",
+      "synthetic": true
+    },
+    {
+      "state": "NV",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-NV-01",
+      "synthetic": true
+    },
+    {
+      "state": "NY",
+      "filing_status": "prior_approval",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-NY-01",
+      "synthetic": true
+    },
+    {
+      "state": "OH",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-OH-01",
+      "synthetic": true
+    },
+    {
+      "state": "OK",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-OK-01",
+      "synthetic": true
+    },
+    {
+      "state": "OR",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-OR-01",
+      "synthetic": true
+    },
+    {
+      "state": "PA",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-PA-01",
+      "synthetic": true
+    },
+    {
+      "state": "RI",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-RI-01",
+      "synthetic": true
+    },
+    {
+      "state": "SC",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-SC-01",
+      "synthetic": true
+    },
+    {
+      "state": "SD",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-SD-01",
+      "synthetic": true
+    },
+    {
+      "state": "TN",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-TN-01",
+      "synthetic": true
+    },
+    {
+      "state": "TX",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-TX-01",
+      "synthetic": true
+    },
+    {
+      "state": "UT",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-UT-01",
+      "synthetic": true
+    },
+    {
+      "state": "VA",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-VA-01",
+      "synthetic": true
+    },
+    {
+      "state": "VT",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-VT-01",
+      "synthetic": true
+    },
+    {
+      "state": "WA",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-WA-01",
+      "synthetic": true
+    },
+    {
+      "state": "WI",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-WI-01",
+      "synthetic": true
+    },
+    {
+      "state": "WV",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-WV-01",
+      "synthetic": true
+    },
+    {
+      "state": "WY",
+      "filing_status": "file_and_use",
+      "serff_filing_tracking_number": "DEMO-SYNTHETIC-WY-01",
+      "synthetic": true
+    }
+  ],
+  "recent_activity": [
+    {
+      "at": "2026-08-24T16:59:07.171357+00:00",
+      "application_id": "1e3d24f7-dee7-453a-937f-406a06b6346d",
+      "garaging_state": "TX",
+      "action": "HARD_DECLINE_COMPLIANCE",
+      "reason_code": "PC02_SANCTIONS_HIT",
+      "human_label": "Declined \u2014 compliance hold"
+    },
+    {
+      "at": "2026-08-24T01:54:42.342696+00:00",
+      "application_id": "2ff69958-f59d-401a-a8be-ca1f58e4f00a",
+      "garaging_state": "CA",
+      "action": "MANUAL_REVIEW_SENIOR",
+      "reason_code": "CP02_AUTHORITY_LIMIT_EXCEEDED",
+      "human_label": "Referred to senior underwriter \u2014 CP02_AUTHORITY_LIMIT_EXCEEDED"
+    },
+    {
+      "at": "2026-08-24T01:54:42.335112+00:00",
+      "application_id": "7d64457c-edfe-4842-883d-bf575e31d324",
+      "garaging_state": "TX",
+      "action": "MANUAL_REVIEW_SENIOR",
+      "reason_code": "DH03_SUSPENDED_OR_REVOKED_LICENSE",
+      "human_label": "Referred to senior underwriter \u2014 DH03_SUSPENDED_OR_REVOKED_LICENSE"
+    },
+    {
+      "at": "2026-08-24T01:54:42.323933+00:00",
+      "application_id": "c3c28553-0d05-49cd-a5b4-5912734e3652",
+      "garaging_state": "FL",
+      "action": "MANUAL_REVIEW_REQUIRED",
+      "reason_code": "AL01_ADVERSE_LOSS_HISTORY",
+      "human_label": "Referred to underwriter \u2014 AL01_ADVERSE_LOSS_HISTORY"
+    },
+    {
+      "at": "2026-08-24T01:54:42.294728+00:00",
+      "application_id": "f7708da0-08b5-462a-bd19-12bdf40281b2",
+      "garaging_state": "NY",
+      "action": "AUTO_PROCEED",
+      "reason_code": null,
+      "human_label": "Auto-proceed \u2014 cleared, no referral"
+    }
+  ],
+  "meta": {
+    "synthetic": true,
+    "enrichment_simulated": true,
+    "source_db": "luxauto_demo"
+  }
+}

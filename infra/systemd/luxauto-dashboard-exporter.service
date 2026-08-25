@@ -1,0 +1,48 @@
+# SKETCH ONLY - NOT INSTALLED, NOT ENABLED.
+#
+# Supervision sketch for the read-only investor-dashboard snapshot exporter.
+# Unlike the other luxauto-* units in this directory, this is a long-lived
+# *service*, not a timer: the exporter is a continuous loop that writes
+# demo-dashboard/snapshot.json every few seconds, so there is nothing for a
+# timer to schedule - systemd's job here is to keep the loop alive and restart
+# it if it dies.
+#
+# It is deliberately left uninstalled. The component is meant to be run and
+# tested by hand first (scripts/export-dashboard-snapshot.sh); enabling this
+# unit is a separate, later decision. To install once that decision is made:
+#
+#   sudo cp infra/systemd/luxauto-dashboard-exporter.service \
+#           /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now luxauto-dashboard-exporter.service
+#
+# Runs as azureuser because that is the identity whose managed identity holds
+# the Key Vault access this job needs (the same identity apply-and-verify-
+# schema.sh relies on) - NOT as odoo (which only has the fs_storage path) and
+# NOT as root.
+
+[Unit]
+Description=luxauto demo investor-dashboard snapshot exporter (read-only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=azureuser
+# WorkingDirectory lets the wrapper resolve scripts/lib/* by relative path.
+WorkingDirectory=/home/azureuser/ai-ins-full-company
+ExecStart=/home/azureuser/ai-ins-full-company/scripts/export-dashboard-snapshot.sh
+# Keep the loop alive across transient faults; the exporter already holds the
+# last good snapshot in place on a per-cycle error, so a restart here is only
+# for a hard crash of the process itself.
+Restart=always
+RestartSec=5
+# The exporter is read-only against the DB and writes exactly one blob key;
+# it needs no write access to the filesystem beyond normal temp.
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
