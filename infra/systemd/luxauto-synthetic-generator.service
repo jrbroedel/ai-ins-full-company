@@ -1,0 +1,50 @@
+# SKETCH ONLY - NOT INSTALLED, NOT ENABLED.
+#
+# Supervision sketch for the autonomous synthetic-application generator (demo
+# only). Like the dashboard exporter, this is a long-lived *service*, not a
+# timer: the generator is a continuous loop that trickles one synthetic
+# application through the real luxauto_demo pipeline every 20-45s, so there is
+# nothing for a timer to schedule - systemd's job here is to keep the loop alive
+# and restart it if it dies.
+#
+# It is deliberately left uninstalled. The component is meant to be run and
+# tested by hand first (scripts/synthetic-generator.sh, and especially the
+# GEN_MAX_APPS=N short-burst mode); enabling this unit is a separate, later
+# decision. To install once that decision is made:
+#
+#   sudo cp infra/systemd/luxauto-synthetic-generator.service \
+#           /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now luxauto-synthetic-generator.service
+#
+# The one destructive path (scripts/synthetic-generator.sh --reset --yes) is
+# NOT what this unit runs - the unit only runs the generation loop. Reset stays
+# a deliberate, manual, confirmed action.
+#
+# Runs as azureuser because that is the identity whose managed identity holds the
+# Key Vault access this job needs (the same identity apply-and-verify-schema.sh
+# and the exporter rely on) - NOT as odoo, and NOT as root.
+
+[Unit]
+Description=luxauto demo synthetic-application generator (writes to luxauto_demo via the real pipeline)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=azureuser
+# WorkingDirectory lets the wrapper resolve scripts/lib/* by relative path and
+# lets the reset path find sample-data/demo/seed_demo_applications.sql.
+WorkingDirectory=/home/azureuser/ai-ins-full-company
+ExecStart=/home/azureuser/ai-ins-full-company/scripts/synthetic-generator.sh
+# Keep the loop alive across transient faults; a single bad application is
+# already caught inside the loop, so a restart here is only for a hard crash of
+# the process itself.
+Restart=always
+RestartSec=5
+# The generator targets luxauto_demo exclusively (guarded in both the wrapper and
+# the Python); it must never be pointed at production.
+Environment=PGDATABASE=luxauto_demo
+
+[Install]
+WantedBy=multi-user.target
