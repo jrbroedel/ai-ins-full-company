@@ -1,6 +1,6 @@
 # ADR 0041 — Investor Dashboard: Snapshot-to-Blob + Entra-Gated Static Web App
 
-**Status:** Accepted (deployed; access-gating pending operator portal steps)
+**Status:** Accepted (deployed and access-gated; live-motion generator + dashboard repoint pending)
 **Date:** 2026-08-26
 **Branch:** demo/investor-preview
 **Supersedes / relates to:** demo/investor-preview build (separate `luxauto_demo` DB), ADR 0039 (commission convention — see "Commission excluded" below)
@@ -111,7 +111,9 @@ in front of investors. A grep of the emitted JSON for
 | Function App managed-identity object id | `b0fce7f1-8419-477c-a157-e1fff0cd4682` |
 | — needs role | Storage Blob Data Reader, scoped to `luxautosa91a2e1` only |
 | Snapshot storage account / container / key | `luxautosa91a2e1` / `demo-dashboard` / `snapshot.json` |
-| Allow-list group (to be created) | `luxauto-dashboard-access` |
+| Allow-list group (created; gating confirmed) | `luxauto-dashboard-access` |
+| Entra app registration — client (application) ID | `fc420fe2-1e12-4811-923c-6948aceb311f` |
+| Entra app registration — object ID | `ab8d9826-a897-441a-9f27-85a37bd7c66d` |
 | Resource group / region | `luxauto-rg` / `eastus2` |
 | Repo commits | `42c6273` (exporter), `1b0be7f` (SWA app) on `demo/investor-preview` |
 | Exporter files | `scripts/lib/`, `scripts/`, `infra/systemd/`, `sample-data/` |
@@ -121,11 +123,16 @@ in front of investors. A grep of the emitted JSON for
 
 ## Status / what remains
 
-- Site is deployed and **correctly denies everyone** until operator portal steps complete
-  (create app registration + secret, wire into SWA, flip assignment-required, create group +
-  assign to app, grant blob-reader role to the Function App identity, invite guest + add
-  members). Full checklist: `dashboard-swa/deploy/OPERATOR-CHECKLIST.md`.
-- Until the blob-reader role is granted, `/api/snapshot` correctly returns 503, not data.
+- Operator portal configuration is COMPLETE (2026-08-26): app registration created,
+  "assignment required" enabled, `luxauto-dashboard-access` group created and assigned to the
+  app, client secret generated and stored in SWA settings only, blob-reader role granted to
+  the Function App identity. Full checklist: `dashboard-swa/deploy/OPERATOR-CHECKLIST.md`.
+- Access gating VERIFIED (deny side): a valid `broedel.net` tenant user NOT in the group is
+  denied at login — confirms tenant membership alone does not grant access. Grant side (a
+  guest added to the group reaching the dashboard) being verified with the first external
+  guest.
+- The blob-reader role is granted; `/api/snapshot` serves snapshot data. (The frontend is not
+  yet wired to it — see repoint below.)
 - The **temporary Contributor grant** on the `luxauto-odoo` managed identity (added for
   provisioning) must be **removed after verification**.
 - The **systemd unit** (`infra/systemd/luxauto-dashboard-exporter.service`) is committed as a
