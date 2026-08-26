@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/staticwebapp.config.json",
+
+  "auth": {
+    "identityProviders": {
+      "customOpenIdConnectProviders": {
+        "entra": {
+          "registration": {
+            "clientIdSettingName": "ENTRA_CLIENT_ID",
+            "clientCredential": {
+              "clientSecretSettingName": "ENTRA_CLIENT_SECRET"
+            },
+            "openIdConnectConfiguration": {
+              "wellKnownOpenIdConfiguration": "https://login.microsoftonline.com/2c7981fb-d0ee-46b6-a5c2-87aaa0a84d0b/v2.0/.well-known/openid-configuration"
+            }
+          },
+          "login": {
+            "nameClaimType": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name",
+            "scopes": ["openid", "profile", "email"]
+          }
+        }
+      }
+    }
+  },
+
+  "routes": [
+    { "route": "/login", "rewrite": "/.auth/login/entra" },
+    { "route": "/logout", "redirect": "/.auth/logout" },
+    { "route": "/.auth/login/github", "statusCode": 404 },
+    { "route": "/.auth/login/aad", "statusCode": 404 },
+    { "route": "/api/control/status", "methods": ["GET"], "allowedRoles": ["authenticated"] },
+    { "route": "/api/control/*", "methods": ["POST"], "allowedRoles": ["authenticated"] },
+    { "route": "/api/*", "allowedRoles": ["authenticated"] },
+    { "route": "/*", "allowedRoles": ["authenticated"] }
+  ],
+
+  "responseOverrides": {
+    "401": { "statusCode": 302, "redirect": "/.auth/login/entra" },
+    "403": { "rewrite": "/403.html" }
+  },
+
+  "globalHeaders": {
+    "Cache-Control": "no-store"
+  }
+}

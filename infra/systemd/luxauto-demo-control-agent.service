@@ -1,0 +1,45 @@
+# SKETCH ONLY - NOT INSTALLED, NOT ENABLED.
+#
+# Supervision sketch for the VM control agent (demo only). Like the generator
+# and the dashboard exporter, this is a long-lived *service*, not a timer: the
+# agent polls the control blobs every few seconds, reflects the operator's
+# intent into the local control file, publishes a status blob, and - only on a
+# NEW reset nonce - runs the existing fenced reprovision path.
+#
+# It is deliberately left uninstalled. Run it by hand first
+# (control-swa/agent/control-agent.sh). Enabling this unit is a separate, later
+# operator decision. To install once that decision is made:
+#
+#   sudo cp infra/systemd/luxauto-demo-control-agent.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now luxauto-demo-control-agent.service
+#
+# PRIVILEGE NOTES:
+#   - Runs as azureuser (the identity whose managed identity holds Key Vault
+#     access AND is granted Storage Blob Data Contributor on the demo-control
+#     container). NOT odoo, NOT root.
+#   - It can trigger a DESTRUCTIVE rebuild of luxauto_demo (nonce-gated, re-
+#     fenced, sanctioned scripts only). It touches NOTHING in production luxauto.
+#   - It never disables an audit trigger and never uses session_replication_role;
+#     the reprovision it calls is the same guarded path the generator ships.
+
+[Unit]
+Description=luxauto demo control agent (bridges the Entra-gated control API to the VM; reflects intent, publishes status, runs the fenced reprovision on request)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=azureuser
+# WorkingDirectory lets the agent resolve scripts/ and sample-data/ by relative
+# path (it invokes scripts/synthetic-generator.sh --reprovision --yes on reset).
+WorkingDirectory=/home/azureuser/ai-ins-full-company
+ExecStart=/home/azureuser/ai-ins-full-company/control-swa/agent/control-agent.sh
+Restart=always
+RestartSec=5
+# The agent (and the reprovision it can trigger) target luxauto_demo exclusively,
+# guarded in the wrapper, the Python, and the reprovision path. Never production.
+Environment=PGDATABASE=luxauto_demo
+
+[Install]
+WantedBy=multi-user.target

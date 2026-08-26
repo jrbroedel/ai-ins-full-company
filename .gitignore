@@ -28,6 +28,12 @@ dashboard-swa/**/node_modules/
 dashboard-swa/deploy/api.zip
 dashboard-swa/**/*.zip
 
+# control-swa build/runtime artifacts
+control-swa/api/node_modules/
+control-swa/**/node_modules/
+control-swa/deploy/api.zip
+control-swa/**/*.zip
+
 # secrets - belt-and-suspenders, nothing secret should ever be committed
 *.env
 .env

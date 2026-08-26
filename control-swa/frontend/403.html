@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>No access — LuxAuto Demo Operator Control</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background:#0f1115; color:#e7e9ee; display:grid; place-items:center; min-height:100vh; margin:0; }
+    .card { max-width:520px; padding:2rem 2.25rem; background:#171a21; border:1px solid #262b36;
+      border-radius:12px; }
+    h1 { margin:0 0 .5rem; font-size:1.3rem; }
+    p { color:#aab1c0; line-height:1.5; }
+    a { color:#7aa2ff; }
+    code { background:#0f1115; padding:.1rem .35rem; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>You don’t have access to the operator control panel</h1>
+    <p>This surface is restricted to the <code>luxauto-control-access</code> allow-list.
+       Signing in with a tenant account is not enough — you must be assigned.</p>
+    <p>If you need access, ask the operator to add you to that group.
+       <a href="/logout">Sign out</a>.</p>
+  </div>
+</body>
+</html>

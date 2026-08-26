@@ -1,0 +1,14 @@
+{
+  "name": "luxauto-control-api",
+  "version": "1.0.0",
+  "description": "Write-capable control API for the luxauto investor-demo operator panel. Holds NO database credential: it only reads/writes control blobs (control-intent/reset-request/status) in a private container. Destruction is executed on the VM by the control agent via the existing fenced reprovision path.",
+  "main": "src/functions/*.js",
+  "scripts": {
+    "start": "func start"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.0",
+    "@azure/identity": "^4.5.0",
+    "@azure/storage-blob": "^12.26.0"
+  }
+}

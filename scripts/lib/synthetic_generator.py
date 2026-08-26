@@ -83,9 +83,24 @@ Usage:
   scripts/synthetic-generator.sh --reset                # non-destructive status report
   scripts/synthetic-generator.sh --reprovision --yes    # destructive full rebuild
 
+LIVE CONTROL (operator control panel)
+-------------------------------------
+The loop reads a small JSON control file at the START of each cycle:
+    { "state": "running"|"paused", "preset": "<name>", "rate_per_min": <number> }
+Five named presets (steady, surge, stress, premium_rising, volume_drying) bias
+the SAME real profile builders + set the rate; premium_rising also scales clean
+appraised values up so NEW quotes read richer. Every change is additive and
+forward-only - it only alters the character/cadence of NEW apps, never touching
+or deleting existing rows. "paused" idles the process (no new apps, stays alive).
+A missing/invalid file falls back to steady/running, so a bare hand-run behaves
+exactly as before. The file is written by the VM control agent (see control-swa/).
+
 Env overrides (all optional):
-  GEN_INTERVAL_SECONDS   override the cadence base (default DEFAULT_INTERVAL_SECONDS)
-  GEN_INTERVAL_JITTER    +/- jitter seconds around the base (default 12)
+  GEN_CONTROL_FILE       path to the live control file (default
+                         /home/azureuser/demo-control/generator-control.json)
+  GEN_INTERVAL_SECONDS   legacy cadence base (superseded by the control file's
+                         rate_per_min when a control file is present)
+  GEN_INTERVAL_JITTER    +/- jitter seconds cap around the paced base (default 12)
   GEN_MAX_APPS           stop after N applications (default 0 = run forever)
   GEN_PERFORMED_BY       decided_by / quoted_by label (default 'synthetic-generator')
 """
@@ -115,6 +130,32 @@ PERFORMED_BY = os.environ.get("GEN_PERFORMED_BY", "synthetic-generator")
 
 EXPECTED_DB = "luxauto_demo"
 PROD_DB = "luxauto"
+
+# --------------------------------------------------------------------------- #
+# LIVE CONTROL FILE (operator control panel, ADR: control-panel build)
+# --------------------------------------------------------------------------- #
+# A small JSON file the loop reads at the START of each cycle so an operator can
+# bend the trend forward without a restart. It is written by the VM control
+# agent (which reflects the Entra-gated control API's intent). A PERSISTENT path
+# (survives reboot), NOT /tmp. Overridable for tests via GEN_CONTROL_FILE.
+#
+# Shape:  { "state": "running"|"paused", "preset": "<name>", "rate_per_min": <n> }
+#
+# Forward-only by construction: a preset/rate change only alters the CHARACTER
+# and CADENCE of NEW applications. The generator's sole write path is
+# "materialize a new app graph -> submit_application() -> maybe create_quote()";
+# it never UPDATEs or DELETEs existing rows. Switching presets therefore never
+# resets or shrinks the book - existing synthetic history stays put.
+CONTROL_FILE = os.environ.get(
+    "GEN_CONTROL_FILE", "/home/azureuser/demo-control/generator-control.json"
+)
+VALID_STATES = ("running", "paused")
+DEFAULT_PRESET = "steady"
+
+# Active knobs the CURRENT cycle applies. Defaults here mean a bare hand-run with
+# no control file behaves exactly as before (steady mix, no premium bias).
+_ACTIVE_WEIGHTS = None      # list[(builder, weight)] or None -> use PROFILE_MIX
+_ACTIVE_PREMIUM_BIAS = 1.0  # multiplier on clean-spec appraised value (>=1.0)
 
 # In-band marker stamped on every generator application (applications.
 # state_specific_extensions). No referral rule reads this column, so it is
@@ -272,6 +313,13 @@ def base_clean_spec(state: str) -> dict:
     """A spec that clears all 13 implemented rules -> AUTO_PROCEED."""
     make, model = random.choice(VEHICLES_LUX)
     value = random.randint(120_000, 900_000)  # >= EL-01 floor, <= CP-02 cap
+    # premium_rising preset only: scale the appraised value UP so NEW quotes read
+    # richer (avg_premium & TIV drift up over subsequent cycles). Clamped below
+    # the CP-02 $2M authority cap so the app stays a genuine AUTO_PROCEED and is
+    # quotable - this raises premiums via new high-value quotes, and NEVER
+    # rewrites an existing quote.
+    if _ACTIVE_PREMIUM_BIAS and _ACTIVE_PREMIUM_BIAS != 1.0:
+        value = min(int(value * _ACTIVE_PREMIUM_BIAS), 1_900_000)
     return {
         "profile": "clean_auto_proceed",
         "expected_action": "AUTO_PROCEED",
@@ -466,6 +514,123 @@ if _only:
             f"Valid: {sorted(NAME_TO_BUILDER)}"
         )
     PROFILE_MIX = [(NAME_TO_BUILDER[p], 1) for p in _only]
+# When the explicit testing lever is set it WINS over any control-file preset:
+# a preset must never silently re-broaden a deliberately narrowed mix.
+_ONLY_LOCKED = bool(_only)
+
+
+# --------------------------------------------------------------------------- #
+# Named presets - the five the control panel switches between. Each is a bias
+# over the SAME real profile builders (by name) plus a rate and an optional
+# premium bias. Nothing here invents a disposition: the referral rules still
+# decide every outcome; a preset only reweights which real inputs are generated
+# and how fast. All five are additive/forward-only.
+#
+#   steady          moderate rate; realistic mix (majority AUTO_PROCEED)
+#   surge           high rate; skew hard to AUTO_PROCEED ("healthy growth")
+#   stress          moderate/high rate; skew to MANUAL_REVIEW_* + DECLINE_*
+#   premium_rising  moderate rate; higher-value clean vehicles + more high-TIV
+#                   -> avg_premium & TIV drift UP via NEW quotes only
+#   volume_drying   LOW rate; same realistic mix, pipeline visibly quiets
+# --------------------------------------------------------------------------- #
+_REALISTIC_MIX = {
+    "clean_auto_proceed": 60, "prior_nonrenewal": 8, "adverse_loss_history": 6,
+    "suspected_business_use": 4, "dui_within_lookback": 5, "suspended_license": 3,
+    "authority_limit_exceeded": 3, "stale_agreed_value": 4,
+    "below_agreed_value_floor": 3, "sanctions_hit": 2,
+}
+PRESETS = {
+    "steady": {
+        "rate_per_min": 2.0, "premium_bias": 1.0, "weights": dict(_REALISTIC_MIX),
+    },
+    "surge": {
+        "rate_per_min": 6.0, "premium_bias": 1.0, "weights": {
+            "clean_auto_proceed": 85, "prior_nonrenewal": 3, "adverse_loss_history": 2,
+            "suspected_business_use": 2, "dui_within_lookback": 2, "suspended_license": 1,
+            "authority_limit_exceeded": 1, "stale_agreed_value": 2,
+            "below_agreed_value_floor": 1, "sanctions_hit": 1,
+        },
+    },
+    "stress": {
+        "rate_per_min": 4.0, "premium_bias": 1.0, "weights": {
+            "clean_auto_proceed": 25, "prior_nonrenewal": 12, "adverse_loss_history": 14,
+            "suspected_business_use": 8, "dui_within_lookback": 12, "suspended_license": 8,
+            "authority_limit_exceeded": 6, "stale_agreed_value": 5,
+            "below_agreed_value_floor": 8, "sanctions_hit": 2,
+        },
+    },
+    "premium_rising": {
+        "rate_per_min": 2.5, "premium_bias": 2.1, "weights": {
+            "clean_auto_proceed": 68, "prior_nonrenewal": 6, "adverse_loss_history": 4,
+            "suspected_business_use": 2, "dui_within_lookback": 4, "suspended_license": 2,
+            "authority_limit_exceeded": 5, "stale_agreed_value": 4,
+            "below_agreed_value_floor": 1, "sanctions_hit": 1,
+        },
+    },
+    "volume_drying": {
+        "rate_per_min": 0.5, "premium_bias": 1.0, "weights": dict(_REALISTIC_MIX),
+    },
+}
+# Clamp bounds for a rate read off the control file (defensive; the API also
+# validates). 0.1/min (one every 10 min) .. 30/min (one every 2s).
+RATE_MIN_PER_MIN = 0.1
+RATE_MAX_PER_MIN = 30.0
+
+
+def _weights_to_mix(weight_map):
+    """Turn a {profile_name: weight} map into the [(builder, weight)] shape
+    pick_profile expects, skipping zero/unknown names."""
+    mix = []
+    for name, w in weight_map.items():
+        if w and w > 0 and name in NAME_TO_BUILDER:
+            mix.append((NAME_TO_BUILDER[name], w))
+    return mix
+
+
+def apply_control(preset_name):
+    """Set the module-global knobs the current cycle uses from a preset name.
+    Unknown preset -> the default. Honors _ONLY_LOCKED (the GEN_ONLY_PROFILES
+    testing lever wins, so a preset never re-broadens a narrowed mix)."""
+    global _ACTIVE_WEIGHTS, _ACTIVE_PREMIUM_BIAS
+    preset = PRESETS.get(preset_name) or PRESETS[DEFAULT_PRESET]
+    _ACTIVE_WEIGHTS = None if _ONLY_LOCKED else _weights_to_mix(preset["weights"])
+    _ACTIVE_PREMIUM_BIAS = 1.0 if _ONLY_LOCKED else float(preset.get("premium_bias", 1.0))
+    return preset
+
+
+def load_control():
+    """Read the live control file at the start of a cycle. Missing or invalid ->
+    a safe default (steady / running), matching the pre-control-file behaviour of
+    a bare hand-run. NEVER raises: a bad control file must not crash the loop or,
+    worse, silently stop generation."""
+    default = {
+        "state": "running",
+        "preset": DEFAULT_PRESET,
+        "rate_per_min": PRESETS[DEFAULT_PRESET]["rate_per_min"],
+    }
+    try:
+        with open(CONTROL_FILE) as f:
+            raw = json.load(f)
+    except FileNotFoundError:
+        return default
+    except Exception as exc:  # unreadable / malformed JSON
+        log.warning("control file %s unreadable (%s); using default", CONTROL_FILE, exc)
+        return default
+    if not isinstance(raw, dict):
+        return default
+
+    state = raw.get("state")
+    if state not in VALID_STATES:
+        state = "running"
+    preset = raw.get("preset")
+    if preset not in PRESETS:
+        preset = DEFAULT_PRESET
+    try:
+        rate = float(raw.get("rate_per_min", PRESETS[preset]["rate_per_min"]))
+    except (TypeError, ValueError):
+        rate = PRESETS[preset]["rate_per_min"]
+    rate = min(max(rate, RATE_MIN_PER_MIN), RATE_MAX_PER_MIN)
+    return {"state": state, "preset": preset, "rate_per_min": rate}
 
 
 # --------------------------------------------------------------------------- #
@@ -502,7 +667,9 @@ def pick_state(states: list) -> str:
 
 
 def pick_profile():
-    builders, weights = zip(*PROFILE_MIX)
+    # Use the active preset's weights when set; otherwise the module default mix.
+    mix = PROFILE_MIX if (_ONLY_LOCKED or not _ACTIVE_WEIGHTS) else _ACTIVE_WEIGHTS
+    builders, weights = zip(*mix)
     return random.choices(builders, weights=weights, k=1)[0]
 
 
@@ -687,15 +854,40 @@ def run_loop() -> int:
     run_id = uuid.uuid4().hex[:8]
     log.info(
         "connected read-write to %s; run_id=%s; %d onboarded states; "
-        "interval=%.0fs(+/-%.0f); flag_disposition=%s; max_apps=%s",
-        EXPECTED_DB, run_id, len(states), INTERVAL_SECONDS, INTERVAL_JITTER,
+        "control_file=%s; flag_disposition=%s; max_apps=%s",
+        EXPECTED_DB, run_id, len(states), CONTROL_FILE,
         "on" if INCLUDE_OUT_OF_TERRITORY_FLAG else "off",
         MAX_APPS or "unbounded",
     )
+    if _ONLY_LOCKED:
+        log.info("GEN_ONLY_PROFILES is set - control-file presets will NOT change "
+                 "the profile mix (the testing lever wins); state/rate still apply.")
 
     made = 0
     seq = 0
+    last_state = None
+    last_preset = None
     while not _STOP:
+        # Read the LIVE control file at the start of every cycle. This is the one
+        # seam that lets an operator bend the trend forward mid-run.
+        ctrl = load_control()
+        apply_control(ctrl["preset"])
+        if ctrl["preset"] != last_preset:
+            log.info("preset -> %s (rate=%.2f/min, premium_bias=%.2f)",
+                     ctrl["preset"], ctrl["rate_per_min"], _ACTIVE_PREMIUM_BIAS)
+            last_preset = ctrl["preset"]
+
+        if ctrl["state"] == "paused":
+            if last_state != "paused":
+                log.info("state -> paused: idling (process stays alive, no NEW apps; "
+                         "existing rows untouched)")
+            last_state = "paused"
+            _interruptible_sleep(2.0)  # stay responsive to un-pause / signals
+            continue
+        if last_state != "running":
+            log.info("state -> running: generating per preset '%s'", ctrl["preset"])
+        last_state = "running"
+
         seq += 1
         try:
             summary = generate_one(conn, states, run_id, seq)
@@ -720,7 +912,11 @@ def run_loop() -> int:
             break
         if _STOP:
             break
-        delay = max(1.0, INTERVAL_SECONDS + random.uniform(-INTERVAL_JITTER, INTERVAL_JITTER))
+        # Pace from the live rate (apps/min -> seconds/app), with light jitter so
+        # the cadence reads organic. Re-read next cycle picks up any change.
+        base = 60.0 / max(ctrl["rate_per_min"], RATE_MIN_PER_MIN)
+        jit = min(INTERVAL_JITTER, base * 0.4)
+        delay = max(1.0, base + random.uniform(-jit, jit))
         _interruptible_sleep(delay)
 
     log.info("exiting; generated %d applications this run", made)

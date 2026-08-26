@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LuxAuto Demo — Operator Control</title>
+  <style>
+    :root {
+      --bg:#0f1115; --panel:#171a21; --panel2:#1d222c; --line:#262b36;
+      --ink:#e7e9ee; --muted:#9aa3b2; --accent:#7aa2ff; --accent2:#5b8def;
+      --ok:#3ecf8e; --warn:#e6b455; --bad:#e5686d; --danger:#c0392b;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; line-height:1.45; }
+    header { display:flex; align-items:baseline; justify-content:space-between;
+      padding:1rem 1.5rem; border-bottom:1px solid var(--line); flex-wrap:wrap; gap:.5rem; }
+    header h1 { font-size:1.15rem; margin:0; }
+    header .sub { color:var(--muted); font-size:.85rem; }
+    header a { color:var(--accent); font-size:.85rem; text-decoration:none; }
+    main { max-width:900px; margin:0 auto; padding:1.25rem 1.5rem 3rem; }
+    .banner { background:#20130f; border:1px solid #4a2c22; color:#f0c9b8;
+      border-radius:10px; padding:.6rem .9rem; font-size:.85rem; margin-bottom:1.25rem; }
+    .banner b { color:#ffb499; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+    @media (max-width:720px){ .grid { grid-template-columns:1fr; } }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:1rem 1.1rem; }
+    .card h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.06em;
+      color:var(--muted); margin:0 0 .8rem; }
+    .statusline { display:flex; justify-content:space-between; padding:.3rem 0; border-bottom:1px dashed var(--line); font-size:.92rem; }
+    .statusline:last-child { border-bottom:0; }
+    .statusline .k { color:var(--muted); }
+    .pill { display:inline-block; padding:.12rem .55rem; border-radius:999px; font-size:.8rem; font-weight:600; }
+    .pill.run { background:rgba(62,207,142,.15); color:var(--ok); }
+    .pill.pause { background:rgba(230,180,85,.15); color:var(--warn); }
+    .pill.bad { background:rgba(229,104,109,.15); color:var(--bad); }
+    .btnrow { display:flex; gap:.6rem; flex-wrap:wrap; margin-top:.4rem; }
+    button { font:inherit; border:1px solid var(--line); background:var(--panel2); color:var(--ink);
+      padding:.5rem .9rem; border-radius:8px; cursor:pointer; }
+    button:hover { border-color:var(--accent2); }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    button.primary { background:var(--accent2); border-color:var(--accent2); color:#fff; }
+    button.danger { background:transparent; border-color:var(--danger); color:#ff8a80; }
+    button.danger:hover { background:var(--danger); color:#fff; }
+    .presets { display:grid; grid-template-columns:1fr 1fr; gap:.55rem; }
+    @media (max-width:720px){ .presets { grid-template-columns:1fr; } }
+    .preset { text-align:left; }
+    .preset.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+    .preset .name { font-weight:600; }
+    .preset .desc { display:block; color:var(--muted); font-size:.78rem; margin-top:.15rem; }
+    .rate { display:flex; gap:.5rem; align-items:center; margin-top:.3rem; }
+    .rate input { width:6rem; font:inherit; padding:.45rem .5rem; border-radius:8px;
+      border:1px solid var(--line); background:var(--bg); color:var(--ink); }
+    .counts { font-variant-numeric:tabular-nums; }
+    .toast { position:fixed; bottom:1rem; left:50%; transform:translateX(-50%);
+      background:var(--panel2); border:1px solid var(--line); border-radius:8px;
+      padding:.6rem 1rem; font-size:.88rem; opacity:0; transition:opacity .2s; pointer-events:none; }
+    .toast.show { opacity:1; }
+    .toast.err { border-color:var(--bad); color:#ffb4b7; }
+    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none;
+      place-items:center; padding:1rem; }
+    .modal-bg.show { display:grid; }
+    .modal { background:var(--panel); border:1px solid var(--danger); border-radius:12px;
+      max-width:460px; padding:1.3rem 1.4rem; }
+    .modal h3 { margin:0 0 .6rem; color:#ff8a80; }
+    .modal p { color:var(--muted); font-size:.9rem; }
+    .modal .confirmrow { display:flex; gap:.6rem; justify-content:flex-end; margin-top:1rem; }
+    .muted { color:var(--muted); }
+    .small { font-size:.8rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>LuxAuto Demo — Operator Control</h1>
+      <div class="sub">Operator-only. Steers the synthetic generator. Never shown to investors.</div>
+    </div>
+    <a href="/logout">Sign out</a>
+  </header>
+
+  <main>
+    <div class="banner">
+      Every action targets <b>luxauto_demo</b> only. Production <b>luxauto</b> is never touched.
+      Reset wipes and rebuilds the demo book; existing demo history is otherwise never deleted —
+      presets only bend the trend of <i>new</i> applications forward.
+    </div>
+
+    <div class="grid">
+      <!-- STATUS -->
+      <section class="card" aria-live="polite">
+        <h2>Status</h2>
+        <div class="statusline"><span class="k">Generator state</span><span id="s-state">—</span></div>
+        <div class="statusline"><span class="k">Active preset</span><span id="s-preset">—</span></div>
+        <div class="statusline"><span class="k">Rate</span><span id="s-rate">—</span></div>
+        <div class="statusline"><span class="k">Generator process</span><span id="s-gen">—</span></div>
+        <div class="statusline"><span class="k">Control agent</span><span id="s-agent">—</span></div>
+        <div class="statusline"><span class="k">demo applications</span><span class="counts" id="s-apps">—</span></div>
+        <div class="statusline"><span class="k">demo quotes</span><span class="counts" id="s-quotes">—</span></div>
+        <div class="statusline"><span class="k">Last reset</span><span id="s-reset">—</span></div>
+        <div class="small muted" id="s-updated" style="margin-top:.6rem">—</div>
+      </section>
+
+      <!-- RUN CONTROL -->
+      <section class="card">
+        <h2>Run control</h2>
+        <p class="muted small">Start/Stop only flip the control file. Stop = the process idles (no
+          new apps) but stays alive; it never deletes anything.</p>
+        <div class="btnrow">
+          <button id="btn-start" class="primary" onclick="act('start')">▶ Start</button>
+          <button id="btn-stop" onclick="act('stop')">⏸ Stop</button>
+        </div>
+
+        <h2 style="margin-top:1.3rem">Rate override</h2>
+        <div class="rate">
+          <input id="rate-input" type="number" min="0.1" max="30" step="0.1" />
+          <span class="muted small">apps / min</span>
+          <button onclick="setRate()">Set</button>
+        </div>
+
+        <h2 style="margin-top:1.3rem">Danger zone</h2>
+        <p class="muted small">Rebuild the demo book from the curated seed (destructive).</p>
+        <div class="btnrow">
+          <button class="danger" onclick="openReset()">⟳ Reset demo (rebuild luxauto_demo)</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- PRESETS -->
+    <section class="card" style="margin-top:1rem">
+      <h2>Scenario preset — switch on the fly (bends the trend over the next cycles)</h2>
+      <div class="presets" id="presets"></div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- RESET double-confirm modal -->
+  <div class="modal-bg" id="modal">
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="mtitle">
+      <h3 id="mtitle">Wipe and rebuild the demo book?</h3>
+      <p>This <b>DROPs and rebuilds luxauto_demo</b> from the curated seed. All synthetic
+         applications generated so far will be gone. <b>Production is never touched.</b>
+         This cannot be undone.</p>
+      <p class="small">Type <b>RESET</b> to confirm.</p>
+      <input id="reset-confirm" type="text" autocomplete="off"
+             style="width:100%;padding:.5rem;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-top:.3rem" />
+      <div class="confirmrow">
+        <button onclick="closeReset()">Cancel</button>
+        <button id="reset-go" class="danger" disabled onclick="doReset()">Yes, rebuild luxauto_demo</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PRESETS = [
+      ["steady", "Moderate rate; realistic mix — majority AUTO_PROCEED, referrals/declines the minority."],
+      ["surge", "High rate; skewed to AUTO_PROCEED. Healthy-growth look."],
+      ["stress", "Moderate/high rate; skewed to MANUAL_REVIEW_* and DECLINE_RECOMMENDED."],
+      ["premium_rising", "Higher-value vehicles → avg premium & TIV drift up via new high-premium quotes."],
+      ["volume_drying", "Low rate; the pipeline visibly quiets. Existing rows stay."],
+    ];
+    let currentPreset = null;
+    let busy = false;
+
+    function el(id){ return document.getElementById(id); }
+    function toast(msg, isErr){
+      const t = el('toast'); t.textContent = msg;
+      t.className = 'toast show' + (isErr ? ' err' : '');
+      clearTimeout(t._h); t._h = setTimeout(()=> t.className='toast', 2600);
+    }
+
+    function renderPresets(){
+      const wrap = el('presets'); wrap.innerHTML = '';
+      for (const [name, desc] of PRESETS){
+        const b = document.createElement('button');
+        b.className = 'preset' + (name===currentPreset ? ' active' : '');
+        b.innerHTML = `<span class="name">${name}</span><span class="desc">${desc}</span>`;
+        b.onclick = () => setPreset(name);
+        wrap.appendChild(b);
+      }
+    }
+
+    async function api(path, method){
+      const res = await fetch(path, { method: method||'GET', headers:{'Accept':'application/json'} });
+      if (res.status === 401){ location.href = '/login'; throw new Error('unauth'); }
+      let body = null; try { body = await res.json(); } catch(_){}
+      if (!res.ok) throw new Error((body && (body.error||body.detail)) || ('HTTP '+res.status));
+      return body;
+    }
+
+    async function refresh(){
+      try {
+        const d = await api('/api/control/status');
+        const intent = d.intent || {};
+        const st = d.status || {};
+        const state = intent.state || st.state || 'unknown';
+        el('s-state').innerHTML = state === 'running'
+          ? '<span class="pill run">running</span>'
+          : state === 'paused' ? '<span class="pill pause">paused</span>'
+          : `<span class="pill bad">${state}</span>`;
+        currentPreset = intent.preset || st.preset || null;
+        el('s-preset').textContent = currentPreset || '—';
+        el('s-rate').textContent = (intent.rate_per_min ?? st.rate_per_min ?? '—') + ' /min';
+        if (document.activeElement !== el('rate-input') && intent.rate_per_min != null)
+          el('rate-input').value = intent.rate_per_min;
+
+        const gen = st.generator || {};
+        el('s-gen').innerHTML = gen.alive === true ? '<span class="pill run">alive</span>'
+          : gen.alive === false ? '<span class="pill pause">not running</span>'
+          : '<span class="muted">unknown</span>';
+        el('s-agent').innerHTML = d.agent_reporting
+          ? '<span class="pill run">reporting</span>'
+          : '<span class="pill bad">not reporting</span>';
+
+        const rc = st.demo_row_count || {};
+        el('s-apps').textContent = rc.error ? '—' : (rc.applications ?? '—');
+        el('s-quotes').textContent = rc.error ? '—' : (rc.quotes ?? '—');
+
+        const lr = st.last_reset || {};
+        el('s-reset').textContent = !lr.status || lr.status==='none' ? 'none this session'
+          : `${lr.status}${lr.in_progress ? ' (in progress)' : ''}${lr.at ? ' · '+new Date(lr.at).toLocaleTimeString() : ''}`;
+
+        el('s-updated').textContent = st.agent_heartbeat
+          ? 'agent heartbeat ' + new Date(st.agent_heartbeat).toLocaleTimeString()
+          : 'no agent status yet';
+        renderPresets();
+      } catch(e){
+        if (e.message !== 'unauth') el('s-updated').textContent = 'status error: ' + e.message;
+      }
+    }
+
+    async function act(which){
+      if (busy) return; busy = true;
+      try { await api('/api/control/'+which, 'POST'); toast(which==='start'?'Started':'Paused'); await refresh(); }
+      catch(e){ toast(e.message, true); }
+      finally { busy = false; }
+    }
+    async function setPreset(name){
+      if (busy) return; busy = true;
+      try {
+        await fetch('/api/control/preset', { method:'POST',
+          headers:{'Content-Type':'application/json'}, body: JSON.stringify({preset:name}) })
+          .then(r=>{ if(!r.ok) throw new Error('preset '+r.status); });
+        toast('Preset → '+name); await refresh();
+      } catch(e){ toast(e.message, true); }
+      finally { busy = false; }
+    }
+    async function setRate(){
+      const v = parseFloat(el('rate-input').value);
+      if (!(v>=0.1 && v<=30)){ toast('Rate must be 0.1–30 /min', true); return; }
+      try {
+        await fetch('/api/control/rate', { method:'POST',
+          headers:{'Content-Type':'application/json'}, body: JSON.stringify({rate_per_min:v}) })
+          .then(r=>{ if(!r.ok) throw new Error('rate '+r.status); });
+        toast('Rate → '+v+'/min'); await refresh();
+      } catch(e){ toast(e.message, true); }
+    }
+
+    // Reset double-confirm
+    function openReset(){ el('reset-confirm').value=''; el('reset-go').disabled=true; el('modal').classList.add('show'); el('reset-confirm').focus(); }
+    function closeReset(){ el('modal').classList.remove('show'); }
+    el('reset-confirm').addEventListener('input', e=>{ el('reset-go').disabled = e.target.value.trim().toUpperCase() !== 'RESET'; });
+    async function doReset(){
+      el('reset-go').disabled = true;
+      try {
+        const d = await fetch('/api/control/reset', { method:'POST' }).then(async r=>{
+          const b = await r.json().catch(()=>({}));
+          if (!r.ok) throw new Error(b.detail || b.error || ('HTTP '+r.status));
+          return b;
+        });
+        closeReset();
+        toast('Reset requested — rebuilding luxauto_demo…');
+        await refresh();
+      } catch(e){ toast(e.message, true); el('reset-go').disabled=false; }
+    }
+
+    renderPresets();
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>
