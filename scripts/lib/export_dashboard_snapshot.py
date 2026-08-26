@@ -330,6 +330,81 @@ def build_snapshot(conn) -> dict:
                 }
             )
 
+        # ---- pipeline_events (per-app REAL stage timeline, <= 40, newest first) --- #
+        # A true per-application trace built ONLY from real timestamps: intake
+        # (submitted_at), referral + disposition (the referral rollup evaluated_at -
+        # the same real event, the disposition being its outcome), and quote
+        # (quoted_at, null when the app never reached a quote). vehicle_display comes
+        # from the vehicles base table (one row per app in v1), applicant_display
+        # from the insured view's synthetic name.
+        #
+        # DELIBERATELY ABSENT: any enrichment timestamp/event. The VIN/title/
+        # household/sanctions integrations do not exist, so there is no honest
+        # timestamp to emit; the frontend interpolates enrichment timing between
+        # intake and referral for animation only and keeps its "simulated" marker.
+        # This block reads NO commission/waterfall/settlement view.
+        cur.execute(
+            """
+            SELECT i.application_id                         AS application_id,
+                   i.garaging_state                         AS garaging_state,
+                   i.first_name                             AS first_name,
+                   i.last_name                              AS last_name,
+                   i.submitted_at                           AS submitted_at,
+                   r.most_severe_action::text               AS disposition,
+                   r.evaluated_at                           AS evaluated_at,
+                   q.quoted_at                              AS quoted_at,
+                   q.indicative_premium                     AS indicative_premium,
+                   v.year                                   AS veh_year,
+                   v.make                                   AS veh_make,
+                   v.model                                  AS veh_model
+            FROM luxauto_insured_view i
+            LEFT JOIN luxauto_application_referral_view r
+                   ON r.application_id = i.application_id
+            LEFT JOIN LATERAL (
+                SELECT qr.quoted_at, qr.indicative_premium
+                FROM luxauto_quote_rating_view qr
+                WHERE qr.application_id = i.application_id
+                ORDER BY qr.quoted_at DESC NULLS LAST
+                LIMIT 1
+            ) q ON true
+            LEFT JOIN LATERAL (
+                SELECT ve.year, ve.make, ve.model
+                FROM vehicles ve
+                WHERE ve.application_id = i.application_id
+                ORDER BY ve.year DESC NULLS LAST
+                LIMIT 1
+            ) v ON true
+            WHERE i.submitted_at IS NOT NULL
+            ORDER BY i.submitted_at DESC
+            LIMIT 40
+            """
+        )
+        pipeline_events = []
+        for r in cur.fetchall():
+            name = " ".join(
+                p for p in [(r["first_name"] or "").strip(), (r["last_name"] or "").strip()] if p
+            )
+            veh = " ".join(
+                str(p) for p in [r["veh_year"], r["veh_make"], r["veh_model"]] if p
+            )
+            pipeline_events.append(
+                {
+                    "application_id": str(r["application_id"]),
+                    "garaging_state": (r["garaging_state"] or "").strip() or None,
+                    "applicant_display": name or None,
+                    "vehicle_display": veh or None,
+                    "disposition": r["disposition"],
+                    "stages": {
+                        "intake": {"at": _iso(r["submitted_at"])},
+                        "referral": {"at": _iso(r["evaluated_at"])},
+                        "disposition": {"at": _iso(r["evaluated_at"])},
+                        "quote": {"at": _iso(r["quoted_at"])},  # null if no quote
+                        # NO "enrichment" key: that stage has no real timestamp.
+                    },
+                    "premium": _num(r["indicative_premium"]),
+                }
+            )
+
     return {
         "generated_at": _iso(datetime.now(timezone.utc)),
         "tiles": tiles,
@@ -337,6 +412,7 @@ def build_snapshot(conn) -> dict:
         "by_state": by_state,
         "states": states,
         "recent_activity": recent,
+        "pipeline_events": pipeline_events,
         "meta": {
             "synthetic": True,
             "enrichment_simulated": True,  # VIN/title/household/sanctions not live

@@ -3,7 +3,7 @@
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IronCliff Vertex — Program Operations</title>
+<title>Torque Underwriters — Program Operations</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
 <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
 <link href="./index_files/css2" rel="stylesheet">
@@ -196,7 +196,7 @@
 
   <header class="masthead">
     <div class="brand">
-      <span class="mark">IRONCLIFF <b>VERTEX</b></span>
+      <span class="mark">TORQUE <b>UNDERWRITERS</b></span>
       <span class="sub">Luxury Auto · Program Operations</span>
     </div>
     <div class="status-cluster">
@@ -231,14 +231,12 @@
       <div class="stage" data-stage="underwrite">
         <div class="stage-head"><span class="stage-num">03</span><span class="stage-name">Referral Eval</span></div>
         <div class="stage-desc">Rules engine &amp; disposition logic</div>
-        <div class="stage-lane" id="lane-underwrite"><div class="appcard d-proceed"><div class="name">Rourke Vandermeer</div><div class="veh">Range Rover Autobiography</div>
-    <div class="foot"><span class="state">WV</span><span></span></div></div></div>
+        <div class="stage-lane" id="lane-underwrite"></div>
       </div>
       <div class="stage" data-stage="disposition">
         <div class="stage-head"><span class="stage-num">04</span><span class="stage-name">Disposition</span></div>
         <div class="stage-desc">Auto-proceed or route to underwriter</div>
-        <div class="stage-lane" id="lane-disposition"><div class="appcard d-proceed"><div class="name">Thea Delaine</div><div class="veh">McLaren 720S</div>
-    <div class="foot"><span class="state">SC</span><span class="tag proceed">Auto-proceed</span></div></div></div>
+        <div class="stage-lane" id="lane-disposition"></div>
       </div>
       <div class="stage" data-stage="quote">
         <div class="stage-head"><span class="stage-num">05</span><span class="stage-name">Quote</span></div>
@@ -250,7 +248,7 @@
 
   <!-- TOTALS -->
   <section class="totals">
-    <div class="tile"><div class="label">Applications Today</div><div class="val" id="t-apps">55</div><div class="delta"><b id="t-apps-d">+34</b> in last hour</div></div>
+    <div class="tile"><div class="label">Applications</div><div class="val" id="t-apps">—</div><div class="delta">submitted to date</div></div>
     <div class="tile"><div class="label">In Underwriting</div><div class="val" id="t-uw">18</div><div class="delta">awaiting review</div></div>
     <div class="tile"><div class="label">Quotes Issued</div><div class="val" id="t-quotes">31</div><div class="delta"><b id="t-bind">61%</b> bind ratio</div></div>
     <div class="tile"><div class="label">Bound</div><div class="val" id="t-bound">19</div><div class="delta">policies in force</div></div>
@@ -300,162 +298,135 @@
   </section>
 
   <div class="footnote">
-    <span>IronCliff Vertex Projects · Program operations surface · demo environment</span>
+    <span>Torque Underwriters · Program operations surface · demo environment</span>
     <span class="sim-note">Data synthetic · enrichment stages simulated pending integration</span>
   </div>
 
 </div>
 
 <script>
-// ---------- synthetic demo data ----------
-const FIRST=["Miriam","Trevor","Dale","Priya","Wesley","Renata","Marcus","Yuki","Harold","Sandra","Anthony","Celeste","Rourke","Imogen","Dev","Larisa","Bennett","Odette","Marco","Thea"];
-const LAST=["Ostrander","Bianchi","Kirkwood","Nandakumar","Carmody","Foss","Delaine","Tanaka","Vance","Whitcombe","Reyes","Ashworth","Calloway","Vandermeer","Rao","Petrova","Hollis","Sarraf","Duarte","Lindqvist"];
-const VEH=["Porsche 911 Turbo S","Lamborghini Huracán","Bentley Continental GT","Ferrari 275 GTB/4","McLaren 720S","Rolls-Royce Ghost","Aston Martin DB11","Mercedes-AMG GT","Range Rover Autobiography","Nissan GT-R Nismo","Ferrari Roma","Bugatti Chiron","Porsche Taycan","Maserati MC20","Lexus LC 500"];
-// Real 50-state registry pulled from production luxauto_demo (state_rating_table_versions).
-// Every row is synthetic: DEMO-SYNTHETIC-<ST>-01, except CT which is the ADR 0034
-// illustrative onboarding seed (TBD-ILLUSTRATIVE). No DC row exists in the registry.
-// NOTE: application COUNTS below are still mock-driven for this preview; when the dashboard
-// is repointed to /api/snapshot, both the state universe AND the counts come from real data.
-const STATE_REGISTRY={AK:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-AK-01"},AL:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-AL-01"},AR:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-AR-01"},AZ:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-AZ-01"},CA:{fs:"prior_approval",serff:"DEMO-SYNTHETIC-CA-01"},CO:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-CO-01"},CT:{fs:"prior_approval",serff:"TBD-ILLUSTRATIVE"},DE:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-DE-01"},FL:{fs:"flex_rating_band",serff:"DEMO-SYNTHETIC-FL-01"},GA:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-GA-01"},HI:{fs:"prior_approval",serff:"DEMO-SYNTHETIC-HI-01"},IA:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-IA-01"},ID:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-ID-01"},IL:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-IL-01"},IN:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-IN-01"},KS:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-KS-01"},KY:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-KY-01"},LA:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-LA-01"},MA:{fs:"prior_approval",serff:"DEMO-SYNTHETIC-MA-01"},MD:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-MD-01"},ME:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-ME-01"},MI:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-MI-01"},MN:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-MN-01"},MO:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-MO-01"},MS:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-MS-01"},MT:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-MT-01"},NC:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-NC-01"},ND:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-ND-01"},NE:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-NE-01"},NH:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-NH-01"},NJ:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-NJ-01"},NM:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-NM-01"},NV:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-NV-01"},NY:{fs:"prior_approval",serff:"DEMO-SYNTHETIC-NY-01"},OH:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-OH-01"},OK:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-OK-01"},OR:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-OR-01"},PA:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-PA-01"},RI:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-RI-01"},SC:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-SC-01"},SD:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-SD-01"},TN:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-TN-01"},TX:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-TX-01"},UT:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-UT-01"},VA:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-VA-01"},VT:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-VT-01"},WA:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-WA-01"},WI:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-WI-01"},WV:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-WV-01"},WY:{fs:"file_and_use",serff:"DEMO-SYNTHETIC-WY-01"}};
-const STATES=Object.keys(STATE_REGISTRY);
-const DISPO=[
-  {k:"proceed",tag:"Auto-proceed",cls:"proceed",w:52},
-  {k:"review",tag:"Manual review",cls:"review",w:26},
-  {k:"senior",tag:"Senior review",cls:"senior",w:14},
-  {k:"decline",tag:"Decline",cls:"decline",w:8},
-];
-const REFER_REASONS={
-  review:["undisclosed modification impact","suspected business use","VIN decode mismatch","stale agreed-value basis"],
-  senior:["undisclosed household driver","DUI within lookback","undisclosed title brand","authority limit exceeded"],
-  decline:["out of licensed territory","sanctions screen — compliance hold"]
+// ============================================================================
+// Torque Underwriters — Program Operations dashboard (LIVE, snapshot-driven).
+//
+// Data source: GET /api/snapshot (same-origin; the SWA serves it and is already
+// auth-gated — this page adds no auth). This page is a PURE READER: every tile,
+// the disposition donut, the national map, the activity feed, and the pipeline
+// animation are driven by the real snapshot the read-only exporter publishes
+// from luxauto_demo. There is NO in-browser data generator any more.
+//
+// HONESTY: four of the five pipeline stages (Intake, Referral Eval, Disposition,
+// Quote) are backed by REAL per-application timestamps in snapshot.pipeline_events
+// and replayed at real relative order; whether an app reaches the Quote lane is
+// decided by whether it actually has a real quote timestamp. ENRICHMENT has NO
+// real data — the VIN/title/household/sanctions integrations do not exist — so
+// its transit is interpolated for animation only and it keeps its existing
+// minimal "simulated" marker and static representative checklist, unchanged.
+//
+// No localStorage / sessionStorage: all state is in memory.
+// ============================================================================
+const SNAPSHOT_URL = "/api/snapshot";
+const POLL_MS = 5000;      // poll cadence
+const SPAWN_MS = 2400;     // pipeline-replay cadence
+
+// The seven real referral actions mapped onto the existing four visual buckets,
+// preserving the current palette/design. This is a display grouping only.
+const ACTION_BUCKET = {
+  AUTO_PROCEED:            {k:"proceed", cls:"proceed", tag:"Auto-proceed"},
+  AUTO_PROCEED_WITH_FLAG:  {k:"proceed", cls:"proceed", tag:"Auto-proceed · flag"},
+  INFORMATION_REQUEST:     {k:"review",  cls:"review",  tag:"Info request"},
+  MANUAL_REVIEW_REQUIRED:  {k:"review",  cls:"review",  tag:"Manual review"},
+  MANUAL_REVIEW_SENIOR:    {k:"senior",  cls:"senior",  tag:"Senior review"},
+  DECLINE_RECOMMENDED:     {k:"decline", cls:"decline", tag:"Decline rec."},
+  HARD_DECLINE_COMPLIANCE: {k:"decline", cls:"decline", tag:"Compliance hold"},
 };
-const rand=a=>a[Math.floor(Math.random()*a.length)];
-function weightedDispo(){let r=Math.random()*100,c=0;for(const d of DISPO){c+=d.w;if(r<=c)return d;}return DISPO[0];}
-function money(n){return "$"+Math.round(n).toLocaleString();}
-function moneyK(n){return n>=1e6?"$"+(n/1e6).toFixed(1)+"M":"$"+Math.round(n/1e3)+"K";}
+function bucket(action){ return ACTION_BUCKET[action] || {k:"review", cls:"review", tag:(action||"—")}; }
 
-// ---------- state ----------
-let totals={apps:14,uw:3,quotes:9,bound:6,tiv:11240000,premSum:214000,appsHr:0};
-let mix={proceed:38,review:14,senior:6,decline:4};
-// Mock activity spread: most states get light activity, the onboarded states run heavier,
-// so the national footprint reads populated. (Replaced by real by_state at repoint.)
-let stateCounts={}; STATES.forEach(s=>stateCounts[s]=Math.floor(Math.random()*4));
-stateCounts["CA"]=11;stateCounts["NY"]=9;stateCounts["TX"]=8;stateCounts["FL"]=7;stateCounts["CT"]=5;
-stateCounts["MI"]=6;stateCounts["MA"]=5;stateCounts["CO"]=4;stateCounts["HI"]=3;
-let feed=[];
+function money(n){ return (n==null) ? "—" : "$"+Math.round(n).toLocaleString(); }
+function moneyK(n){ if(n==null) return "—"; return n>=1e6 ? "$"+(n/1e6).toFixed(1)+"M" : "$"+Math.round(n/1e3)+"K"; }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function set(id,v){ const el=document.getElementById(id); if(el) el.textContent=(v==null?"—":v); }
 
-// ---------- pipeline motion ----------
-const lanes=["intake","enrich","underwrite","disposition","quote"];
-function makeApp(){
-  const d=weightedDispo();
-  return {
-    id:Math.random().toString(36).slice(2,8),
-    name:rand(FIRST)+" "+rand(LAST),
-    veh:rand(VEH),
-    state:rand(STATES),
-    dispo:d,
-    stage:0,
-    el:null
-  };
-}
-function cardHTML(app,stageIdx){
-  let inner=`<div class="name">${app.name}</div><div class="veh">${app.veh}</div>
-    <div class="foot"><span class="state">${app.state}</span>`;
-  if(stageIdx>=3){ inner+=`<span class="tag ${app.dispo.cls}">${app.dispo.tag}</span>`; }
-  else { inner+=`<span></span>`; }
-  inner+=`</div>`;
-  return inner;
-}
-function enrichHTML(){
-  const rows=[["VIN decode","done"],["Title history","done"],["Household check","run"],["Sanctions/OFAC","run"]];
-  return `<div class="enrich-checks">`+rows.map(([n,s])=>
-    `<div class="echk ${s==='done'?'done':''}"><span class="box">${s==='done'?'✓':'…'}</span>${n}</div>`).join("")+`</div>`;
-}
-function placeCard(app){
-  const lane=document.getElementById("lane-"+lanes[app.stage]);
-  const div=document.createElement("div");
-  div.className="appcard d-"+app.dispo.k;
-  if(app.stage===1){ div.innerHTML=cardHTML(app,app.stage)+enrichHTML(); }
-  else { div.innerHTML=cardHTML(app,app.stage); }
-  lane.prepend(div);
-  app.el=div;
-  // cap lane length
-  while(lane.children.length>3) lane.removeChild(lane.lastChild);
-}
-function advance(app){
-  if(app.el&&app.el.parentNode) app.el.parentNode.removeChild(app.el);
-  app.stage++;
-  if(app.stage>=lanes.length){
-    finalize(app);
-    return;
+// ---------- in-memory state (no browser storage) ----------
+let snapshot = null;       // last good snapshot document
+let stateRegistry = {};    // st -> {fs, serff, synthetic}, from snapshot.states
+let stateCounts = {};      // st -> application count, from snapshot.by_state
+let lastUpdate = null;     // Date of last successful fetch
+
+// ---------- fetch loop ----------
+async function poll(){
+  try{
+    const res = await fetch(SNAPSHOT_URL, {headers:{'Accept':'application/json'}, cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    snapshot = data;
+    lastUpdate = new Date();
+    ingest(data);
+    renderAll();
+  }catch(err){
+    // Keep the last good render; never blank the board on a transient failure.
+    console.warn('snapshot fetch failed:', err && err.message ? err.message : err);
   }
-  placeCard(app);
-  const dwell=app.stage===1?1800:1400+Math.random()*900;
-  setTimeout(()=>advance(app),dwell);
-}
-function finalize(app){
-  // update totals + mix + map + feed when an app completes the flow
-  totals.apps++;totals.appsHr++;
-  mix[app.dispo.k]++;
-  stateCounts[app.state]=(stateCounts[app.state]||0)+1;
-  if(app.dispo.k==="proceed"){
-    totals.quotes++;
-    if(Math.random()<0.7){totals.bound++;const p=18000+Math.random()*40000;totals.premSum+=p;totals.tiv+=120000+Math.random()*400000;}
-  } else if(app.dispo.k==="review"||app.dispo.k==="senior"){
-    totals.uw++;
-  }
-  pushFeed(app);
-  render();
-}
-function pushFeed(app){
-  let text,cls=app.dispo.k;
-  if(app.dispo.k==="proceed"){
-    text=`<span class="ff">Quote issued</span> <span class="fs">— ${app.veh}, ${app.state} · ${moneyK(20000+Math.random()*45000)}</span>`;
-  } else if(app.dispo.k==="decline"){
-    text=`<span class="ff">Declined</span> <span class="fs">— ${rand(REFER_REASONS.decline)}, ${app.state}</span>`;
-  } else {
-    const r=app.dispo.k==="senior"?rand(REFER_REASONS.senior):rand(REFER_REASONS.review);
-    text=`<span class="ff">Referred to ${app.dispo.k==="senior"?"senior ":""}underwriter</span> <span class="fs">— ${r}, ${app.state}</span>`;
-  }
-  feed.unshift({text,cls,t:new Date()});
-  if(feed.length>8)feed.pop();
 }
 
-// ---------- rendering ----------
-function render(){
-  document.getElementById("t-apps").textContent=totals.apps;
-  document.getElementById("t-apps-d").textContent="+"+totals.appsHr;
-  document.getElementById("t-uw").textContent=totals.uw;
-  document.getElementById("t-quotes").textContent=totals.quotes;
-  document.getElementById("t-bound").textContent=totals.bound;
-  document.getElementById("t-bind").textContent=Math.round(totals.bound/Math.max(totals.quotes,1)*100)+"%";
-  document.getElementById("t-tiv").textContent=moneyK(totals.tiv);
-  document.getElementById("t-avg").textContent=money(totals.premSum/Math.max(totals.bound,1));
-  // mix
-  const mt=mix.proceed+mix.review+mix.senior+mix.decline;
-  document.getElementById("m-proceed").textContent=mix.proceed;
-  document.getElementById("m-review").textContent=mix.review;
-  document.getElementById("m-senior").textContent=mix.senior;
-  document.getElementById("m-decline").textContent=mix.decline;
-  setArc("arc-proceed",mix.proceed/mt*100,0);
-  setArc("arc-review",mix.review/mt*100,mix.proceed/mt*100);
-  setArc("arc-senior",mix.senior/mt*100,(mix.proceed+mix.review)/mt*100);
-  setArc("arc-decline",mix.decline/mt*100,(mix.proceed+mix.review+mix.senior)/mt*100);
-  // feed
-  const f=document.getElementById("feed");
-  f.innerHTML=feed.map(x=>`<div class="fitem"><span class="fdot ${x.cls}"></span>
-    <div><div class="ftext">${x.text}</div><div class="ftime">${x.t.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}</div></div></div>`).join("");
-  renderMap();
+function ingest(data){
+  stateRegistry = {};
+  (data.states || []).forEach(s => {
+    stateRegistry[s.state] = {fs:s.filing_status, serff:s.serff_filing_tracking_number, synthetic:s.synthetic};
+  });
+  stateCounts = {};
+  (data.by_state || []).forEach(r => { stateCounts[r.state] = r.applications; });
+  syncPipeline(data.pipeline_events || []);
+}
+
+// ---------- tiles ----------
+function renderTiles(t){
+  if(!t) return;
+  set("t-apps", t.applications_total);
+  set("t-uw", t.in_underwriting);
+  set("t-quotes", t.quotes_issued);
+  set("t-bound", t.bound);
+  document.getElementById("t-bind").textContent = Math.round((t.bind_ratio || 0) * 100) + "%";
+  document.getElementById("t-tiv").textContent = moneyK(t.total_insured_value);
+  document.getElementById("t-avg").textContent = money(t.avg_premium);
+}
+
+// ---------- disposition donut (7 real actions -> 4 buckets) ----------
+function renderDonut(mixData){
+  const b = {proceed:0, review:0, senior:0, decline:0};
+  Object.entries(mixData || {}).forEach(([action, n]) => { b[bucket(action).k] += (n || 0); });
+  const total = (b.proceed + b.review + b.senior + b.decline) || 1;
+  set("m-proceed", b.proceed); set("m-review", b.review);
+  set("m-senior", b.senior);   set("m-decline", b.decline);
+  setArc("arc-proceed", b.proceed/total*100, 0);
+  setArc("arc-review",  b.review/total*100,  b.proceed/total*100);
+  setArc("arc-senior",  b.senior/total*100,  (b.proceed+b.review)/total*100);
+  setArc("arc-decline", b.decline/total*100, (b.proceed+b.review+b.senior)/total*100);
 }
 function setArc(id,pct,offsetPct){
-  const el=document.getElementById(id);
+  const el=document.getElementById(id); if(!el) return;
   const gap=1; const len=Math.max(pct-gap,0);
   el.setAttribute("stroke-dasharray",`${len} ${100-len}`);
   el.setAttribute("stroke-dashoffset",`${25-offsetPct}`);
 }
 
+// ---------- recent activity feed (real, from snapshot.recent_activity) ----------
+function renderFeed(items){
+  const f=document.getElementById("feed"); if(!f) return;
+  if(!items || !items.length){ f.innerHTML=''; return; }
+  f.innerHTML = items.slice(0,8).map(it => {
+    const cls = bucket(it.action).cls;
+    const label = it.human_label || it.action || '';
+    const st = it.garaging_state ? ` · ${esc(it.garaging_state)}` : '';
+    const t = it.at ? new Date(it.at) : null;
+    const time = t ? t.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
+    return `<div class="fitem"><span class="fdot ${cls}"></span>
+      <div><div class="ftext"><span class="ff">${esc(label)}</span><span class="fs">${st}</span></div><div class="ftime">${time}</div></div></div>`;
+  }).join("");
+}
+
 // ---------- US map (simplified grid cartogram) ----------
-// A stylized state grid — not geographically exact, reads as "national coverage" for a C-level glance.
+// A stylized state grid — not geographically exact; reads as "national coverage"
+// for a C-level glance. Universe + counts are REAL (snapshot.states / by_state).
 const GRID=[
 ["","","","","","","","","","","ME"],
 ["","","","","","","","","","VT","NH"],
@@ -475,44 +446,122 @@ function renderMap(){
   for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
     const st=GRID[r][c];if(!st)continue;
     const cnt=stateCounts[st]||0;
-    const reg=STATE_REGISTRY[st];
+    const reg=stateRegistry[st];
     let cls="st";if(cnt>0){const ratio=cnt/max;cls+=ratio>0.66?" a3":ratio>0.33?" a2":" a1";}
     const x=c*(cell+gap),y=r*(cell+gap);
-    // Honest tooltip: real filing status + synthetic SERFF marker; states not in the
-    // registry (e.g. DC) are labelled as outside the program rather than looking like a gap.
+    // Honest tooltip: real filing status + synthetic SERFF marker; states not in
+    // the registry (e.g. DC) are labelled as outside the program, not a gap.
     const tip=reg?`${st} · ${cnt} application${cnt===1?'':'s'} · ${reg.fs} · ${reg.serff} (synthetic)`:`${st} · not in program`;
-    svg+=`<g><rect class="${cls}" x="${x}" y="${y}" width="${cell}" height="${cell}" rx="4"><title>${tip}</title></rect>`;
+    svg+=`<g><rect class="${cls}" x="${x}" y="${y}" width="${cell}" height="${cell}" rx="4"><title>${esc(tip)}</title></rect>`;
     svg+=`<text x="${x+cell/2}" y="${y+cell/2+3}" text-anchor="middle" font-size="8" fill="${cnt>0?'#f2ede3':'#4a5766'}" font-family="JetBrains Mono">${st}</text></g>`;
   }
   svg+=`</svg>`;
   document.getElementById("mapbox").innerHTML=svg;
 }
 
-// ---------- clock + ago ----------
+// ---------- pipeline animation (replays REAL apps from pipeline_events) ----------
+const LANES=["intake","enrich","underwrite","disposition","quote"];
+let eventPool = [];  // real events, oldest-first for a natural "arrivals" feel
+let eventIdx = 0;
+
+function syncPipeline(events){
+  // exporter emits newest-first; replay oldest-first
+  eventPool = events.slice().reverse();
+  if(eventIdx > eventPool.length) eventIdx = 0;
+}
+function clearLanes(){ LANES.forEach(l=>{const el=document.getElementById("lane-"+l); if(el) el.innerHTML='';}); }
+
+function cardHTML(app,stageIdx){
+  let inner=`<div class="name">${esc(app.name||'—')}</div><div class="veh">${esc(app.veh||'')}</div>
+    <div class="foot"><span class="state">${esc(app.state||'')}</span>`;
+  // The disposition tag only appears from the Disposition lane onward — that is
+  // where the real outcome is known.
+  if(stageIdx>=3){ inner+=`<span class="tag ${app.bk.cls}">${esc(app.bk.tag)}</span>`; }
+  else { inner+=`<span></span>`; }
+  inner+=`</div>`;
+  return inner;
+}
+// The Enrichment stage's representative checklist — UNCHANGED from the original
+// "simulated" marker. No per-app enrichment data exists; this is static and
+// clearly labelled simulated in the stage header.
+function enrichHTML(){
+  const rows=[["VIN decode","done"],["Title history","done"],["Household check","run"],["Sanctions/OFAC","run"]];
+  return `<div class="enrich-checks">`+rows.map(([n,s])=>
+    `<div class="echk ${s==='done'?'done':''}"><span class="box">${s==='done'?'✓':'…'}</span>${n}</div>`).join("")+`</div>`;
+}
+function placeCard(app){
+  const lane=document.getElementById("lane-"+LANES[app.stage]); if(!lane) return;
+  const div=document.createElement("div");
+  div.className="appcard d-"+app.bk.k;
+  div.innerHTML = (app.stage===1) ? cardHTML(app,app.stage)+enrichHTML() : cardHTML(app,app.stage);
+  lane.prepend(div);
+  app.el=div;
+  while(lane.children.length>3) lane.removeChild(lane.lastChild);
+}
+function advance(app){
+  if(app.el&&app.el.parentNode) app.el.parentNode.removeChild(app.el);
+  app.stage++;
+  // Terminal stage is decided by REAL data: an app enters the Quote lane only if
+  // it actually reached a real quote (stages.quote.at present). Otherwise it
+  // stops at Disposition (index 3) — declines and referrals never "quote".
+  const hasQuote = !!(app.ev.stages && app.ev.stages.quote && app.ev.stages.quote.at);
+  const lastStage = hasQuote ? 4 : 3;
+  if(app.stage>lastStage){
+    if(app.el&&app.el.parentNode) app.el.parentNode.removeChild(app.el);
+    return;
+  }
+  placeCard(app);
+  // Visual dwell. Enrichment (index 1) is INTERPOLATED — no real timestamp — so
+  // it simply uses a representative dwell like any lane; it invents no data.
+  const dwell = app.stage===1 ? 1800 : 1300 + Math.random()*700;
+  setTimeout(()=>advance(app), dwell);
+}
+function spawnNext(){
+  if(!eventPool.length) return;  // no data yet / generator idle -> board waits
+  const ev = eventPool[eventIdx % eventPool.length];
+  eventIdx++;
+  const app = {
+    ev,
+    bk: bucket(ev.disposition),
+    name: ev.applicant_display,
+    veh: ev.vehicle_display,
+    state: ev.garaging_state,
+    stage: 0,
+    el: null,
+  };
+  placeCard(app);
+  setTimeout(()=>advance(app), 1200);
+}
+
+// ---------- top-level render ----------
+function renderAll(){
+  if(!snapshot) return;
+  renderTiles(snapshot.tiles);
+  renderDonut(snapshot.disposition_mix);
+  renderFeed(snapshot.recent_activity);
+  renderMap();
+}
+
+// ---------- clock + freshness ----------
 function tick(){
   const n=new Date();
   document.getElementById("clock").textContent=n.toLocaleString([], {month:'short',day:'numeric'})+" · "+n.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
-let agoS=2;
-setInterval(()=>{agoS=1;document.getElementById("ago").textContent=agoS+"s";},4000);
-setInterval(()=>{agoS++;if(agoS<60)document.getElementById("ago").textContent=agoS+"s";},1000);
+function agoTick(){
+  const el=document.getElementById("ago"); if(!el) return;
+  if(!lastUpdate){ el.textContent="…"; return; }
+  const s=Math.max(0,Math.round((Date.now()-lastUpdate.getTime())/1000));
+  el.textContent = s+"s";
+}
 
 // ---------- boot ----------
-function spawn(){
-  const app=makeApp();
-  placeCard(app);
-  setTimeout(()=>advance(app),1300);
-}
-tick();setInterval(tick,1000);
-// seed initial feed + map so it doesn't start empty
-for(let i=0;i<5;i++){const a=makeApp();a.state=rand(STATES);pushFeed(a);}
-render();
-// stagger initial spawns, then steady cadence
-spawn();
-setTimeout(spawn,1600);
-setTimeout(spawn,3400);
-setInterval(spawn,3800);
-setInterval(()=>{totals.appsHr=Math.max(0,totals.appsHr-1);},20000); // decay "last hour" gently
+clearLanes();
+document.getElementById("mapbox").innerHTML='';  // drop any pre-rendered placeholder
+document.getElementById("feed").innerHTML='';    // clear pre-rendered placeholder feed
+tick(); setInterval(tick,1000);
+setInterval(agoTick,1000);
+poll(); setInterval(poll, POLL_MS);          // fetch real data now, then on cadence
+setInterval(spawnNext, SPAWN_MS);            // replay real apps through the pipeline
 </script>
 
 
