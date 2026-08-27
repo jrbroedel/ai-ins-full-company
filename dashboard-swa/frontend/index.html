@@ -127,7 +127,7 @@
   .echk.done .box{background:rgba(107,124,146,.25)}
 
   /* ---- Band: totals ---- */
-  .totals{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px}
+  .totals{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:20px}
   .tile{
     background:var(--ground-2);border:1px solid var(--line);border-radius:var(--radius);
     padding:15px 16px;position:relative;overflow:hidden;
@@ -219,12 +219,12 @@
     </div>
     <div class="pipeline">
       <div class="stage" data-stage="intake">
-        <div class="stage-head"><span class="stage-num">01</span><span class="stage-name">Intake</span></div>
+        <div class="stage-head"><span class="stage-num">01</span><span class="stage-name">Submissions</span></div>
         <div class="stage-desc">Application received &amp; validated</div>
         <div class="stage-lane" id="lane-intake"></div>
       </div>
       <div class="stage simulated" data-stage="enrich">
-        <div class="stage-head"><span class="stage-num">02</span><span class="stage-name">Enrichment</span><span class="sim-tag">simulated</span></div>
+        <div class="stage-head"><span class="stage-num">02</span><span class="stage-name">Underwriting</span><span class="sim-tag">simulated</span></div>
         <div class="stage-desc">VIN · title · household · sanctions</div>
         <div class="stage-lane" id="lane-enrich"></div>
       </div>
@@ -250,7 +250,8 @@
   <section class="totals">
     <div class="tile"><div class="label">Applications</div><div class="val" id="t-apps">—</div><div class="delta">submitted to date</div></div>
     <div class="tile"><div class="label">In Underwriting</div><div class="val" id="t-uw">18</div><div class="delta">awaiting review</div></div>
-    <div class="tile"><div class="label">Quotes Issued</div><div class="val" id="t-quotes">31</div><div class="delta"><b id="t-bind">61%</b> bind ratio</div></div>
+    <div class="tile"><div class="label">Quotes Issued</div><div class="val" id="t-quotes">31</div><div class="delta">indicative premiums</div></div>
+    <div class="tile"><div class="label">Bind Ratio</div><div class="val" id="t-bind">61%</div><div class="delta">bound / quotes issued</div></div>
     <div class="tile"><div class="label">Bound</div><div class="val" id="t-bound">19</div><div class="delta">policies in force</div></div>
     <div class="tile"><div class="label">Total Insured Value</div><div class="val small" id="t-tiv">$14.9M</div><div class="delta">across active book</div></div>
     <div class="tile"><div class="label">Avg Premium</div><div class="val small" id="t-avg">$38,778</div><div class="delta">indicative, annual</div></div>
@@ -271,7 +272,7 @@
         <div class="donut-legend">
           <div class="dl-row"><i style="background:var(--proceed)"></i><span class="dl-name">Auto-proceed</span><span class="dl-val" id="m-proceed">60</span></div>
           <div class="dl-row"><i style="background:var(--review)"></i><span class="dl-name">Manual review</span><span class="dl-val" id="m-review">24</span></div>
-          <div class="dl-row"><i style="background:var(--senior)"></i><span class="dl-name">Senior review</span><span class="dl-val" id="m-senior">11</span></div>
+          <div class="dl-row"><i style="background:var(--senior)"></i><span class="dl-name">Refer to Underwriting</span><span class="dl-val" id="m-senior">11</span></div>
           <div class="dl-row"><i style="background:var(--decline)"></i><span class="dl-name">Decline / compliance</span><span class="dl-val" id="m-decline">8</span></div>
         </div>
       </div>
@@ -335,7 +336,7 @@ const ACTION_BUCKET = {
   AUTO_PROCEED_WITH_FLAG:  {k:"proceed", cls:"proceed", tag:"Auto-proceed · flag"},
   INFORMATION_REQUEST:     {k:"review",  cls:"review",  tag:"Info request"},
   MANUAL_REVIEW_REQUIRED:  {k:"review",  cls:"review",  tag:"Manual review"},
-  MANUAL_REVIEW_SENIOR:    {k:"senior",  cls:"senior",  tag:"Senior review"},
+  MANUAL_REVIEW_SENIOR:    {k:"senior",  cls:"senior",  tag:"Refer to Underwriting"},
   DECLINE_RECOMMENDED:     {k:"decline", cls:"decline", tag:"Decline rec."},
   HARD_DECLINE_COMPLIANCE: {k:"decline", cls:"decline", tag:"Compliance hold"},
 };
