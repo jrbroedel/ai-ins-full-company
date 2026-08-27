@@ -1,6 +1,6 @@
 # ADR 0041 — Investor Dashboard: Snapshot-to-Blob + Entra-Gated Static Web App
 
-**Status:** Accepted (deployed and access-gated; live-motion generator + dashboard repoint pending)
+**Status:** Accepted (live in production-demo; deployed, access-gated, custom-domained, generator + control panel operational)
 **Date:** 2026-08-26
 **Branch:** demo/investor-preview
 **Supersedes / relates to:** demo/investor-preview build (separate `luxauto_demo` DB), ADR 0039 (commission convention — see "Commission excluded" below)
@@ -118,6 +118,14 @@ in front of investors. A grep of the emitted JSON for
 | Repo commits | `42c6273` (exporter), `1b0be7f` (SWA app) on `demo/investor-preview` |
 | Exporter files | `scripts/lib/`, `scripts/`, `infra/systemd/`, `sample-data/` |
 | App tree | `dashboard-swa/` (repo root) |
+| Control panel SWA (Standard) | `luxauto-control-swa` |
+| Control API Function App | `luxauto-control-api` |
+| Control API managed-identity object id | (from deploy output; Storage Blob Data Contributor on the demo-control container) |
+| Control allow-list group | `luxauto-control-access` (separate from dashboard group) |
+| Dashboard custom domain | `https://dashboard.ironcliffvertex.com` |
+| Control panel custom domain | `https://control.ironcliffvertex.com` |
+| Dashboard azurestaticapps URL | `https://orange-bush-0d66eac0f.7.azurestaticapps.net` |
+| Control azurestaticapps URL | `https://blue-tree-0dc34b50f.7.azurestaticapps.net` |
 
 **Client secret is deliberately NOT recorded here or anywhere in the repo.**
 
@@ -127,25 +135,56 @@ in front of investors. A grep of the emitted JSON for
   "assignment required" enabled, `luxauto-dashboard-access` group created and assigned to the
   app, client secret generated and stored in SWA settings only, blob-reader role granted to
   the Function App identity. Full checklist: `dashboard-swa/deploy/OPERATOR-CHECKLIST.md`.
+- Control panel portal configuration is ALSO COMPLETE: the `luxauto-control-access` group
+  (separate from the dashboard group) is created and its gating confirmed; the control app
+  registration exists with "assignment required" enabled and its client secret stored in SWA
+  settings only; **Storage Blob Data Contributor on the `demo-control` container** is granted to
+  BOTH the control Function App identity AND the `luxauto-odoo` VM identity. Full checklist:
+  `control-swa/deploy/OPERATOR-CHECKLIST.md`.
 - Access gating VERIFIED (deny side): a valid `broedel.net` tenant user NOT in the group is
   denied at login — confirms tenant membership alone does not grant access. Grant side (a
   guest added to the group reaching the dashboard) being verified with the first external
   guest.
-- The blob-reader role is granted; `/api/snapshot` serves snapshot data. (The frontend is not
-  yet wired to it — see repoint below.)
+- The blob-reader role is granted; `/api/snapshot` serves snapshot data, and the dashboard
+  frontend polls it live (repoint complete — see follow-ups below, now DONE).
 - The **temporary Contributor grant** on the `luxauto-odoo` managed identity (added for
-  provisioning) must be **removed after verification**.
-- The **systemd unit** (`infra/systemd/luxauto-dashboard-exporter.service`) is committed as a
-  repo artifact **only** — not installed, no cron/timer. The exporter is not yet running on a
-  cadence on the VM. Activation is a deliberate later step.
+  provisioning both the dashboard and control SWAs) is **STILL PRESENT as of this update** and
+  should be removed now that all deploys are complete — **pending final removal**.
+- **All three systemd services are INSTALLED and RUNNING on `luxauto-odoo`:**
+  `luxauto-dashboard-exporter` (writes `snapshot.json` to Blob, read-only),
+  `luxauto-synthetic-generator` (drives synthetic apps through the real `luxauto_demo` pipeline;
+  starts paused, steerable via the control panel), and `luxauto-demo-control-agent` (bridges the
+  Entra-gated control API to the VM control file; runs the fenced reprovision on request).
+  The generator resting state is **PAUSED** (no new apps until started from the control panel).
+- **Both sites are live on custom domains** (`dashboard.ironcliffvertex.com`,
+  `control.ironcliffvertex.com`) via Cloudflare CNAMEs (DNS-only) with Azure-managed TLS; the
+  azurestaticapps URLs remain valid. Redirect URIs for both hostnames are registered on each app
+  registration.
 
-## Not yet built (follow-ups)
+## Prior follow-ups — now completed
 
-- **Generator** — an autonomous process feeding synthetic applications through the *real*
+These were the open follow-ups at first acceptance; all are now DONE (kept here to preserve the
+planned → done history):
+
+- **Generator** — DONE. An autonomous process feeds synthetic applications through the *real*
   `luxauto_demo` pipeline (submit → referral eval → disposition → quote) on a cadence, with a
-  reset-to-curated-book control. This is what fills the currently near-empty board with live
-  motion. Not built.
-- **Dashboard repoint** — swap the frontend's placeholder in-browser data generator for
-  polling `/api/snapshot`. Until then the served page shows mock motion (real 50-state map
-  universe, mock counts).
-- **Exporter activation** — install/enable the systemd unit so the exporter runs continuously.
+  guarded reset-to-curated-book control. It is **built, installed, and running** on
+  `luxauto-odoo` (resting **paused**), and is now **steerable live** from the operator control
+  panel (rate + five presets + pause/reset). Committed on `demo/investor-preview`.
+- **Dashboard repoint** — DONE. The frontend's placeholder in-browser data generator was
+  replaced by polling `/api/snapshot`; the board shows real pipeline motion and is **live** on
+  `dashboard.ironcliffvertex.com`.
+- **Exporter activation** — DONE. The `luxauto-dashboard-exporter` systemd unit is installed and
+  running, writing `snapshot.json` on a cadence.
+
+## Known follow-ups (polish pass)
+
+Recorded, not yet implemented:
+
+- **Richer `recent_activity` feed** — join applicant name + vehicle + state into each activity
+  entry (data already available in the views); the feed is currently disposition-centric.
+- **Dashboard deploy script clobbers auth settings** — the dashboard `deploy.sh` resets the
+  populated `ENTRA_CLIENT_ID` / `ENTRA_CLIENT_SECRET` app-settings back to placeholders on
+  redeploy; must be fixed so redeploys don't break login.
+- **Node 20 runtime EOL** on both Function Apps (Azure nudging to a newer runtime) — maintenance.
+- **App Insights skipped on the control API deploy** — optional telemetry.
