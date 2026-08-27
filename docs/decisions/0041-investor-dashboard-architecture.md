@@ -120,7 +120,7 @@ in front of investors. A grep of the emitted JSON for
 | App tree | `dashboard-swa/` (repo root) |
 | Control panel SWA (Standard) | `luxauto-control-swa` |
 | Control API Function App | `luxauto-control-api` |
-| Control API managed-identity object id | (from deploy output; Storage Blob Data Contributor on the demo-control container) |
+| Control API managed-identity object id | `99b85fd3-9f3d-4a3f-9567-192127187f31` (Storage Blob Data Contributor on the demo-control container) |
 | Control allow-list group | `luxauto-control-access` (separate from dashboard group) |
 | Dashboard custom domain | `https://dashboard.ironcliffvertex.com` |
 | Control panel custom domain | `https://control.ironcliffvertex.com` |
