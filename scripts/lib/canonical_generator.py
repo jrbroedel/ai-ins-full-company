@@ -498,7 +498,8 @@ def money_split(bound_premium: float, agreed_value: float) -> dict:
     }
 
 
-def generate(seed, total_submissions, months, start_ym, value_scale, rating_snapshot):
+def generate(seed, total_submissions, months, start_ym, value_scale, rating_snapshot,
+             claim_frequency=CLAIM_FREQUENCY):
     rng = __import__("random").Random(seed)
     rater = Rater(rating_snapshot)
     states = rating_snapshot["onboarded_states"]
@@ -636,7 +637,7 @@ def generate(seed, total_submissions, months, start_ym, value_scale, rating_snap
         # rare near-$1M+ losses) lands the aggregate LR near target NATURALLY -
         # the gentle global scale below then only fine-tunes, so the tail is
         # preserved rather than crushed.
-        if rng.random() < CLAIM_FREQUENCY:
+        if rng.random() < claim_frequency:
             n = 1 if rng.random() < 0.88 else 2
             for _k in range(n):
                 r = rng.random()
@@ -659,6 +660,11 @@ def generate(seed, total_submissions, months, start_ym, value_scale, rating_snap
     raw_incurred = sum(c[2] for c in raw_claims)
     target_incurred = TARGET_LOSS_RATIO * total_bound_premium
     scale = (target_incurred / raw_incurred) if raw_incurred > 0 else 1.0
+    if os.environ.get("CANON_LR_PROBE"):
+        print(f"PROBE seed={seed} freq={claim_frequency} n_bound={len(all_bound)} "
+              f"raw_incurred={raw_incurred:.2f} bound_prem={total_bound_premium:.2f} "
+              f"raw_lr={raw_incurred/total_bound_premium:.4f} implied_scale={scale:.4f}")
+        raise SystemExit(0)      # clean exit, writes nothing, never hits the clamp
     # Tight clamp: the frequency is tuned so raw LR is already ~target, so the
     # scale should sit near 1.0 and the fat tail is preserved. A scale that would
     # need to leave this band signals a mis-tuned frequency (fail loud rather than
@@ -765,6 +771,9 @@ def main(argv) -> int:
     # (ADR 0043 book size), given the rater's base rates + territory factors and
     # the modeled softening trend. Override for scaled test runs.
     value_scale = float(os.environ.get("CANON_VALUE_SCALE", "1.90"))
+    # Per-policy claim frequency; default preserves the original ~$23M book.
+    # Recalibrated upward for the larger book so raw LR lands ~target naturally.
+    freq = float(os.environ.get("CANON_CLAIM_FREQUENCY", "0.04"))
     start_ym_raw = os.environ.get("CANON_START_YM", "2025-08")
     sy, sm = start_ym_raw.split("-")
     start_ym = (int(sy), int(sm))
@@ -777,7 +786,8 @@ def main(argv) -> int:
     finally:
         conn.close()
 
-    dataset = generate(seed, total, months, start_ym, value_scale, snap)
+    dataset = generate(seed, total, months, start_ym, value_scale, snap,
+                       claim_frequency=freq)
 
     artifact = {
         "schema_version": "canonical-dataset-v1",
@@ -789,6 +799,7 @@ def main(argv) -> int:
         "parameters": {
             "target_submissions": total,
             "value_scale": value_scale,
+            "claim_frequency": freq,
             "target_loss_ratio": TARGET_LOSS_RATIO,
             "commission_total_rate": COMMISSION_TOTAL_RATE,
             "markets_rate": MARKETS_RATE,
