@@ -2,7 +2,7 @@
 """Build 2 — four Excel deliverables, READ-ONLY from the frozen canonical artifact.
 Generates no new numbers: every cell is an artifact field or a documented calc/formula
 over artifact fields. See ADR 0043."""
-import json, hashlib, os, sys, subprocess, zipfile
+import json, hashlib, os, sys, subprocess, zipfile, re
 from pathlib import Path
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -186,6 +186,36 @@ for mon in BOUND_BY_MONTH:
 
 BDX_ROW_GWP = {}   # policy_number -> GWP written into the month's BDX bordereau
 
+# An inlineStr cell that declares a string type but carries no <is> child
+# (self-closing or empty) — Excel rejects it as corrupt.
+_INLINE_BAD = re.compile(r'<c\b[^>]*t="inlineStr"[^>]*/>|<c\b[^>]*t="inlineStr"[^>]*></c>')
+
+def recalc_inplace(path, tag):
+    """Round-trip through recalc.py (LibreOffice) so formula caches are written
+    and empty cells re-serialize clean. Uniform final step for every file."""
+    rcp = subprocess.run([sys.executable, str(ROOT / "scripts" / "recalc.py"), path],
+                         capture_output=True, text=True, timeout=360)
+    rc = json.loads(rcp.stdout.strip().splitlines()[-1]) if rcp.stdout.strip() else {}
+    assert rc.get("status") == "success" and rc.get("total_errors") == 0, \
+        f"{tag}: recalc.py did not succeed: {rc} :: {rcp.stderr[:300]}"
+    return rc
+
+def scan_xlsx_validity(path):
+    """Fail-closed scan: return a list of Excel-corrupting problems in a workbook —
+    (a) formula cell with empty <v></v>, (b) t=inlineStr cell with no <is> child."""
+    problems = []
+    with zipfile.ZipFile(path) as z:
+        for n in z.namelist():
+            if n.startswith("xl/worksheets/") and n.endswith(".xml"):
+                xml = z.read(n).decode("utf-8", "replace")
+                ev = xml.count("<v></v>")
+                bad = len(_INLINE_BAD.findall(xml))
+                if ev:
+                    problems.append(f"{os.path.basename(path)}:{n}: {ev} empty <v></v>")
+                if bad:
+                    problems.append(f"{os.path.basename(path)}:{n}: {bad} inlineStr-without-<is>")
+    return problems
+
 # ================================================================= BDX (per month)
 def build_bdx_month(mon):
     ma = MA_BY[mon]
@@ -316,17 +346,7 @@ def build_bdx_month(mon):
 
     # ---- Excel-repair fix: LibreOffice recalc IN PLACE so <v></v> gets a cached
     #      number (Excel rejects an empty <v> on a numeric formula cell). ----
-    rcp = subprocess.run([sys.executable, str(ROOT / "scripts" / "recalc.py"), p],
-                         capture_output=True, text=True, timeout=360)
-    rc_status = json.loads(rcp.stdout.strip().splitlines()[-1]) if rcp.stdout.strip() else {}
-    assert rc_status.get("status") == "success" and rc_status.get("total_errors") == 0, \
-        f"{mon}: recalc.py did not succeed: {rc_status} :: {rcp.stderr[:300]}"
-    # zero '<v></v>' remain in any worksheet part
-    with zipfile.ZipFile(p) as _z:
-        empty_v = sum(_z.read(n).decode("utf-8", "replace").count("<v></v>")
-                      for n in _z.namelist()
-                      if n.startswith("xl/worksheets/") and n.endswith(".xml"))
-    assert empty_v == 0, f"{mon}: {empty_v} empty <v></v> remain after recalc"
+    recalc_inplace(p, mon)
     # post-recalc value gates, read from the recalculated cache
     vwb = openpyxl.load_workbook(p, data_only=True)
     vbx = vwb["Bordereau"]; vrc = vwb["Reconciliation"]
@@ -380,12 +400,17 @@ def build_rater_sample(mon):
         return r + 1
 
     def line(r, lab, val, how="", fmt=None, italic=False):
-        cl = rs.cell(row=r, column=1, value=lab); cl.font = Font(name=FN, size=10, italic=italic)
-        cv = rs.cell(row=r, column=2, value=val)
+        # Assign None (never "") to blank styled cells: openpyxl serializes a
+        # styled value="" as <c t="inlineStr"></c> (typed string with no <is>),
+        # which Excel rejects as corrupt. None serializes clean.
+        cl = rs.cell(row=r, column=1, value=(lab if lab != "" else None))
+        cl.font = Font(name=FN, size=10, italic=italic)
+        cv = rs.cell(row=r, column=2, value=(val if val != "" else None))
         cv.font = Font(name=FN, size=10, bold=isinstance(val, (int, float)))
         if fmt:
             cv.number_format = fmt
-        ch = rs.cell(row=r, column=3, value=how); ch.font = Font(name=FN, size=9, italic=True, color="595959")
+        ch = rs.cell(row=r, column=3, value=(how if how != "" else None))
+        ch.font = Font(name=FN, size=9, italic=True, color="595959")
         for cc in range(1, 4):
             rs.cell(row=r, column=cc).border = BORDER
         return r + 1
@@ -442,6 +467,17 @@ def build_rater_sample(mon):
     ])
     tabcolors(wb, "1F4E79")  # Rater navy; README green (in helper)
     p = f"{OUT}/rater_sample_{mon}.xlsx"; wb.save(p)
+    # ---- uniform Excel-clean round-trip (mirrors the BDX path) ----
+    recalc_inplace(p, f"rater {mon}")
+    # re-verify the named sample survived the round-trip intact
+    vwb = openpyxl.load_workbook(p, data_only=True); vrs = vwb["Rater"]
+    cells = {vrs.cell(rr, 1).value: (rr, vrs.cell(rr, 2).value) for rr in range(1, vrs.max_row + 1)}
+    assert cells.get("Certificate / policy ref", (None, None))[1] == ref, f"rater {mon}: ref lost"
+    assert cells.get("INDICATIVE TECHNICAL PREMIUM", (None, None))[1] == indicative, f"rater {mon}: IND changed"
+    assert cells.get("GROSS WRITTEN PREMIUM", (None, None))[1] == gwp, f"rater {mon}: GWP changed"
+    vclass = cells.get("Vehicle class", (None, None))[1]
+    assert isinstance(vclass, str) and " - " in vclass, f"rater {mon}: class label lost ' - '"
+    vwb.close()
     return p, ref, gwp, indicative, q["base_premium"], pol["bound_premium"]
 
 # ================================================================= DRIVER
@@ -485,6 +521,17 @@ print(f"\nSum of 12 BDX GWP totals = ${total_bdx_gwp:,.2f}  vs summary.gwp_bound
 print(f"ALL PER-MONTH CHECKS: {'PASS' if allok else 'FAIL'}")
 if not (allok and grand_ok):
     raise SystemExit("RECONCILIATION FAILED — see 'N'/MISMATCH above.")
+
+# ---- fail-closed Excel-validity scan on EVERY deliverable before staging ----
+all_problems = []
+for p in paths:
+    all_problems += scan_xlsx_validity(p)
+print(f"\nEXCEL-VALIDITY SCAN ({len(paths)} files): "
+      f"{'PASS (0 empty <v></v>, 0 inlineStr-without-<is>)' if not all_problems else 'FAIL'}")
+if all_problems:
+    for pr in all_problems:
+        print("  ", pr)
+    raise SystemExit("EXCEL-VALIDITY SCAN FAILED — corrupt content would prompt repair.")
 
 print(f"\nBUILT {len(paths)} files:")
 for p in paths:
