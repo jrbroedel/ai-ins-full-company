@@ -1,6 +1,7 @@
 # ADR 0043 — Canonical 12-Month Demo Dataset + Replay Mode
 
 **Status:** Accepted
+> Headline numbers superseded by ADR 0044 (re-freeze to ~$57M, 2026-08-28); design unchanged.
 **Date:** 2026-08-27
 **Branch:** demo/investor-preview
 **Relates to:** ADR 0042 (corrected commission structure — the money math here applies it);
