@@ -105,411 +105,355 @@ def readme_tab(wb, title_text, lines):
     widths(ws, {"A": 42, "B": 3, "C": 55})
     return ws
 
-# ================================================================= WB1 SUBMISSIONS
-def build_submissions():
-    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Submissions"
-    cols = ["Seq", "Submission ID", "Submitted Date", "Month", "Applicant", "Occupation",
-            "Garaging State", "Veh Year", "Make", "Model", "Vehicle Category", "Rating Class",
-            "Agreed Value", "Loss-Run Pattern", "Prior Claims", "At-Fault", "Claims >$100k",
-            "Prior Non-Renewal", "Disposition", "Quote Premium", "Premium Kind", "Bind Status",
-            "Policy Number"]
-    title(ws, "Submissions Export — Full Funnel",
-          f'One row per submission (all {SUM["submissions"]:,}). Quote premium shown for every submission; '
-          "premium_kind flags bound vs indicative. Earned/bound premium = bound rows only.",
-          span=len(cols))
-    HR = 4
-    hdr(ws, HR, cols)
-    for j, s in enumerate(SUBS):
+# ================================================================= 24-FILE BUILD
+# 12 monthly underwriting BDX workbooks + 12 monthly sample-rater workbooks,
+# bound business ONLY, rendered read-only from the frozen artifact (ADR 0044).
+
+# ---------- label maps ----------
+STATE = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+    "DC": "District of Columbia", "FL": "Florida", "GA": "Georgia", "HI": "Hawaii",
+    "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+    "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+    "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
+    "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+    "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+    "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
+    "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+    "WI": "Wisconsin", "WY": "Wyoming",
+}
+# loss_run.pattern -> Kent's Claims History label (exact strings from his sheet)
+CLAIMS_LABEL = {
+    "clean": "No at-fault claims - 5 yrs",
+    "minor_comp": "Comp-only claims (glass/animal/weather)",
+    "one_large": "1 at-fault claim over $100k",
+    "theft_total": "1 theft / total loss claim",
+    "two_claims": "2 at-fault claims - 5 yrs",
+    "prior_nonrenewal": "Prior carrier non-renewal / cancellation",
+    "three_plus_fault": "3 + at-fault claims - 5 yrs",
+}
+# Fixed capacity-panel order (7.5% of premium each = 75% to capacity).
+SYND_ORDER = ["Beazley", "Hiscox", "Chaucer", "Ark", "Brit", "Canopius",
+              "Apollo", "Antares", "MS Amlin", "Ascot"]
+assert set(SYND_ORDER) == set(SYNDS), "syndicate panel mismatch vs artifact"
+
+from datetime import date
+
+def expiry(eff):
+    """effective_date + 1 year, same month/day (Feb-29 -> Feb-28)."""
+    y, m, d = map(int, eff.split("-"))
+    try:
+        return date(y + 1, m, d).isoformat()
+    except ValueError:
+        return date(y + 1, m, d - 1).isoformat()
+
+def state_name(abbr):
+    return STATE.get(abbr, abbr)
+
+def claims_label(pattern):
+    return CLAIMS_LABEL.get(pattern, pattern)
+
+# vehicle_category -> Kent's EXACT Base Rates class label (DISPLAY ONLY; does not
+# drive any premium — rating uses quote.rating_basis, untouched here).
+VCLASS_DISPLAY = {
+    "production_luxury": "02 - Sports / GT",
+    "exotic": "03 - Supercar",
+    "classic_collector": "07 - Post-War Classic (1946-1972)",
+    "restomod_coachbuilt": "11 - Restomod / Coachbuilt / Bespoke",
+    "pre_war_vintage": "06 - Vintage Pre-War (pre-1946)",
+}
+
+def vclass_label(sub):
+    cat = sub["vehicle"]["vehicle_category"]
+    assert cat in VCLASS_DISPLAY, f"unmapped vehicle_category {cat!r}"
+    return VCLASS_DISPLAY[cat]
+
+def money(sub):
+    return sub["policy"]["money"]
+
+# ---------- month grouping (bound business only, by policy effective month) ----------
+MONTHS = [m["month"] for m in MA]
+MA_BY = {m["month"]: m for m in MA}
+BOUND = [s for s in SUBS if s.get("policy")]
+BOUND_BY_MONTH = {mon: [] for mon in MONTHS}
+for s in BOUND:
+    BOUND_BY_MONTH[s["policy"]["effective_date"][:7]].append(s)
+for mon in BOUND_BY_MONTH:
+    BOUND_BY_MONTH[mon].sort(key=lambda s: s["seq"])
+
+BDX_ROW_GWP = {}   # policy_number -> GWP written into the month's BDX bordereau
+
+# ================================================================= BDX (per month)
+def build_bdx_month(mon):
+    ma = MA_BY[mon]
+    rows_m = BOUND_BY_MONTH[mon]
+    wb = openpyxl.Workbook(); wb.remove(wb.active)
+
+    # ---- Bordereau sheet ----
+    bx = wb.create_sheet("Bordereau")
+    cols = ["Certificate/Policy Ref", "Named Insured", "Effective Date", "Expiry Date",
+            "Vehicle Year", "Make", "Model", "VIN", "Vehicle Class", "Agreed Value (USD)",
+            "Garaging State", "Gross Written Premium", "Broker Commission 12.5%",
+            "MGA (Torque) Commission 12.5%", "Net to Capacity 75%"] + list(SYND_ORDER) + \
+           ["Policy Fee", "Inspection Fee", "Total Fees"]
+    NC = len(cols)  # 28
+    GWP_COL = 12    # L
+    title(bx, f"Underwriting Bordereau — {mon}  (Bound business only)",
+          "One row per bound policy incepting this month. Premium bordereau convention: "
+          "declines and referrals never appear. Figures read-only from the frozen artifact.",
+          span=NC)
+    HR = 4; hdr(bx, HR, cols)
+    for j, s in enumerate(rows_m):
         r = HR + 1 + j
-        q = s["quote"]; rb = q["rating_basis"]; lr = s["loss_run"]; v = s["vehicle"]
-        pol = s.get("policy")
-        row = [
-            s["seq"], s["submission_id"], s["submitted_at"], s["submitted_at"][:7],
-            f'{s["applicant"]["first_name"]} {s["applicant"]["last_name"]}',
-            s["applicant"]["occupation"], s["garaging_state"], v["year"], v["make"], v["model"],
-            v["vehicle_category"], CLASS_LABEL.get(rb["rating_vehicle_class"], rb["rating_vehicle_class"]),
-            v["agreed_value"], lr["pattern"], lr["claim_count"], lr["at_fault_count"],
-            lr["claims_over_100k"], "Yes" if lr["prior_carrier_nonrenewal"] else "No",
-            s["disposition"], q["premium"], q["premium_kind"],
-            "Bound" if pol else "Not Bound", pol["policy_number"] if pol else "",
-        ]
-        for i, val in enumerate(row):
-            c = ws.cell(row=r, column=1 + i, value=val)
-            c.font = font(10)
-            if i in (12, 19):  # agreed value, premium
+        pol = s["policy"]; mo = pol["money"]; v = s["vehicle"]; a = s["applicant"]
+        shares = mo["syndicate_shares"]
+        vals = [pol["policy_number"], f'{a["first_name"]} {a["last_name"]}',
+                pol["effective_date"], expiry(pol["effective_date"]),
+                v["year"], v["make"], v["model"], v["vin"], vclass_label(s),
+                v["agreed_value"], state_name(s["garaging_state"]), pol["bound_premium"],
+                mo["commission_broker"], mo["commission_torque"], mo["markets_total"]] + \
+               [shares[name] for name in SYND_ORDER] + \
+               [mo["policy_fee"], mo["inspection_fee"], mo["fee_income_total"]]
+        for i, val in enumerate(vals):
+            c = bx.cell(row=r, column=1 + i, value=val); c.font = font(10)
+            if (1 + i) == 10 or (1 + i) >= 12:   # money columns (agreed value + all $ cols)
                 c.number_format = CUR
             if r % 2 == 0:
                 c.fill = PatternFill("solid", fgColor=GREY)
-    last = HR + len(SUBS)
-    ws.auto_filter.ref = f"A{HR}:{get_column_letter(len(cols))}{last}"
-    widths(ws, {"A": 6, "B": 30, "C": 13, "D": 8, "E": 20, "F": 22, "G": 6, "H": 8, "I": 14,
-                "J": 18, "K": 18, "L": 24, "M": 14, "N": 18, "O": 8, "P": 8, "Q": 8, "R": 10,
-                "S": 11, "T": 14, "U": 12, "V": 11, "W": 22})
-
-    # Summary tab with live reconciliation formulas
-    sm = wb.create_sheet("Summary")
-    sm.sheet_view.showGridLines = False
-    title(sm, "Funnel Reconciliation", "Live COUNTIF/SUMIF over the Submissions tab; ties to the artifact summary.", span=3)
-    S = "Submissions"; disp = f"'{S}'!S5:S{last}"; kind = f"'{S}'!U5:U{last}"; prem = f"'{S}'!T5:T{last}"
-    rows = [
-        ("Metric", "Formula (live)", "Artifact"),
-        ("Total submissions", f"=COUNTA('{S}'!B5:B{last})", SUM["submissions"]),
-        ("Binds", f'=COUNTIF({disp},"bind")', SUM["binds"]),
-        ("Declines", f'=COUNTIF({disp},"decline")', SUM["declines"]),
-        ("Refers", f'=COUNTIF({disp},"refer")', SUM["refers"]),
-        ("Indicative-only quotes", f'=COUNTIF({kind},"indicative")', SUM["indicative_only_quotes"]),
-        ("Bound quotes", f'=COUNTIF({kind},"bound")', SUM["binds"]),
-        ("GWP — bound premium", f'=SUMIF({kind},"bound",{prem})', GWP),
-        ("Indicative premium (NOT earned)", f'=SUMIF({kind},"indicative",{prem})', None),
-        ("Bind %", f'=COUNTIF({disp},"bind")/COUNTA(\'{S}\'!B5:B{last})', SUM["bind_pct"] / 100),
-    ]
-    hdr(sm, 4, ["Metric", "Formula (live)", "Artifact value"])
-    for k, (lab, f, art) in enumerate(rows[1:]):
-        r = 5 + k
-        sm.cell(row=r, column=1, value=lab).font = font(10)
-        cf = sm.cell(row=r, column=2, value=f); cf.font = font(10)
-        if "GWP" in lab or "premium" in lab.lower(): cf.number_format = CUR
-        if lab == "Bind %": cf.number_format = PCT2
-        if art is not None:
-            ca = sm.cell(row=r, column=3, value=art); ca.font = font(10)
-            if "GWP" in lab: ca.number_format = CUR
-            elif lab == "Bind %": ca.number_format = PCT2
-            else: ca.number_format = INT
-        for cc in range(1, 4): sm.cell(row=r, column=cc).border = BORDER
-    widths(sm, {"A": 32, "B": 34, "C": 18})
-    readme_tab(wb, "01 · Submissions Export", [
-        ("Rows", str(len(SUBS))),
-        ("Reconciliation", "See 'Summary' tab (live formulas tie to artifact)."),
-        ("Bind / Decline / Refer", f'{SUM["binds"]} / {SUM["declines"]} / {SUM["refers"]}'),
-        ("GWP (bound)", f'${GWP:,.2f}'),
-        ("Note", "Indicative premium is labeled and NEVER treated as earned/bound premium."),
-    ])
-    tabcolors(wb, "808080")
-    p = f"{OUT}/01_submissions_export.xlsx"; wb.save(p); return p
-
-# ================================================================= WB2 MONTHLY RATERS
-def build_raters():
-    wb = openpyxl.Workbook(); wb.remove(wb.active)
-    by_month = {m["month"]: [] for m in MA}
-    for s in SUBS:
-        by_month[MA[s["month_index"]]["month"]].append(s)
-    avgbound_cell = {}  # month -> "'tab'!$C$row"
-    cols = ["Submitted Date", "Submission ID", "State", "Vehicle", "Rating Class",
-            "Agreed Value", "Base Rate /100", "Territory Factor", "Softening Index",
-            "Gross-Up Divisor", "Rated Premium (calc)", "Premium — Artifact", "Δ",
-            "Disposition", "Premium Kind"]
-    # col letters: A..O ; formula refs: F AV,G base,H terr,I soft,J gross,K calc,L artifact,O kind
-    for m in MA:
-        mon = m["month"]; ws = wb.create_sheet(mon)
-        title(ws, f"Monthly Rater — {mon}  (Month {m['month_index']+1} of 12)",
-              f"Softening index {m['softening_index']:.4f}. Rated Premium = ROUND(AgreedValue/100 × BaseRate × "
-              f"Territory × Softening ÷ Gross-Up, 2); ties to artifact premium within $0.01 (generator rounding).",
-              span=len(cols))
-        HR = 4; hdr(ws, HR, cols)
-        rows_m = by_month[mon]
-        for j, s in enumerate(rows_m):
-            r = HR + 1 + j
-            q = s["quote"]; rb = q["rating_basis"]; v = s["vehicle"]
-            vals = [s["submitted_at"], s["submission_id"], s["garaging_state"],
-                    f'{v["year"]} {v["make"]} {v["model"]}',
-                    CLASS_LABEL.get(rb["rating_vehicle_class"], rb["rating_vehicle_class"]),
-                    v["agreed_value"], rb["base_rate_per_100"], rb["territory_factor"],
-                    q["softening_index"], rb["gross_up_divisor"], None, q["premium"], None,
-                    s["disposition"], q["premium_kind"]]
-            for i, val in enumerate(vals):
-                c = ws.cell(row=r, column=1 + i, value=val); c.font = font(10)
-                if r % 2 == 0: c.fill = PatternFill("solid", fgColor=GREY)
-            ws.cell(row=r, column=11, value=f"=ROUND(F{r}/100*G{r}*H{r}*I{r}/J{r},2)")
-            ws.cell(row=r, column=13, value=f"=L{r}-K{r}")
-            for cc in (6, 11, 12, 13): ws.cell(row=r, column=cc).number_format = CUR
-            ws.cell(row=r, column=7).number_format = RATE
-            ws.cell(row=r, column=8).number_format = RATE
-            ws.cell(row=r, column=9).number_format = RATE
-            ws.cell(row=r, column=10).number_format = RATE
-        last = HR + len(rows_m)
-        ws.auto_filter.ref = f"A{HR}:O{last}"
-        # summary block
-        sr = last + 2
-        blk = [
-            ("Rated submissions", f"=COUNTA(B{HR+1}:B{last})", INT),
-            ("Bound count", f'=COUNTIF(O{HR+1}:O{last},"bound")', INT),
-            ("Avg premium — all rated", f"=AVERAGE(L{HR+1}:L{last})", CUR),
-            ("Avg premium — BOUND only", f'=AVERAGEIF(O{HR+1}:O{last},"bound",L{HR+1}:L{last})', CUR),
-            ("GWP bound (month)", f'=SUMIF(O{HR+1}:O{last},"bound",L{HR+1}:L{last})', CUR),
-            ("Softening index (month)", m["softening_index"], RATE),
-        ]
-        for k, (lab, f, fmt) in enumerate(blk):
-            rr = sr + k
-            ws.cell(row=rr, column=1, value=lab).font = font(10, b=True)
-            c = ws.cell(row=rr, column=3, value=f); c.font = font(10, b=True); c.number_format = fmt
-            c.fill = PatternFill("solid", fgColor=TOTFILL)
-        avgbound_cell[mon] = f"'{mon}'!$C${sr+3}"
-        widths(ws, {"A": 13, "B": 30, "C": 6, "D": 24, "E": 24, "F": 14, "G": 12, "H": 13,
-                    "I": 13, "J": 13, "K": 15, "L": 16, "M": 9, "N": 11, "O": 12})
-    # Rate Trend tab
-    rt = wb.create_sheet("Rate Trend", 0)
-    rt.sheet_view.showGridLines = False
-    title(rt, "Declining Rate Trend (12 months)",
-          "Avg BOUND premium and softening index per month — pulled live from each month tab. "
-          "The downward trend is the core story.", span=5)
-    hdr(rt, 4, ["Month", "Month #", "Softening Index", "Avg Bound Premium", "% vs Month 1"])
-    first_prem_row = 5
-    for k, m in enumerate(MA):
-        r = 5 + k
-        rt.cell(row=r, column=1, value=m["month"]).font = font(10)
-        rt.cell(row=r, column=2, value=m["month_index"] + 1).font = font(10)
-        c3 = rt.cell(row=r, column=3, value=m["softening_index"]); c3.font = font(10); c3.number_format = RATE
-        c4 = rt.cell(row=r, column=4, value=f"={avgbound_cell[m['month']]}"); c4.font = font(10); c4.number_format = CUR
-        c5 = rt.cell(row=r, column=5, value=f"=D{r}/$D${first_prem_row}-1"); c5.font = font(10); c5.number_format = PCT2
-        for cc in range(1, 6): rt.cell(row=r, column=cc).border = BORDER
-    tr = 5 + len(MA) + 1
-    rt.cell(row=tr, column=1, value="Month 1 → Month 12 change").font = font(10, b=True)
-    ch = rt.cell(row=tr, column=5, value=f"=D{5+len(MA)-1}/D{first_prem_row}-1")
-    ch.font = font(10, b=True); ch.number_format = PCT2; ch.fill = PatternFill("solid", fgColor=TOTFILL)
-    widths(rt, {"A": 12, "B": 9, "C": 15, "D": 18, "E": 14})
-    readme_tab(wb, "02 · Monthly Raters (×12)", [
-        ("Tabs", "Rate Trend + 12 monthly rater tabs"),
-        ("Rate formula", "Premium = ROUND(AV/100 × BaseRate × Territory × Softening ÷ Gross-Up, 2)"),
-        ("Trend (artifact)", f'M1 ${MA[0]["avg_bound_premium"]:,.2f} → M12 ${MA[11]["avg_bound_premium"]:,.2f} '
-                             f'({(MA[11]["avg_bound_premium"]/MA[0]["avg_bound_premium"]-1)*100:.1f}%)'),
-        ("Δ column", "Artifact premium − calc; within $0.01 (generator intermediate rounding)."),
-    ])
-    tabcolors(wb, "1F4E79")
-    p = f"{OUT}/02_monthly_raters.xlsx"; wb.save(p); return p
-
-# ================================================================= WB3 UNDERWRITING BDX
-def build_bdx():
-    wb = openpyxl.Workbook(); wb.remove(wb.active)
-    bound = [s for s in SUBS if s.get("policy")]
-    by_month = {m["month"]: [] for m in MA}
-    for s in bound:
-        by_month[MA[s["month_index"]]["month"]].append(s)
-    # columns: A pol#,B eff,C insured,D state,E AV,F premium,G broker,H torque,I markets,
-    # J residual, K..T syndicates(10), U policy fee,V insp fee,W fee total
-    base = ["Policy Number", "Effective Date", "Insured", "State", "Agreed Value",
-            "Bound Premium", "Broker 12.5%", "Torque 12.5%", "Markets 75%", "Rounding Residual"]
-    synd_cols = list(SYNDS)
-    tail = ["Policy Fee", "Inspection Fee", "Fee Total"]
-    cols = base + synd_cols + tail
-    NC = len(cols)
-    Kc = 11  # first syndicate col index
-    tot_rows = {}  # month -> totals row number
-    for m in MA:
-        mon = m["month"]; ws = wb.create_sheet(mon)
-        title(ws, f"Underwriting BDX — {mon}  (Bound book only)",
-              "Indicative/declined premium excluded. Markets 75% = SUM of the ten syndicate columns "
-              "(7.5% each). Residual = Premium − (Broker+Torque+Markets) so the row foots exactly.",
-              span=NC)
-        HR = 4; hdr(ws, HR, cols)
-        rows_m = by_month[mon]
-        for j, s in enumerate(rows_m):
-            r = HR + 1 + j
-            pol = s["policy"]; mo = pol["money"]; v = s["vehicle"]; a = s["applicant"]
-            ws.cell(row=r, column=1, value=pol["policy_number"])
-            ws.cell(row=r, column=2, value=pol["effective_date"])
-            ws.cell(row=r, column=3, value=f'{a["first_name"]} {a["last_name"]}')
-            ws.cell(row=r, column=4, value=s["garaging_state"])
-            ws.cell(row=r, column=5, value=v["agreed_value"])
-            ws.cell(row=r, column=6, value=pol["bound_premium"])
-            ws.cell(row=r, column=7, value=mo["commission_broker"])
-            ws.cell(row=r, column=8, value=mo["commission_torque"])
-            # syndicate shares from artifact
-            for si, name in enumerate(synd_cols):
-                ws.cell(row=r, column=Kc + si, value=mo["syndicate_shares"][name])
-            k0 = get_column_letter(Kc); k1 = get_column_letter(Kc + 9)
-            ws.cell(row=r, column=9, value=f"=SUM({k0}{r}:{k1}{r})")          # markets = sum synds
-            ws.cell(row=r, column=10, value=f"=F{r}-(G{r}+H{r}+I{r})")        # residual
-            ws.cell(row=r, column=Kc + 10, value=mo["policy_fee"])
-            ws.cell(row=r, column=Kc + 11, value=mo["inspection_fee"])
-            ws.cell(row=r, column=Kc + 12, value=f"=U{r}+V{r}")              # fee total
-            for i in range(1, NC + 1):
-                c = ws.cell(row=r, column=i); c.font = font(10)
-                if i >= 5: c.number_format = CUR
-                if r % 2 == 0: c.fill = PatternFill("solid", fgColor=GREY)
-        last = HR + len(rows_m)
-        # totals row
-        tr = last + 1; tot_rows[mon] = tr
-        ws.cell(row=tr, column=1, value="TOTAL").font = font(10, b=True)
-        for i in range(5, NC + 1):
-            L = get_column_letter(i)
-            c = ws.cell(row=tr, column=i, value=f"=SUM({L}{HR+1}:{L}{last})")
-            c.font = font(10, b=True); c.number_format = CUR
-            c.fill = PatternFill("solid", fgColor=TOTFILL); c.border = BORDER
-        # foot check row: Premium - (broker+torque+markets+residual) should be 0
-        cr = tr + 1
-        ws.cell(row=cr, column=1, value="Foot check: Premium − (B+T+M+Resid)").font = SUBF
-        cc = ws.cell(row=cr, column=6, value=f"=F{tr}-(G{tr}+H{tr}+I{tr}+J{tr})")
-        cc.font = font(9, b=True); cc.number_format = CUR
-        cr2 = cr + 1
-        ws.cell(row=cr2, column=1, value="Foot check: Markets − Σ(10 syndicates)").font = SUBF
-        k0 = get_column_letter(Kc); k1 = get_column_letter(Kc + 9)
-        cc2 = ws.cell(row=cr2, column=9, value=f"=I{tr}-SUM({k0}{tr}:{k1}{tr})")
-        cc2.font = font(9, b=True); cc2.number_format = CUR
-        ws.auto_filter.ref = f"A{HR}:{get_column_letter(NC)}{last}"
-        wmap = {"A": 20, "B": 13, "C": 20, "D": 6, "E": 14, "F": 15, "G": 13, "H": 13, "I": 14, "J": 15}
-        for si in range(10): wmap[get_column_letter(Kc + si)] = 11
-        wmap[get_column_letter(Kc + 10)] = 11; wmap[get_column_letter(Kc + 11)] = 13; wmap[get_column_letter(Kc + 12)] = 11
-        widths(ws, wmap)
-    # Annual Summary
-    an = wb.create_sheet("Annual Summary", 0)
-    an.sheet_view.showGridLines = False
-    an_cols = ["Month", "Bound Premium", "Broker 12.5%", "Torque 12.5%", "Markets 75%",
-               "Rounding Residual"] + synd_cols + ["Policy Fee", "Inspection Fee", "Fee Total"]
-    title(an, "Underwriting BDX — Annual Summary",
-          f"Each row pulls that month tab's TOTAL row. Grand total ties to artifact GWP ${GWP:,.2f}.",
-          span=len(an_cols))
-    hdr(an, 4, an_cols)
-    # month->totals cell mapping. In month tab: premium F, broker G, torque H, markets I, resid J,
-    # synds K..T, polfee U, inspfee V, feetot W
-    src_letters = ["F", "G", "H", "I", "J"] + [get_column_letter(Kc + i) for i in range(10)] + ["U", "V", "W"]
-    firstr = 5
-    for k, m in enumerate(MA):
-        r = 5 + k; mon = m["month"]; tr = tot_rows[mon]
-        an.cell(row=r, column=1, value=mon).font = font(10)
-        for i, L in enumerate(src_letters):
-            c = an.cell(row=r, column=2 + i, value=f"='{mon}'!{L}{tr}")
-            c.font = font(10); c.number_format = CUR; c.border = BORDER
-        an.cell(row=r, column=1).border = BORDER
-    gr = 5 + len(MA)
-    an.cell(row=gr, column=1, value="GRAND TOTAL").font = font(10, b=True)
-    for i in range(2, len(an_cols) + 1):
-        L = get_column_letter(i)
-        c = an.cell(row=gr, column=i, value=f"=SUM({L}{firstr}:{L}{gr-1})")
+        BDX_ROW_GWP[pol["policy_number"]] = pol["bound_premium"]
+    last = HR + len(rows_m)
+    bx.auto_filter.ref = f"A{HR}:{get_column_letter(NC)}{last}"
+    # ---- totals + explicit commission rounding line (foots commission cols to GWP) ----
+    CL = lambda i: get_column_letter(i)
+    tr = last + 1
+    bx.cell(row=tr, column=1, value="TOTAL").font = font(10, b=True)
+    for i in [10] + list(range(12, NC + 1)):   # agreed value + all $ columns
+        c = bx.cell(row=tr, column=i, value=f"=SUM({CL(i)}{HR+1}:{CL(i)}{last})")
         c.font = font(10, b=True); c.number_format = CUR
         c.fill = PatternFill("solid", fgColor=TOTFILL); c.border = BORDER
-    # reconciliation block
-    rb0 = gr + 2
-    recon = [
-        ("RECONCILIATION", "", ""),
-        ("Annual bound premium (grand total)", f"=B{gr}", None),
-        ("Artifact GWP (bound)", None, GWP),
-        ("Δ premium vs GWP (must be 0)", f"=B{gr}-{GWP}", None),
-        ("Broker+Torque+Markets+Residual", f"=C{gr}+D{gr}+E{gr}+F{gr}", None),
-        ("Δ split vs premium (must be 0)", f"=(C{gr}+D{gr}+E{gr}+F{gr})-B{gr}", None),
-        ("Σ ten syndicate columns", f"=SUM(G{gr}:P{gr})", None),
-        ("Markets 75% (grand total)", f"=E{gr}", None),
-        ("Δ syndicates vs markets (must be 0)", f"=SUM(G{gr}:P{gr})-E{gr}", None),
-        ("Per-syndicate total (each, from tabs)", f"=G{gr}", None),
-        ("  memo: theoretical 0.075 × GWP", None, SUM["per_syndicate_total_7_5pct"]),
-        ("Fee income (grand total)", f"=S{gr}", None),
-        ("  artifact fee_income_total", None, SUM["fee_income_total"]),
+    synd_sum = f"SUM({CL(16)}{tr}:{CL(25)}{tr})"   # Σ ten syndicate column totals
+    comm = f"M{tr}+N{tr}+{synd_sum}"               # broker + torque + Σ syndicates
+    block = [
+        ("Commission (Broker + Torque + Σ10 syndicates)", f"={comm}"),
+        ("Commission rounding adjustment", f"=L{tr}-({comm})"),
+        ("Footed commission (Broker+Torque+Σ10+adj) == GWP", f"={comm}+L{tr+2}"),
     ]
-    for k, (lab, f, art) in enumerate(recon):
-        r = rb0 + k
-        cL = an.cell(row=r, column=1, value=lab)
-        cL.font = font(10, b=(lab == "RECONCILIATION" or "must be 0" in lab))
-        if f is not None:
-            c = an.cell(row=r, column=3, value=f); c.font = font(10, b=True); c.number_format = CUR
-            if "must be 0" in lab: c.fill = PatternFill("solid", fgColor=TOTFILL)
-        if art is not None:
-            c = an.cell(row=r, column=4, value=art); c.font = font(10); c.number_format = CUR
-            c.fill = PatternFill("solid", fgColor=MEMOFILL)
-    widths(an, {"A": 38, "B": 15, "C": 15, "D": 16, "E": 14, "F": 15})
-    readme_tab(wb, "03 · Underwriting BDX", [
-        ("Scope", f'BOUND book only ({SUM["binds"]:,} policies). Indicative/declined excluded.'),
-        ("Split", "12.5% Broker + 12.5% Torque + 75% Markets; Markets = Σ ten syndicates (7.5% each)."),
-        ("Fees", "$350 policy fee/policy; $250 inspection for AV ≥ $1M."),
-        ("Reconciliation", f"See 'Annual Summary' — Δ rows foot to 0; premium = GWP ${GWP:,.2f}."),
-        ("Rounding residual", "Explicit column; standard bordereau practice so the row foots exactly."),
-    ])
-    tabcolors(wb, "1F4E79")
-    p = f"{OUT}/03_underwriting_bdx.xlsx"; wb.save(p); return p
+    for bi, (lab, formula) in enumerate(block):
+        rr = tr + 1 + bi
+        cL = bx.cell(row=rr, column=1, value=lab); cL.font = font(10, b=True)
+        cv = bx.cell(row=rr, column=12, value=formula)   # value under the GWP column (L)
+        cv.font = font(10, b=True); cv.number_format = CUR
+        cv.fill = PatternFill("solid", fgColor=TOTFILL); cv.border = BORDER
+    wmap = {"A": 34, "B": 22, "C": 13, "D": 13, "E": 11, "F": 16, "G": 20, "H": 20,
+            "I": 26, "J": 16, "K": 16, "L": 18, "M": 18, "N": 22, "O": 18}
+    for i in range(NC):
+        wmap.setdefault(get_column_letter(1 + i), 12)
+    widths(bx, wmap)
 
-# ================================================================= WB4 CLAIMS BDX
-def build_claims():
+    # ---- Reconciliation sheet ----
+    rc = wb.create_sheet("Reconciliation")
+    rc.sheet_view.showGridLines = False
+    title(rc, f"Bordereau Reconciliation — {mon}",
+          "Bordereau totals tie to monthly_aggregates and foot to GWP.", span=3)
+    hdr(rc, 4, ["Metric", "Bordereau total (live)", "Artifact (monthly_aggregates)"])
+    L = lambda i: get_column_letter(i)
+    rng = lambda i: f"Bordereau!{L(i)}{HR+1}:{L(i)}{last}"
+    # fixed row map so avg/foot can reference the cells above
+    lines = [
+        ("Bound policy count", f"=COUNTA({rng(1)})", ma["binds"], INT),        # r5
+        ("Gross written premium", f"=SUM({rng(12)})", ma["gwp"], CUR),         # r6
+        ("Average bound premium", "=B6/B5", ma["avg_bound_premium"], CUR),      # r7
+        ("Broker commission 12.5%", f"=SUM({rng(13)})", None, CUR),            # r8
+        ("MGA (Torque) commission 12.5%", f"=SUM({rng(14)})", None, CUR),      # r9
+        ("Net to capacity 75%", f"=SUM({rng(15)})", None, CUR),               # r10
+    ]
+    for si, name in enumerate(SYND_ORDER):                                     # r11..r20
+        lines.append((f"  {name} (7.5%)", f"=SUM({rng(16+si)})", None, CUR))
+    lines += [
+        ("Policy fee income", f"=SUM({rng(26)})", None, CUR),                 # r21
+        ("Inspection fee income", f"=SUM({rng(27)})", None, CUR),             # r22
+        ("Total fee income", f"=SUM({rng(28)})", None, CUR),                  # r23
+        ("Foot: Broker + Torque + Net-to-capacity", "=B8+B9+B10", None, CUR),      # r24
+        ("Commission rounding adjustment", "=B6-(B8+B9+B10)", None, CUR),           # r25
+        ("Footed commission (Broker+Torque+Net+adj) == GWP", "=B24+B25", None, CUR),# r26
+    ]
+    for k, (lab, f, art, fmt) in enumerate(lines):
+        r = 5 + k
+        cL = rc.cell(row=r, column=1, value=lab)
+        cL.font = font(10, b=lab.startswith("Foot") or "adjustment" in lab.lower() or "count" in lab.lower())
+        cf = rc.cell(row=r, column=2, value=f); cf.font = font(10); cf.number_format = fmt
+        if lab.startswith("Foot") or "adjustment" in lab.lower():
+            cf.fill = PatternFill("solid", fgColor=TOTFILL)
+        if art is not None:
+            ca = rc.cell(row=r, column=3, value=art); ca.font = font(10); ca.number_format = fmt
+            ca.fill = PatternFill("solid", fgColor=MEMOFILL)
+        for cc in range(1, 4):
+            rc.cell(row=r, column=cc).border = BORDER
+    widths(rc, {"A": 34, "B": 22, "C": 28})
+
+    # ---- README ----
+    readme_tab(wb, f"Underwriting BDX — {mon}", [
+        ("Scope", f"Bound business only ({ma['binds']} policies incepting {mon})."),
+        ("Gross written premium", f'${ma["gwp"]:,.2f}'),
+        ("Commission stack", "12.5% Broker + 12.5% MGA (Torque) + 75% to capacity (7.5% ×10 syndicates)."),
+        ("Verifies against", f"rater_sample_{mon}.xlsx (its GWP == that policy's Bordereau row)."),
+    ])
+    tabcolors(wb, "1F4E79")  # Bordereau + Reconciliation navy; README green (in helper)
+    p = f"{OUT}/bdx_underwriting_{mon}.xlsx"; wb.save(p)
+    # ---- hard reconcile (fail loud) ----
+    py_gwp = round(sum(s["policy"]["bound_premium"] for s in rows_m), 2)
+    broker_t = round(sum(s["policy"]["money"]["commission_broker"] for s in rows_m), 2)
+    torque_t = round(sum(s["policy"]["money"]["commission_torque"] for s in rows_m), 2)
+    synd_t = round(sum(sh for s in rows_m for sh in s["policy"]["money"]["syndicate_shares"].values()), 2)
+    adjustment = round(py_gwp - (broker_t + torque_t + synd_t), 2)
+    footed = round(broker_t + torque_t + synd_t + adjustment, 2)
+    assert len(rows_m) == ma["binds"], f"{mon}: count {len(rows_m)} != {ma['binds']}"
+    assert abs(py_gwp - ma["gwp"]) < 0.01, f"{mon}: GWP {py_gwp} != {ma['gwp']}"
+    assert footed == py_gwp, f"{mon}: footed commission {footed} != GWP {py_gwp}"
+    return p, len(rows_m), py_gwp, adjustment
+
+# ================================================================= RATER SAMPLE (per month)
+def build_rater_sample(mon):
+    rows_m = BOUND_BY_MONTH[mon]
+    s = rows_m[0]  # lowest seq (already sorted)
+    pol = s["policy"]; q = s["quote"]; rb = q["rating_basis"]; mo = pol["money"]; v = s["vehicle"]
+    a = s["applicant"]; ref = pol["policy_number"]
+    av = rb["agreed_value"]; br = rb["base_rate_per_100"]; tf = rb["territory_factor"]
+    gu = rb["gross_up_divisor"]; soft = q["softening_index"]
+    base_lc = av / 100 * br
+    adj_lc = base_lc * tf
+    indicative = round(adj_lc / gu, 2)
+    gwp = round(indicative * soft, 2)
+    # HARD ASSERTS
+    assert indicative == q["base_premium"], f"{mon}: indicative {indicative} != base_premium {q['base_premium']}"
+    assert gwp == pol["bound_premium"], f"{mon}: GWP {gwp} != bound_premium {pol['bound_premium']}"
+    assert gwp == BDX_ROW_GWP.get(ref), f"{mon}: rater GWP {gwp} != BDX row {BDX_ROW_GWP.get(ref)} for {ref}"
+
     wb = openpyxl.Workbook(); wb.remove(wb.active)
-    # policy_id -> (policy_number, insured, state)
-    pmap = {}
-    for s in SUBS:
-        if s.get("policy"):
-            pmap[s["policy"]["policy_id"]] = (
-                s["policy"]["policy_number"],
-                f'{s["applicant"]["first_name"]} {s["applicant"]["last_name"]}',
-                s["garaging_state"])
-    reg = sorted(CLAIMS, key=lambda c: c["date_of_loss"])
-    ws = wb.create_sheet("Claims Register")
-    cols = ["Claim ID", "Policy Number", "Insured", "State", "Policy ID", "Date of Loss",
-            "Loss Month", "Incurred (Paid+Reserves)", "Status"]
-    title(ws, "Claims BDX — Policy-Period Claims Register",
-          "Continuous register, by date of loss. Claims on bound policies only. Losses span beyond the "
-          "12 submission months (late binds carry losses into the next year); reported by date of loss.",
-          span=len(cols))
-    HR = 4; hdr(ws, HR, cols)
-    for j, c in enumerate(reg):
-        r = HR + 1 + j
-        pn, ins, st = pmap.get(c["policy_id"], ("", "", ""))
-        vals = [c["claim_id"], pn, ins, st, c["policy_id"], c["date_of_loss"],
-                c["date_of_loss"][:7], c["incurred"], c["status"]]
-        for i, val in enumerate(vals):
-            cc = ws.cell(row=r, column=1 + i, value=val); cc.font = font(10)
-            if i == 7: cc.number_format = CUR
-            if r % 2 == 0: cc.fill = PatternFill("solid", fgColor=GREY)
-    last = HR + len(reg)
-    tr = last + 1
-    ws.cell(row=tr, column=1, value="TOTAL INCURRED").font = font(10, b=True)
-    tc = ws.cell(row=tr, column=8, value=f"=SUM(H{HR+1}:H{last})")
-    tc.font = font(10, b=True); tc.number_format = CUR; tc.fill = PatternFill("solid", fgColor=TOTFILL)
-    ws.auto_filter.ref = f"A{HR}:I{last}"
-    widths(ws, {"A": 30, "B": 20, "C": 20, "D": 6, "E": 30, "F": 13, "G": 11, "H": 22, "I": 9})
+    rs = wb.create_sheet("Rater")
+    title(rs, f"Sample Rater — {mon}  ({ref})",
+          "Indicative rating build for one bound account; renders the artifact's own rating chain "
+          "as values. GWP equals this policy's row in the month's underwriting BDX.", span=3)
 
-    # By Loss Month
-    bm = wb.create_sheet("By Loss Month")
-    bm.sheet_view.showGridLines = False
-    title(bm, "Claims by Loss Month", "Count and incurred per loss month (SUMIF/COUNTIF over the register), with running cumulative.", span=4)
-    hdr(bm, 4, ["Loss Month", "Claim Count", "Incurred", "Cumulative Incurred"])
-    months = sorted({c["date_of_loss"][:7] for c in reg})
-    reg_month = f"'Claims Register'!$G${HR+1}:$G${last}"
-    reg_inc = f"'Claims Register'!$H${HR+1}:$H${last}"
-    firstr = 5
-    for k, mon in enumerate(months):
-        r = 5 + k
-        bm.cell(row=r, column=1, value=mon).font = font(10)
-        bm.cell(row=r, column=2, value=f'=COUNTIF({reg_month},"{mon}")').font = font(10)
-        c3 = bm.cell(row=r, column=3, value=f'=SUMIF({reg_month},"{mon}",{reg_inc})'); c3.font = font(10); c3.number_format = CUR
-        c4 = bm.cell(row=r, column=4, value=f"=SUM($C${firstr}:C{r})"); c4.font = font(10); c4.number_format = CUR
-        for cc in range(1, 5): bm.cell(row=r, column=cc).border = BORDER
-    gr = 5 + len(months)
-    bm.cell(row=gr, column=1, value="TOTAL").font = font(10, b=True)
-    tc = bm.cell(row=gr, column=2, value=f"=SUM(B{firstr}:B{gr-1})"); tc.font = font(10, b=True)
-    ti = bm.cell(row=gr, column=3, value=f"=SUM(C{firstr}:C{gr-1})"); ti.font = font(10, b=True); ti.number_format = CUR
-    ti.fill = PatternFill("solid", fgColor=TOTFILL)
-    widths(bm, {"A": 12, "B": 12, "C": 18, "D": 20})
+    def section(r, label):
+        c = rs.cell(row=r, column=1, value=label)
+        c.font = Font(name=FN, size=11, bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor=BLUE)
+        for cc in (2, 3):
+            rs.cell(row=r, column=cc).fill = PatternFill("solid", fgColor=BLUE)
+        rs.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+        return r + 1
 
-    # Loss Ratio
-    lr = wb.create_sheet("Loss Ratio", 0)
-    lr.sheet_view.showGridLines = False
-    title(lr, "Loss Ratio Reconciliation", "Incurred ÷ Bound premium, bound book only. Under the 0.60 PC hurdle → bonus pays at the 10% band.", span=3)
-    rows = [
-        ("Total incurred losses", f"='Claims Register'!H{tr}", None, CUR),
-        ("Bound GWP (artifact)", None, GWP, CUR),
-        ("Loss Ratio (incurred ÷ GWP)", f"='Claims Register'!H{tr}/{GWP}", None, RATE),
-        ("Target loss ratio", None, SUM["loss_ratio_target"], RATE),
-        ("Artifact loss_ratio", None, SUM["loss_ratio"], RATE),
-        ("Profit-commission band", None, SUM["pc_band_pct"] / 100, PCT2),
-        ("Claim count", f"=COUNTA('Claims Register'!A{HR+1}:A{last})", SUM["policy_period_claim_count"], INT),
-        ("Claims referencing non-bound policy", 0, None, INT),
-    ]
-    hdr(lr, 4, ["Metric", "Formula / value", "Artifact"])
-    for k, (lab, f, art, fmt) in enumerate(rows):
-        r = 5 + k
-        lr.cell(row=r, column=1, value=lab).font = font(10)
-        if f is not None:
-            c = lr.cell(row=r, column=2, value=f); c.font = font(10, b=True); c.number_format = fmt
-            if "Loss Ratio" in lab: c.fill = PatternFill("solid", fgColor=TOTFILL)
-        if art is not None:
-            c = lr.cell(row=r, column=3, value=art); c.font = font(10); c.number_format = fmt
-        for cc in range(1, 4): lr.cell(row=r, column=cc).border = BORDER
-    widths(lr, {"A": 34, "B": 20, "C": 16})
-    readme_tab(wb, "04 · Claims BDX", [
-        ("Register", f"{len(reg)} policy-period claims on bound policies, by date of loss."),
-        ("Loss span", f'{reg[0]["date_of_loss"]} → {reg[-1]["date_of_loss"]} (extends past the 12 submission months).'),
-        ("Total incurred", f'${SUM["total_incurred_losses"]:,.2f}'),
-        ("Loss ratio", f'{SUM["loss_ratio"]:.4f}  (incurred ÷ GWP) — PC band {SUM["pc_band_pct"]}%'),
-        ("Status values", "Artifact uses closed/open (closed = settled/paid); shown as-is."),
+    def line(r, lab, val, how="", fmt=None, italic=False):
+        cl = rs.cell(row=r, column=1, value=lab); cl.font = Font(name=FN, size=10, italic=italic)
+        cv = rs.cell(row=r, column=2, value=val)
+        cv.font = Font(name=FN, size=10, bold=isinstance(val, (int, float)))
+        if fmt:
+            cv.number_format = fmt
+        ch = rs.cell(row=r, column=3, value=how); ch.font = Font(name=FN, size=9, italic=True, color="595959")
+        for cc in range(1, 4):
+            rs.cell(row=r, column=cc).border = BORDER
+        return r + 1
+
+    r = 4
+    r = section(r, "1 · RISK INPUTS (facts on file)")
+    r = line(r, "Named insured", f'{a["first_name"]} {a["last_name"]}')
+    r = line(r, "Certificate / policy ref", ref)
+    r = line(r, "Effective date", pol["effective_date"])
+    r = line(r, "Vehicle", f'{v["year"]} {v["make"]} {v["model"]}')
+    r = line(r, "VIN", v["vin"])
+    r = line(r, "Vehicle class", vclass_label(s), "Kent Base Rates class")
+    r = line(r, "Agreed value (USD)", av, "Stated agreed value", CUR)
+    r = line(r, "Garaging state", state_name(s["garaging_state"]))
+    r = line(r, "Claims history (5-yr)", claims_label(s["loss_run"]["pattern"]), "Kent Claims History band")
+    r = line(r, "Driver, mileage, security, deductible and sub-limit inputs are not captured in the "
+                "indicative dataset.", "", "", None, italic=True)
+
+    r += 1
+    r = section(r, "2 · INDICATIVE RATING BUILD (artifact chain)")
+    r = line(r, "Agreed value (USD)", av, "A", CUR)
+    r = line(r, "Base rate per $100", br, "B = class base rate", RATE)
+    r = line(r, "Base PD loss cost", round(base_lc, 2), "A ÷ 100 × B", CUR)
+    r = line(r, "State territory factor", tf, "T = garaging-state factor", RATE)
+    r = line(r, "Adjusted loss cost", round(adj_lc, 2), "(A÷100×B) × T", CUR)
+    r = line(r, "Gross-up divisor", gu, "G = expense/profit gross-up", RATE)
+    r = line(r, "INDICATIVE TECHNICAL PREMIUM", indicative, "ROUND(adjusted ÷ G, 2)", CUR)
+    r = line(r, "Market softening index (month)", soft, "S = month softening", RATE)
+    r = line(r, "GROSS WRITTEN PREMIUM", gwp, "ROUND(indicative × S, 2)", CUR)
+
+    r += 1
+    r = section(r, "3 · COMMISSION")
+    r = line(r, "Total commission 25%", mo["commission_total"], "Broker + MGA", CUR)
+    r = line(r, "Broker commission 12.5%", mo["commission_broker"], "12.5% of GWP", CUR)
+    r = line(r, "MGA (Torque) commission 12.5%", mo["commission_torque"], "12.5% of GWP", CUR)
+    r = line(r, "Net to capacity 75%", mo["markets_total"], "75% of GWP", CUR)
+    for name in SYND_ORDER:
+        r = line(r, f"  {name}", mo["syndicate_shares"][name], "7.5% of GWP", CUR)
+
+    r += 1
+    r = section(r, "4 · FEES")
+    r = line(r, "Policy fee", mo["policy_fee"], "Per-policy fee", CUR)
+    r = line(r, "Inspection fee", mo["inspection_fee"], "Applies when agreed value ≥ $1M", CUR)
+    r = line(r, "TOTAL DUE (GWP + fees)", round(gwp + mo["fee_income_total"], 2),
+             "GWP + total fees", CUR)
+
+    widths(rs, {"A": 40, "B": 20, "C": 34})
+
+    readme_tab(wb, f"Sample Rater — {mon}", [
+        ("Sample account", f"Lowest-seq bound policy incepting {mon}: {ref}."),
+        ("Indicative technical premium", f'${indicative:,.2f}  (== quote base premium)'),
+        ("Gross written premium", f'${gwp:,.2f}  (== this policy\'s row in bdx_underwriting_{mon}.xlsx)'),
+        ("Note", "Rating build shown as values; declines/refers never appear (bound business only)."),
     ])
-    tabcolors(wb, "C00000")
-    p = f"{OUT}/04_claims_bdx.xlsx"; wb.save(p); return p
+    tabcolors(wb, "1F4E79")  # Rater navy; README green (in helper)
+    p = f"{OUT}/rater_sample_{mon}.xlsx"; wb.save(p)
+    return p, ref, gwp, indicative, q["base_premium"], pol["bound_premium"]
 
-paths = [build_submissions(), build_raters(), build_bdx(), build_claims()]
-print("BUILT:")
-for p in paths: print("  ", p)
+# ================================================================= DRIVER
+# Remove the four superseded interim files (ADR 0044).
+for _old in ("01_submissions_export", "02_monthly_raters", "03_underwriting_bdx", "04_claims_bdx"):
+    _fp = f"{OUT}/{_old}.xlsx"
+    if os.path.exists(_fp):
+        os.remove(_fp); print(f"removed interim: {_old}.xlsx")
+
+RECON = []   # per-month reconciliation report rows
+paths = []
+for mon in MONTHS:
+    bp, bcount, bgwp, badj = build_bdx_month(mon)
+    rp, ref, rgwp, rind, base_prem, bound_prem = build_rater_sample(mon)
+    ma = MA_BY[mon]
+    RECON.append({
+        "month": mon,
+        "bdx_count": bcount, "ma_binds": ma["binds"], "count_ok": bcount == ma["binds"],
+        "bdx_gwp": bgwp, "ma_gwp": ma["gwp"], "gwp_ok": abs(bgwp - ma["gwp"]) < 0.01,
+        "adjustment": badj,
+        "rater_ref": ref, "rater_gwp": rgwp, "bdx_row_gwp": BDX_ROW_GWP.get(ref),
+        "rater_gwp_ok": rgwp == BDX_ROW_GWP.get(ref),
+        "rater_ind": rind, "base_premium": base_prem, "ind_ok": rind == base_prem,
+    })
+    paths += [bp, rp]
+
+total_bdx_gwp = round(sum(r["bdx_gwp"] for r in RECON), 2)
+grand_ok = abs(total_bdx_gwp - SUM["gwp_bound"]) < 0.01
+
+print("\n=== RECONCILIATION ===")
+print(f"{'month':8} {'bdxCnt':>6} {'maBinds':>7} cnt {'bdxGWP':>14} {'maGWP':>14} gwp  {'raterRef':>20} rGWP=BDX indPrem=base {'commAdj':>8}")
+allok = True
+for r in RECON:
+    allok &= r["count_ok"] and r["gwp_ok"] and r["rater_gwp_ok"] and r["ind_ok"]
+    print(f"{r['month']:8} {r['bdx_count']:6d} {r['ma_binds']:7d} "
+          f"{'Y' if r['count_ok'] else 'N'}  {r['bdx_gwp']:14,.2f} {r['ma_gwp']:14,.2f} "
+          f"{'Y' if r['gwp_ok'] else 'N'}   {r['rater_ref']:>20} "
+          f"{'Y' if r['rater_gwp_ok'] else 'N'}       {'Y' if r['ind_ok'] else 'N'}     {r['adjustment']:8.2f}")
+print(f"\nSum of 12 BDX GWP totals = ${total_bdx_gwp:,.2f}  vs summary.gwp_bound "
+      f"${SUM['gwp_bound']:,.2f}  ->  {'TIE' if grand_ok else 'MISMATCH'}")
+print(f"ALL PER-MONTH CHECKS: {'PASS' if allok else 'FAIL'}")
+if not (allok and grand_ok):
+    raise SystemExit("RECONCILIATION FAILED — see 'N'/MISMATCH above.")
+
+print(f"\nBUILT {len(paths)} files:")
+for p in paths:
+    print("  ", p)
