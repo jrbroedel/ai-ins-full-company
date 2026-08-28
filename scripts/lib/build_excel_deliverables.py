@@ -2,7 +2,7 @@
 """Build 2 — four Excel deliverables, READ-ONLY from the frozen canonical artifact.
 Generates no new numbers: every cell is an artifact field or a documented calc/formula
 over artifact fields. See ADR 0043."""
-import json, hashlib, os
+import json, hashlib, os, sys, subprocess, zipfile
 from pathlib import Path
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -238,7 +238,7 @@ def build_bdx_month(mon):
     comm = f"M{tr}+N{tr}+{synd_sum}"               # broker + torque + Σ syndicates
     block = [
         ("Commission (Broker + Torque + Σ10 syndicates)", f"={comm}"),
-        ("Commission rounding adjustment", f"=L{tr}-({comm})"),
+        ("Commission rounding adjustment", f"=ROUND(L{tr}-({comm}),2)"),
         ("Footed commission (Broker+Torque+Σ10+adj) == GWP", f"={comm}+L{tr+2}"),
     ]
     for bi, (lab, formula) in enumerate(block):
@@ -277,7 +277,7 @@ def build_bdx_month(mon):
         ("Inspection fee income", f"=SUM({rng(27)})", None, CUR),             # r22
         ("Total fee income", f"=SUM({rng(28)})", None, CUR),                  # r23
         ("Foot: Broker + Torque + Net-to-capacity", "=B8+B9+B10", None, CUR),      # r24
-        ("Commission rounding adjustment", "=B6-(B8+B9+B10)", None, CUR),           # r25
+        ("Commission rounding adjustment", "=ROUND(B6-(B8+B9+B10),2)", None, CUR),  # r25
         ("Footed commission (Broker+Torque+Net+adj) == GWP", "=B24+B25", None, CUR),# r26
     ]
     for k, (lab, f, art, fmt) in enumerate(lines):
@@ -313,6 +313,38 @@ def build_bdx_month(mon):
     assert len(rows_m) == ma["binds"], f"{mon}: count {len(rows_m)} != {ma['binds']}"
     assert abs(py_gwp - ma["gwp"]) < 0.01, f"{mon}: GWP {py_gwp} != {ma['gwp']}"
     assert footed == py_gwp, f"{mon}: footed commission {footed} != GWP {py_gwp}"
+
+    # ---- Excel-repair fix: LibreOffice recalc IN PLACE so <v></v> gets a cached
+    #      number (Excel rejects an empty <v> on a numeric formula cell). ----
+    rcp = subprocess.run([sys.executable, str(ROOT / "scripts" / "recalc.py"), p],
+                         capture_output=True, text=True, timeout=360)
+    rc_status = json.loads(rcp.stdout.strip().splitlines()[-1]) if rcp.stdout.strip() else {}
+    assert rc_status.get("status") == "success" and rc_status.get("total_errors") == 0, \
+        f"{mon}: recalc.py did not succeed: {rc_status} :: {rcp.stderr[:300]}"
+    # zero '<v></v>' remain in any worksheet part
+    with zipfile.ZipFile(p) as _z:
+        empty_v = sum(_z.read(n).decode("utf-8", "replace").count("<v></v>")
+                      for n in _z.namelist()
+                      if n.startswith("xl/worksheets/") and n.endswith(".xml"))
+    assert empty_v == 0, f"{mon}: {empty_v} empty <v></v> remain after recalc"
+    # post-recalc value gates, read from the recalculated cache
+    vwb = openpyxl.load_workbook(p, data_only=True)
+    vbx = vwb["Bordereau"]; vrc = vwb["Reconciliation"]
+    tot_r = foot_r = None
+    for rr in range(1, vbx.max_row + 1):
+        a = vbx.cell(rr, 1).value
+        if a == "TOTAL":
+            tot_r = rr
+        elif isinstance(a, str) and a.startswith("Footed commission"):
+            foot_r = rr
+    assert round(vbx.cell(foot_r, 12).value - vbx.cell(tot_r, 12).value, 2) == 0.0, \
+        f"{mon}: Bordereau L{foot_r} (footed) != L{tot_r} (GWP total)"
+    assert round(vrc["B26"].value - vrc["B6"].value, 2) == 0.0, f"{mon}: Recon B26 != B6"
+    assert vrc["B5"].value == ma["binds"], f"{mon}: Recon B5 {vrc['B5'].value} != {ma['binds']}"
+    labels = {vbx.cell(rr, 9).value for rr in range(HR + 1, tot_r)}
+    assert all(" - " in l for l in labels if isinstance(l, str) and l[:2].isdigit()), \
+        f"{mon}: vehicle-class label lost its ' - ' separator after recalc"
+    vwb.close()
     return p, len(rows_m), py_gwp, adjustment
 
 # ================================================================= RATER SAMPLE (per month)
