@@ -84,7 +84,7 @@ CANON_DIR = ROOT / "sample-data" / "canonical"
 DEFAULT_ARTIFACT = CANON_DIR / "canonical_dataset.json"
 
 # The one frozen artifact this engine is allowed to play back. Fail-closed.
-EXPECT_SHA = "965b986a29d24a4c33685af599c8be4eeb503fb21200251766a5ba0d9611427f"
+EXPECT_SHA = "0a3d67e8774e8cd15fba1c8ab9fa484cd433ac71665a04ca040d9db96b3a9811"
 ADR = "0043"
 SEED = 20260827
 MODE = "replay"
@@ -338,15 +338,16 @@ def atomic_write_json(obj, out_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Reconciliation gate
 # ---------------------------------------------------------------------------
-# ADR 0043 targets, reconciled EXACTLY (to the cent / stated precision) at m12.
+# ADR 0044 targets ($57M re-freeze), reconciled EXACTLY (to the cent / stated
+# precision) at m12. Supersedes the ~$23M ADR 0043 headline numbers.
 RECON_TARGETS = {
-    "submissions_to_date": 3300,
-    "bound_to_date": 2414,
-    "gwp_to_date": 23020114.17,
-    "avg_premium": 9536.09,
+    "submissions_to_date": 8414,
+    "bound_to_date": 6089,
+    "gwp_to_date": 56932078.70,
+    "avg_premium": 9349.99,
     "loss_ratio_to_date": 0.5600,
-    "incurred_losses_to_date": 12891263.97,
-    "premium_change_pct_m1_to_current": -23.5,
+    "incurred_losses_to_date": 31881964.07,
+    "premium_change_pct_m1_to_current": -30.0,
 }
 
 
