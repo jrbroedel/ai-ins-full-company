@@ -1,6 +1,8 @@
 # ADR 0039: broker/MGA acquisition commission wired into the premium waterfall
 
 **Status:** Decided; implemented
+
+**Superseded by ADR 0042** (2026-08-27) — the commission model here is incorrect; the markets receive premium (75%), not commission. Correct structure: 25% total commission (12.5% Torque / 12.5% broker), 75% premium to markets by participation. See ADR 0042.
 **Date:** 2026-08-22
 **Follows from:** ADR 0007 + its addendum (the quota-share waterfall and the broker/MGA acquisition columns this finally wires together), ADR 0010 (`calculate_premium_waterfall`, "where the waterfall math lives"), ADR 0014 (`calculate_endorsement_waterfall`, and the raw-overload split this reuses), ADR 0018 (`calculate_cancellation_waterfall`), ADR 0028 (`compute_indicative_premium`, the gross premium source), ADR 0013 (the settlement view this changes)
 
