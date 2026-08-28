@@ -71,9 +71,30 @@ echo "==> Static Web App (Standard)"
 az staticwebapp show -n "$SWA_NAME" -g "$RG" -o none 2>/dev/null || \
 az staticwebapp create -n "$SWA_NAME" -g "$RG" -l "$LOCATION" --sku Standard -o none
 
-echo "==> Placeholder Entra app settings (operator supplies real values, checklist Step 3)"
-az staticwebapp appsettings set -n "$SWA_NAME" \
-  --setting-names ENTRA_CLIENT_ID="REPLACE_WITH_APP_CLIENT_ID" ENTRA_CLIENT_SECRET="REPLACE_WITH_APP_CLIENT_SECRET" -o none
+echo "==> Entra app settings (seed placeholders only where missing/placeholder; PRESERVE real values)"
+# On redeploy the operator's real ENTRA_CLIENT_ID/SECRET (supplied per checklist Step 3) must
+# survive. Only (re)write the placeholder when the setting is empty/missing OR still holds a
+# REPLACE_WITH_* placeholder. A "real value" (non-empty AND not REPLACE_WITH_*) is left untouched.
+CUR_ID="$(az staticwebapp appsettings list -n "$SWA_NAME" -g "$RG" --query "properties.ENTRA_CLIENT_ID" -o tsv 2>/dev/null || true)"
+CUR_SECRET="$(az staticwebapp appsettings list -n "$SWA_NAME" -g "$RG" --query "properties.ENTRA_CLIENT_SECRET" -o tsv 2>/dev/null || true)"
+
+ENTRA_SETTINGS=()
+if [ -z "$CUR_ID" ] || [[ "$CUR_ID" == REPLACE_WITH_* ]]; then
+  ENTRA_SETTINGS+=( ENTRA_CLIENT_ID="REPLACE_WITH_APP_CLIENT_ID" )
+else
+  echo "    ENTRA_CLIENT_ID already holds a real value — preserving"
+fi
+if [ -z "$CUR_SECRET" ] || [[ "$CUR_SECRET" == REPLACE_WITH_* ]]; then
+  ENTRA_SETTINGS+=( ENTRA_CLIENT_SECRET="REPLACE_WITH_APP_CLIENT_SECRET" )
+else
+  echo "    ENTRA_CLIENT_SECRET already holds a real value — preserving"
+fi
+
+if [ "${#ENTRA_SETTINGS[@]}" -gt 0 ]; then
+  az staticwebapp appsettings set -n "$SWA_NAME" --setting-names "${ENTRA_SETTINGS[@]}" -o none
+else
+  echo "    both Entra settings already populated — nothing to write"
+fi
 
 echo "==> Deploy the frontend (static content) via the SWA CLI"
 TOKEN="$(az staticwebapp secrets list -n "$SWA_NAME" -g "$RG" --query 'properties.apiKey' -o tsv)"
