@@ -140,20 +140,45 @@ def write_blob_json(container, name, obj):
 # --------------------------------------------------------------------------- #
 # Intent -> local control file
 # --------------------------------------------------------------------------- #
-def validate_intent(raw):
-    """Coerce a raw intent blob into a valid, clamped control dict, or None."""
+def read_scenarios():
+    """Live scenario list from scenario_defs (ADR 0048): [{name,label,is_modeled}].
+    Falls back to the committed seed names if the table isn't there yet (driver not
+    run). This is what the agent PUBLISHES into status.json so control.js can validate
+    against a dynamic list without any DB access of its own."""
+    try:
+        conn = sg.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT to_regclass('public.scenario_defs')")
+                if cur.fetchone()[0] is None:
+                    raise RuntimeError("no scenario_defs yet")
+                cur.execute("SELECT name, label, is_modeled FROM scenario_defs ORDER BY name")
+                return [{"name": n, "label": l, "is_modeled": bool(m)} for n, l, m in cur.fetchall()]
+        finally:
+            conn.close()
+    except Exception:
+        from scenario_seed import SEED_SCENARIOS
+        return [{"name": n, "label": lbl, "is_modeled": im}
+                for (n, _p, _o, im, lbl) in SEED_SCENARIOS]
+
+
+def validate_intent(raw, valid_names):
+    """Coerce a raw intent blob into a valid, clamped control dict, or None. The
+    scenario NAME is validated against the LIVE scenario_defs list (ADR 0048), so a
+    scenario added by INSERT is accepted with no code change."""
     if not isinstance(raw, dict):
         return None
     state = raw.get("state")
     if state not in sg.VALID_STATES:
         state = "running"
     preset = raw.get("preset")
-    if preset not in sg.PRESETS:
+    if preset not in valid_names:
         preset = sg.DEFAULT_PRESET
+    default_rate = sg.PRESETS.get(preset, {}).get("rate_per_min", 2.0)
     try:
-        rate = float(raw.get("rate_per_min", sg.PRESETS[preset]["rate_per_min"]))
+        rate = float(raw.get("rate_per_min", default_rate))
     except (TypeError, ValueError):
-        rate = sg.PRESETS[preset]["rate_per_min"]
+        rate = default_rate
     rate = min(max(rate, sg.RATE_MIN_PER_MIN), sg.RATE_MAX_PER_MIN)
     return {"state": state, "preset": preset, "rate_per_min": rate}
 
@@ -180,7 +205,8 @@ def reflect_intent(container):
     raw = read_blob_json(container, INTENT_BLOB)
     if raw is None:
         return  # nothing set yet - never clobber the local file with a default
-    ctrl = validate_intent(raw)
+    valid_names = {s["name"] for s in read_scenarios()}
+    ctrl = validate_intent(raw, valid_names)
     if ctrl is None:
         return
     cur = current_control_file()
@@ -328,6 +354,10 @@ def publish_status(container, reset_in_progress=False):
         "state": ctrl.get("state"),
         "preset": ctrl.get("preset"),
         "rate_per_min": ctrl.get("rate_per_min"),
+        # ADR 0048: publish the LIVE scenario list so control.js (which has no DB
+        # access, by design) can validate/render against it - a 6th scenario added by
+        # INSERT becomes selectable end-to-end with no code change.
+        "scenarios": read_scenarios(),
         "demo_row_count": demo_counts(),
         "generator": generator_liveness(),
         "last_reset": dict(_last_reset, in_progress=bool(reset_in_progress)),

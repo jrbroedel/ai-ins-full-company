@@ -73,7 +73,7 @@
   <header>
     <div>
       <h1>LuxAuto Demo — Operator Control</h1>
-      <div class="sub">Operator-only. Steers the synthetic generator. Never shown to investors.</div>
+      <div class="sub">Operator-only. Steers the playback of the frozen $71M book. Never shown to investors.</div>
     </div>
     <a href="/logout">Sign out</a>
   </header>
@@ -81,8 +81,9 @@
   <main>
     <div class="banner">
       Every action targets <b>luxauto_demo</b> only. Production <b>luxauto</b> is never touched.
-      Reset wipes and rebuilds the demo book; existing demo history is otherwise never deleted —
-      presets only bend the trend of <i>new</i> applications forward.
+      This is <b>playback</b> of the frozen $71M book — no data is ever created or destroyed.
+      Scenarios change the <i>pace</i> and <i>displayed magnitude</i>; Reset <b>rewinds</b> the
+      reveal to the start (empty board). The book itself is never mutated.
     </div>
 
     <div class="grid">
@@ -92,7 +93,7 @@
         <div class="statusline"><span class="k">Generator state</span><span id="s-state">—</span></div>
         <div class="statusline"><span class="k">Active preset</span><span id="s-preset">—</span></div>
         <div class="statusline"><span class="k">Rate</span><span id="s-rate">—</span></div>
-        <div class="statusline"><span class="k">Generator process</span><span id="s-gen">—</span></div>
+        <div class="statusline"><span class="k">Playback driver</span><span id="s-gen">—</span></div>
         <div class="statusline"><span class="k">Control agent</span><span id="s-agent">—</span></div>
         <div class="statusline"><span class="k">demo applications</span><span class="counts" id="s-apps">—</span></div>
         <div class="statusline"><span class="k">demo quotes</span><span class="counts" id="s-quotes">—</span></div>
@@ -103,31 +104,32 @@
       <!-- RUN CONTROL -->
       <section class="card">
         <h2>Run control</h2>
-        <p class="muted small">Start/Stop only flip the control file. Stop = the process idles (no
-          new apps) but stays alive; it never deletes anything.</p>
+        <p class="muted small">Start/Stop the playback clock. Stop = the reveal pauses (the board
+          holds where it is); nothing is created or deleted.</p>
         <div class="btnrow">
-          <button id="btn-start" class="primary" onclick="act('start')">▶ Start</button>
-          <button id="btn-stop" onclick="act('stop')">⏸ Stop</button>
+          <button id="btn-start" class="primary" onclick="act('start')">▶ Play</button>
+          <button id="btn-stop" onclick="act('stop')">⏸ Pause</button>
         </div>
 
-        <h2 style="margin-top:1.3rem">Rate override</h2>
+        <h2 style="margin-top:1.3rem">Pace override</h2>
         <div class="rate">
           <input id="rate-input" type="number" min="0.1" max="30" step="0.1" />
-          <span class="muted small">apps / min</span>
+          <span class="muted small">reveal pace (×)</span>
           <button onclick="setRate()">Set</button>
         </div>
 
-        <h2 style="margin-top:1.3rem">Danger zone</h2>
-        <p class="muted small">Rebuild the demo book from the curated seed (destructive).</p>
+        <h2 style="margin-top:1.3rem">Rewind</h2>
+        <p class="muted small">Rewind the reveal to the start — the board opens empty and plays back
+          up. Non-destructive: no data is deleted, the $71M book is untouched.</p>
         <div class="btnrow">
-          <button class="danger" onclick="openReset()">⟳ Reset demo (rebuild luxauto_demo)</button>
+          <button class="danger" onclick="openReset()">⟲ Rewind playback (start over)</button>
         </div>
       </section>
     </div>
 
     <!-- PRESETS -->
     <section class="card" style="margin-top:1rem">
-      <h2>Scenario preset — switch on the fly (bends the trend over the next cycles)</h2>
+      <h2>Scenario — pace + displayed magnitude of the playback (switch on the fly)</h2>
       <div class="presets" id="presets"></div>
     </section>
   </main>
@@ -137,28 +139,32 @@
   <!-- RESET double-confirm modal -->
   <div class="modal-bg" id="modal">
     <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="mtitle">
-      <h3 id="mtitle">Wipe and rebuild the demo book?</h3>
-      <p>This <b>DROPs and rebuilds luxauto_demo</b> from the curated seed. All synthetic
-         applications generated so far will be gone. <b>Production is never touched.</b>
-         This cannot be undone.</p>
-      <p class="small">Type <b>RESET</b> to confirm.</p>
+      <h3 id="mtitle">Rewind the playback to the start?</h3>
+      <p>This resets the reveal cursor to before the first month — the board opens <b>empty</b> and
+         plays back up. <b>No data is deleted</b>; the frozen $71M book is untouched. Production is
+         never touched.</p>
+      <p class="small">Type <b>REWIND</b> to confirm.</p>
       <input id="reset-confirm" type="text" autocomplete="off"
              style="width:100%;padding:.5rem;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-top:.3rem" />
       <div class="confirmrow">
         <button onclick="closeReset()">Cancel</button>
-        <button id="reset-go" class="danger" disabled onclick="doReset()">Yes, rebuild luxauto_demo</button>
+        <button id="reset-go" class="danger" disabled onclick="doReset()">Yes, rewind playback</button>
       </div>
     </div>
   </div>
 
   <script>
-    const PRESETS = [
-      ["steady", "Moderate rate; realistic mix — majority AUTO_PROCEED, referrals/declines the minority."],
-      ["surge", "High rate; skewed to AUTO_PROCEED. Healthy-growth look."],
-      ["stress", "Moderate/high rate; skewed to MANUAL_REVIEW_* and DECLINE_RECOMMENDED."],
-      ["premium_rising", "Higher-value vehicles → avg premium & TIV drift up via new high-premium quotes."],
-      ["volume_drying", "Low rate; the pipeline visibly quiets. Existing rows stay."],
+    // Scenarios come from the LIVE list the agent publishes into status.json
+    // (from scenario_defs, ADR 0048) - so a scenario added by INSERT appears here with
+    // no code change. Fallback names cover the first paint before status arrives.
+    const FALLBACK_SCENARIOS = [
+      {name:"steady", label:"Steady state", is_modeled:false},
+      {name:"surge", label:"Surge (fast reveal)", is_modeled:false},
+      {name:"volume_drying", label:"Volume drying up", is_modeled:false},
+      {name:"premium_rising", label:"Premium rising", is_modeled:true},
+      {name:"stress", label:"Stress (loss spike)", is_modeled:true},
     ];
+    let scenarios = FALLBACK_SCENARIOS;
     let currentPreset = null;
     let busy = false;
 
@@ -171,7 +177,9 @@
 
     function renderPresets(){
       const wrap = el('presets'); wrap.innerHTML = '';
-      for (const [name, desc] of PRESETS){
+      for (const sc of scenarios){
+        const name = sc.name;
+        const desc = (sc.label || name) + (sc.is_modeled ? ' · modeled magnitudes' : ' · pace only');
         const b = document.createElement('button');
         b.className = 'preset' + (name===currentPreset ? ' active' : '');
         b.innerHTML = `<span class="name">${name}</span><span class="desc">${desc}</span>`;
@@ -193,6 +201,7 @@
         const d = await api('/api/control/status');
         const intent = d.intent || {};
         const st = d.status || {};
+        if (Array.isArray(st.scenarios) && st.scenarios.length) scenarios = st.scenarios;
         const state = intent.state || st.state || 'unknown';
         el('s-state').innerHTML = state === 'running'
           ? '<span class="pill run">running</span>'
@@ -259,7 +268,7 @@
     // Reset double-confirm
     function openReset(){ el('reset-confirm').value=''; el('reset-go').disabled=true; el('modal').classList.add('show'); el('reset-confirm').focus(); }
     function closeReset(){ el('modal').classList.remove('show'); }
-    el('reset-confirm').addEventListener('input', e=>{ el('reset-go').disabled = e.target.value.trim().toUpperCase() !== 'RESET'; });
+    el('reset-confirm').addEventListener('input', e=>{ el('reset-go').disabled = e.target.value.trim().toUpperCase() !== 'REWIND'; });
     async function doReset(){
       el('reset-go').disabled = true;
       try {
@@ -269,7 +278,7 @@
           return b;
         });
         closeReset();
-        toast('Reset requested — rebuilding luxauto_demo…');
+        toast('Rewind requested — restarting playback…');
         await refresh();
       } catch(e){ toast(e.message, true); el('reset-go').disabled=false; }
     }

@@ -52,6 +52,8 @@ from datetime import datetime, timedelta, timezone
 
 import psycopg2
 
+from scenario_seed import ensure_scenarios  # ADR 0048: create+seed the five scenarios
+
 EXPECTED_DB = "luxauto_demo"
 PROD_DB = "luxauto"
 
@@ -67,26 +69,20 @@ CONTROL_FILE = os.environ.get(
 )
 TICK_SECONDS = float(os.environ.get("PLAYBACK_TICK_SECONDS", "2.0"))
 
-# Preset -> base reveal speed in DEMO-DAYS per REAL-MINUTE. The 365-day year at each
-# base: surge ~2 min, stress ~4 min, steady/premium_rising ~6 min, volume_drying ~20
-# min. rate_per_min scales this relative to the preset's canonical rate below, so the
-# panel's rate override still bends the pace. These are demo-pacing knobs only - they
-# reveal frozen rows faster/slower, they never change the data.
-PRESET_SPEED_DAYS_PER_MIN = {
-    "steady": 60.0,
-    "surge": 180.0,
-    "stress": 90.0,
-    "premium_rising": 60.0,
-    "volume_drying": 18.0,
-}
-# Canonical per-preset rate (mirrors the control API / former generator) - the rate at
-# which the mapped base speed applies; other rates scale it proportionally.
-PRESET_CANON_RATE = {
-    "steady": 2.0, "surge": 6.0, "stress": 4.0, "premium_rising": 2.5, "volume_drying": 0.5,
-}
+# PACE now comes from scenario_defs.pace (ADR 0048), read by the active scenario name -
+# NOT a hardcoded per-preset map, so adding a scenario is one INSERT, no code. These are
+# the reference knobs a scenario's pace JSON scales:
+#   {"speed_scale": s}          -> reveal speed = BASE * s (surge s=3.0, steady s=1.0)
+#   {"mode":"taper","late_factor":f} -> in the late window, advance slows to *f (volume dries)
+# rate_per_min still scales speed (relative to DEFAULT_RATE) so the panel's rate slider bends pace.
+# Demo-pacing knobs only - they reveal frozen rows faster/slower, never change the data.
+BASE_DAYS_PER_MIN = 60.0            # 365-day year revealed in ~6 min at speed_scale 1.0, default rate
+DEFAULT_RATE = 2.0                 # the rate at which speed_scale applies as-is
+LATE_START_MONTH_INDEX = 6         # taper kicks in from the operating year's second half
 DEFAULT_PRESET = "steady"
 RATE_MIN_PER_MIN = 0.1
 RATE_MAX_PER_MIN = 30.0
+DEFAULT_PACE = {"speed_scale": 1.0, "mode": "linear"}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -131,21 +127,25 @@ def connect():
 # The cursor table - the ONLY thing this driver writes. Never the book.
 # --------------------------------------------------------------------------- #
 def ensure_state(conn) -> datetime:
-    """Create demo_playback_state (idempotent) and seed the single row if absent.
-    Seeds to WINDOW_END (full book) so INSTALLING the driver never blanks the board;
-    an operator explicitly rewinds to start playback. Returns current_position."""
+    """Create demo_playback_state (idempotent), including the ADR 0048 `scenario`
+    column, and seed the single row if absent. Seeds to REWIND_POSITION (start-EMPTY,
+    ADR 0048) so the board opens empty and plays UP. Returns current_position."""
     with conn.cursor() as cur:
         cur.execute(
             "CREATE TABLE IF NOT EXISTS demo_playback_state ("
             " id BOOLEAN PRIMARY KEY DEFAULT true CHECK (id),"
             " current_position TIMESTAMPTZ NOT NULL,"
             " mode TEXT,"
+            " scenario TEXT,"
             " updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"
         )
+        # ADR 0048: the exporter reads the active scenario off this row; add the column
+        # if an ADR-0047-era table pre-exists.
+        cur.execute("ALTER TABLE demo_playback_state ADD COLUMN IF NOT EXISTS scenario TEXT")
         cur.execute(
-            "INSERT INTO demo_playback_state (id, current_position, mode) "
-            "VALUES (true, %s, 'full') ON CONFLICT (id) DO NOTHING",
-            (WINDOW_END,),
+            "INSERT INTO demo_playback_state (id, current_position, mode, scenario) "
+            "VALUES (true, %s, 'rewound', %s) ON CONFLICT (id) DO NOTHING",
+            (REWIND_POSITION, DEFAULT_PRESET),
         )
         cur.execute("SELECT current_position FROM demo_playback_state WHERE id")
         pos = cur.fetchone()[0]
@@ -153,22 +153,31 @@ def ensure_state(conn) -> datetime:
     return pos
 
 
-def set_position(conn, pos: datetime, mode: str) -> None:
+def set_position(conn, pos: datetime, mode: str, scenario: str) -> None:
     with conn.cursor() as cur:
         cur.execute(
             "UPDATE demo_playback_state SET current_position = %s, mode = %s, "
-            "updated_at = now() WHERE id",
-            (pos, mode),
+            "scenario = %s, updated_at = now() WHERE id",
+            (pos, mode, scenario),
         )
     conn.commit()
+
+
+def scenario_pace(conn, name: str) -> dict:
+    """Read the active scenario's pace JSON from scenario_defs; default if absent."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT pace FROM scenario_defs WHERE name = %s", (name,))
+        row = cur.fetchone()
+    if not row or not row[0]:
+        return dict(DEFAULT_PACE)
+    return row[0]
 
 
 # --------------------------------------------------------------------------- #
 # Control file (the same local file the agent maintains).
 # --------------------------------------------------------------------------- #
 def load_control():
-    default = {"state": "running", "preset": DEFAULT_PRESET,
-               "rate_per_min": PRESET_CANON_RATE[DEFAULT_PRESET]}
+    default = {"state": "running", "preset": DEFAULT_PRESET, "rate_per_min": DEFAULT_RATE}
     try:
         with open(CONTROL_FILE) as f:
             raw = json.load(f)
@@ -180,21 +189,29 @@ def load_control():
     if not isinstance(raw, dict):
         return default
     state = raw.get("state") if raw.get("state") in ("running", "paused") else "running"
-    preset = raw.get("preset") if raw.get("preset") in PRESET_SPEED_DAYS_PER_MIN else DEFAULT_PRESET
+    # The scenario NAME is not validated against a hardcoded list (ADR 0048): the driver
+    # looks its pace up in scenario_defs, and an unknown name falls back to the default
+    # pace. So a scenario added by INSERT is honored with no code change.
+    preset = raw.get("preset") or DEFAULT_PRESET
     try:
-        rate = float(raw.get("rate_per_min", PRESET_CANON_RATE[preset]))
+        rate = float(raw.get("rate_per_min", DEFAULT_RATE))
     except (TypeError, ValueError):
-        rate = PRESET_CANON_RATE[preset]
+        rate = DEFAULT_RATE
     rate = min(max(rate, RATE_MIN_PER_MIN), RATE_MAX_PER_MIN)
-    return {"state": state, "preset": preset, "rate_per_min": rate}
+    return {"state": state, "preset": str(preset), "rate_per_min": rate}
 
 
-def days_per_second(ctrl) -> float:
-    """Reveal speed in demo-days per REAL second from preset + rate scaling."""
-    base = PRESET_SPEED_DAYS_PER_MIN.get(ctrl["preset"], PRESET_SPEED_DAYS_PER_MIN[DEFAULT_PRESET])
-    canon = PRESET_CANON_RATE.get(ctrl["preset"], 2.0)
-    scale = ctrl["rate_per_min"] / canon if canon else 1.0
-    return (base * scale) / 60.0
+def days_per_second(pace: dict, rate_per_min: float, pos: datetime) -> float:
+    """Reveal speed in demo-days per REAL second from the scenario's pace + rate.
+    Taper (volume_drying) slows the advance once the cursor reaches the late window."""
+    speed_scale = float(pace.get("speed_scale", 1.0) or 1.0)
+    rate_scale = (rate_per_min / DEFAULT_RATE) if DEFAULT_RATE else 1.0
+    taper = 1.0
+    if pace.get("mode") == "taper":
+        month_index = (pos.year - 2025) * 12 + (pos.month - 8)
+        if month_index >= LATE_START_MONTH_INDEX:
+            taper = float(pace.get("late_factor", 1.0) or 1.0)
+    return (BASE_DAYS_PER_MIN * speed_scale * rate_scale * taper) / 60.0
 
 
 # --------------------------------------------------------------------------- #
@@ -203,10 +220,13 @@ def days_per_second(ctrl) -> float:
 def rewind() -> int:
     conn = connect()
     try:
+        ensure_scenarios(conn)
         ensure_state(conn)
-        set_position(conn, REWIND_POSITION, "rewound")
-        log.info("REWIND: cursor set to %s (empty board; playback will re-reveal).",
-                 REWIND_POSITION.date())
+        # Preserve the active scenario across a rewind; the control file names it.
+        scenario = load_control().get("preset", DEFAULT_PRESET)
+        set_position(conn, REWIND_POSITION, "rewound", scenario)
+        log.info("REWIND: cursor set to %s (empty board; playback will re-reveal). scenario=%s",
+                 REWIND_POSITION.date(), scenario)
     finally:
         conn.close()
     return 0
@@ -236,6 +256,7 @@ def run_loop() -> int:
     signal.signal(signal.SIGINT, _handle_stop)
 
     conn = connect()
+    ensure_scenarios(conn)     # ADR 0048: create + seed the five committed scenarios (idempotent)
     pos = ensure_state(conn)
     log.info("playback driver up: db=%s cursor=%s control_file=%s window=%s..%s",
              EXPECTED_DB, pos.isoformat(), CONTROL_FILE,
@@ -246,10 +267,11 @@ def run_loop() -> int:
     last_tick = time.monotonic()
     while not _STOP:
         ctrl = load_control()
-        if ctrl["preset"] != last_preset:
-            log.info("preset -> %s (%.1f demo-days/real-min base, rate=%.2f)",
-                     ctrl["preset"], PRESET_SPEED_DAYS_PER_MIN[ctrl["preset"]], ctrl["rate_per_min"])
-            last_preset = ctrl["preset"]
+        scenario = ctrl["preset"]
+        pace = scenario_pace(conn, scenario)
+        if scenario != last_preset:
+            log.info("scenario -> %s (pace=%s, rate=%.2f)", scenario, pace, ctrl["rate_per_min"])
+            last_preset = scenario
 
         now = time.monotonic()
         elapsed = now - last_tick
@@ -260,6 +282,12 @@ def run_loop() -> int:
                 log.info("state -> paused: clock frozen at %s (board holds; nothing written)",
                          _fmt(pos))
             last_state = "paused"
+            # Keep the scenario name current even while paused, so the exporter's overlay
+            # follows a preset switch without waiting for the clock to advance.
+            try:
+                set_position(conn, pos, "paused", scenario)
+            except Exception:
+                pass
             _sleep(TICK_SECONDS)
             continue
         if last_state != "running":
@@ -269,12 +297,14 @@ def run_loop() -> int:
         # Advance the cursor by elapsed real-time * speed, clamped at the window end.
         try:
             if pos < WINDOW_END:
-                pos = min(pos + timedelta(days=days_per_second(ctrl) * elapsed), WINDOW_END)
+                pos = min(pos + timedelta(days=days_per_second(pace, ctrl["rate_per_min"], pos) * elapsed), WINDOW_END)
                 mode = "full" if pos >= WINDOW_END else "playing"
-                set_position(conn, pos, mode)
+                set_position(conn, pos, mode, scenario)
                 if mode == "full":
                     log.info("reached window end -> full book revealed; idling until rewind")
-            # else: already full; idle (cursor stays >= end -> exporter serves full book).
+            else:
+                # Already full; keep the scenario name current (overlay follows a switch).
+                set_position(conn, pos, "full", scenario)
         except (psycopg2.OperationalError, psycopg2.InterfaceError) as exc:
             # Connection dropped (the old fabricator's silent-freeze failure mode).
             # Reconnect on the next tick; NEVER let the cursor silently stall.

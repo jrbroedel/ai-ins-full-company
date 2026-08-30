@@ -52,6 +52,10 @@
   .brand .mark b{color:var(--brass);font-weight:600}
   .brand .sub{font-size:12px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase}
   .status-cluster{display:flex;align-items:center;gap:22px}
+  .scenario-pill{display:inline-flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--review);border:1px solid var(--review);border-radius:999px;
+    padding:3px 11px;font-weight:600}
+  .scenario-pill.plain{color:var(--muted);border-color:var(--line)}
   .live-pill{
     display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.1em;
     text-transform:uppercase;color:var(--muted);
@@ -231,6 +235,7 @@
       <span class="sub">Luxury Auto · Program Operations</span>
     </div>
     <div class="status-cluster">
+      <span class="scenario-pill" id="scenario-pill" style="display:none"></span>
       <span class="clock" id="clock">Aug 25 · 03:33:19 PM</span>
       <span class="live-pill"><span class="live-dot"></span>Live · updated <span id="ago">5s</span> ago</span>
     </div>
@@ -698,6 +703,26 @@ function renderAll(){
   renderMap();
   renderTrend();
   renderEfficiency(snapshot.time_saving);
+  renderScenario(snapshot.scenario);
+}
+
+// ---------- scenario marker (ADR 0048) ----------
+// Shows when a scenario is active: "scenario · modeled figures" when the scenario
+// bends displayed magnitudes (is_modeled), plain scenario label otherwise. This is IN
+// ADDITION to the always-on synthetic footnote; it never replaces it.
+function renderScenario(sc){
+  const pill = document.getElementById("scenario-pill");
+  if(!pill) return;
+  const name = sc && (sc.label || sc.name);
+  if(!name){ pill.style.display = "none"; return; }
+  pill.style.display = "inline-flex";
+  if(sc.is_modeled){
+    pill.className = "scenario-pill";
+    pill.textContent = `${name} · modeled figures`;
+  } else {
+    pill.className = "scenario-pill plain";
+    pill.textContent = `Scenario · ${name}`;
+  }
 }
 
 // ---------- clock + freshness ----------

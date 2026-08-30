@@ -132,16 +132,61 @@ FAR_FUTURE = _dt(9999, 12, 31, tzinfo=timezone.utc)
 # binds it settles into a tight 0.52-0.63 band and lands 0.5600 at full playback.
 LOSS_RATIO_MIN_REVEALED_BINDS = 1000
 
+# ---- Scenario overlay (ADR 0048) ------------------------------------------- #
+# A scenario's overlay is per-metric per-MONTH multipliers applied to the REVEALED
+# subset at build time. The model is uniform + composable: every revealed row is
+# weighted by volume[m]; dollars additionally by premium[m] (premiums) or loss[m]
+# (incurred); rate_trend per-month avg by premium[m]. Absent metric/month = 1.0, so a
+# non-overlay scenario is byte-identical to today's full-book snapshot (foots). The
+# arrays are 12-long (operating year 2025-08 .. 2026-07, index 0..11); factors are
+# applied by SQL array subscript on the row's month index (1-based -> idx+1).
+OVERLAY_METRICS = ("premium", "loss", "volume")
+# Month-index SQL (0..11) for each grain, and the 1-based array-subscript factor exprs.
+_MI_EFF = "((extract(year from lower(effective_range))::int-2025)*12+(extract(month from lower(effective_range))::int-8))"
+_MI_EFF_P = "((extract(year from lower(p.effective_range))::int-2025)*12+(extract(month from lower(p.effective_range))::int-8))"
+_MI_SUB = "((extract(year from submitted_at)::int-2025)*12+(extract(month from submitted_at)::int-8))"
+_MI_SUB_A = "((extract(year from a.submitted_at)::int-2025)*12+(extract(month from a.submitted_at)::int-8))"
 
-def _playback_cursor(cur):
-    """Resolve the playback cursor. Far-future when there is no playback state, so
-    every `<= cursor` filter reveals the whole book (back-compat / full snapshot)."""
+
+def _f(arr_param, mi):
+    """SQL scalar: the month factor for a row, COALESCEd to identity 1.0."""
+    return f"COALESCE((%({arr_param})s::numeric[])[{mi}+1], 1.0)"
+
+
+def _playback_state(cur):
+    """Return (cursor, scenario_name). Far-future + None when there is no playback
+    state, so every `<= cursor` filter reveals the whole book (back-compat)."""
     if not q1(cur, "SELECT to_regclass('public.demo_playback_state') IS NOT NULL AS ok")["ok"]:
-        return FAR_FUTURE
-    row = q1(cur, "SELECT current_position FROM demo_playback_state LIMIT 1")
+        return FAR_FUTURE, None
+    has_scen = q1(cur, "SELECT EXISTS(SELECT 1 FROM information_schema.columns "
+                       "WHERE table_name='demo_playback_state' AND column_name='scenario') AS ok")["ok"]
+    col = "current_position, scenario" if has_scen else "current_position, NULL AS scenario"
+    row = q1(cur, f"SELECT {col} FROM demo_playback_state LIMIT 1")
     if not row or row["current_position"] is None:
-        return FAR_FUTURE
-    return row["current_position"]
+        return FAR_FUTURE, (row["scenario"] if row else None)
+    return row["current_position"], row["scenario"]
+
+
+def _scenario_overlay(cur, name):
+    """Return (factors, is_modeled, label) for the active scenario. factors is a dict
+    of 12-long arrays for premium/loss/volume (identity when the metric is absent)."""
+    identity = {m: [1.0] * 12 for m in OVERLAY_METRICS}
+    if not name:
+        return identity, False, None
+    if not q1(cur, "SELECT to_regclass('public.scenario_defs') IS NOT NULL AS ok")["ok"]:
+        return identity, False, None
+    row = q1(cur, "SELECT overlay, is_modeled, label FROM scenario_defs WHERE name=%s", (name,))
+    if not row:
+        return identity, False, None
+    overlay = row["overlay"] or {}
+    factors = {}
+    for m in OVERLAY_METRICS:
+        seq = overlay.get(m)
+        if isinstance(seq, list) and seq:
+            factors[m] = [float(x) for x in (seq + [1.0] * 12)[:12]]
+        else:
+            factors[m] = [1.0] * 12
+    return factors, bool(row["is_modeled"]), row["label"]
 
 logging.basicConfig(
     level=logging.INFO,
@@ -210,54 +255,65 @@ def q1(cur, sql, params=None):
 # --------------------------------------------------------------------------- #
 def build_snapshot(conn) -> dict:
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        # Playback cursor (ADR 0047). Every tile below reveals only rows with its
-        # authoritative time key <= P["cur"]. Far-future when no playback -> full book.
-        P = {"cur": _playback_cursor(cur)}
+        # Playback cursor + active scenario (ADR 0047/0048). Every tile reveals only
+        # rows with its time key <= P["cur"]; the scenario's overlay factors weight each
+        # revealed row by month (volume[m] on counts; premium[m]/loss[m] on dollars).
+        # Absent playback -> far-future cursor + identity factors -> today's full book.
+        cur_pos, scen_name = _playback_state(cur)
+        factors, scen_is_modeled, scen_label = _scenario_overlay(cur, scen_name)
+        P = {"cur": cur_pos, "premF": factors["premium"],
+             "lossF": factors["loss"], "volF": factors["volume"]}
+        vol_sub = _f("volF", _MI_SUB)      # volume weight, app-grain (submitted_at column)
+        vol_sub_a = _f("volF", _MI_SUB_A)  # volume weight, app-grain via alias a.
+        vol_eff = _f("volF", _MI_EFF)      # volume weight, policy-grain (effective_range)
+        vol_eff_p = _f("volF", _MI_EFF_P)  # volume weight, policy-grain via alias p.
 
         # ---- tiles -------------------------------------------------------- #
-        # Revealed applications (app-grain, applications.submitted_at). NULL
-        # submitted_at (unsubmitted drafts) is naturally excluded by `<=`.
+        # Counts are volume-weighted (SUM of the month factor); with no overlay the
+        # factor is 1.0 so SUM == count (identity). Revealed apps: app-grain submitted_at.
         apps_total = q1(
             cur,
-            "SELECT count(*) AS n FROM applications WHERE submitted_at <= %(cur)s",
+            f"SELECT ROUND(SUM({vol_sub}))::bigint AS n FROM applications WHERE submitted_at <= %(cur)s",
             P,
-        )["n"]
+        )["n"] or 0
 
         in_uw = q1(
             cur,
-            "SELECT count(*) AS n FROM luxauto_underwriter_review_view v "
-            "WHERE override_status = 'pending' AND EXISTS ("
-            "  SELECT 1 FROM applications a WHERE a.application_id = v.application_id "
-            "    AND a.submitted_at <= %(cur)s)",
+            f"SELECT ROUND(SUM({vol_sub_a}))::bigint AS n FROM luxauto_underwriter_review_view v "
+            "JOIN applications a ON a.application_id = v.application_id "
+            "WHERE v.override_status = 'pending' AND a.submitted_at <= %(cur)s",
             P,
-        )["n"]
+        )["n"] or 0
 
         # quotes are bound-only in this load; revealed via their application's submitted_at.
         quotes_issued = q1(
             cur,
-            "SELECT count(*) AS n FROM quotes q WHERE q.status IN ('issued','bound') AND EXISTS ("
-            "  SELECT 1 FROM applications a WHERE a.application_id = q.application_id "
-            "    AND a.submitted_at <= %(cur)s)",
+            f"SELECT ROUND(SUM({vol_sub_a}))::bigint AS n FROM quotes q "
+            "JOIN applications a ON a.application_id = q.application_id "
+            "WHERE q.status IN ('issued','bound') AND a.submitted_at <= %(cur)s",
             P,
-        )["n"]
+        )["n"] or 0
 
-        # 'bound' policies. NOTE (STEP 0): policy_status_t has no 'bound' member
-        # (its values are active/cancelled/expired/nonrenewed); in this model a
-        # policies row exists only once a policy is bound, so the presence of a
-        # luxauto_policy_view row IS the bind. Count those revealed by effective month.
+        # 'bound' policies (volume-weighted display count), and the PLAIN revealed-bind
+        # count used only for the loss-ratio reveal gate (statistical credibility).
         bound = q1(
+            cur,
+            f"SELECT ROUND(SUM({vol_eff}))::bigint AS n FROM luxauto_policy_view "
+            "WHERE lower(effective_range) <= %(cur)s",
+            P,
+        )["n"] or 0
+        revealed_binds = q1(
             cur,
             "SELECT count(*) AS n FROM luxauto_policy_view WHERE lower(effective_range) <= %(cur)s",
             P,
         )["n"]
 
-        # Frozen disposition counts (ADR 0046): the SINGLE source for BOTH the
-        # headline disposition_mix and bind_ratio, so the two can never disagree.
-        # (Guarded: if the frozen table is absent, fall back honestly to empty.)
+        # Frozen disposition counts (ADR 0046), volume-weighted: the SINGLE source for
+        # BOTH the headline disposition_mix and bind_ratio, so they can never disagree.
         frozen_mix = {"bind": 0, "refer": 0, "decline": 0}
         if q1(cur, "SELECT to_regclass('public.canonical_load_disposition') IS NOT NULL AS ok")["ok"]:
             cur.execute(
-                "SELECT cld.artifact_disposition AS d, count(*) AS n "
+                f"SELECT cld.artifact_disposition AS d, ROUND(SUM({vol_sub_a}))::bigint AS n "
                 "FROM canonical_load_disposition cld "
                 "JOIN applications a ON a.application_id = cld.application_id "
                 "WHERE a.submitted_at <= %(cur)s "
@@ -266,22 +322,19 @@ def build_snapshot(conn) -> dict:
             )
             for row in cur.fetchall():
                 if row["d"] in frozen_mix:
-                    frozen_mix[row["d"]] = int(row["n"])
+                    frozen_mix[row["d"]] = int(row["n"] or 0)
                 else:
                     log.warning("frozen disposition not in known set: %r", row["d"])
         frozen_total = sum(frozen_mix.values())
-        # bind_ratio = bound / ALL submissions (frozen), NOT bound/quotes_issued -
-        # quotes are bound-only in this load so that ratio is ~1.0 (ADR 0046).
         bind_ratio = round(frozen_mix["bind"] / frozen_total, 4) if frozen_total else 0
 
-        # total_insured_value: prefer bound policy vehicles; fall back to the
-        # appraised value on submitted applications' vehicles when nothing is
-        # bound. The sibling tiv_basis names which basis produced the number.
+        # total_insured_value: bound policy vehicles (volume-weighted; premium overlay
+        # does NOT touch asset value), else submitted applications' vehicles.
         if bound > 0:
             tiv_basis = "bound"
             tiv = q1(
                 cur,
-                "SELECT COALESCE(SUM(pv.current_appraised_value), 0) AS s "
+                f"SELECT COALESCE(SUM(pv.current_appraised_value * {vol_eff_p}), 0) AS s "
                 "FROM luxauto_policy_vehicle_view pv "
                 "JOIN luxauto_policy_view p ON p.policy_id = pv.policy_id "
                 "WHERE lower(p.effective_range) <= %(cur)s",
@@ -291,7 +344,7 @@ def build_snapshot(conn) -> dict:
             tiv_basis = "submitted"
             tiv = q1(
                 cur,
-                "SELECT COALESCE(SUM(v.current_appraised_value), 0) AS s "
+                f"SELECT COALESCE(SUM(v.current_appraised_value * {vol_sub_a}), 0) AS s "
                 "FROM vehicles v "
                 "JOIN applications a ON a.application_id = v.application_id "
                 "WHERE a.status = 'submitted' AND a.submitted_at <= %(cur)s",
@@ -302,10 +355,14 @@ def build_snapshot(conn) -> dict:
         # NOT luxauto_quote_rating_view.indicative_premium (the un-softened re-rate
         # the hybrid load exists to avoid). Null-safe: AVG over no bound policies
         # -> SQL NULL -> Python None -> JSON null, which the dashboard renders as a dash.
+        # avg_premium (overlay-aware): premium- and volume-weighted mean over revealed
+        # policies = Σ(premium × premium[m] × volume[m]) / Σ(volume[m]). Identity factors
+        # collapse this to the plain AVG(premium_amount).
+        prem_eff = _f("premF", _MI_EFF)
         avg_premium = q1(
             cur,
-            "SELECT ROUND(AVG(premium_amount), 2) AS a FROM luxauto_policy_view "
-            "WHERE lower(effective_range) <= %(cur)s",
+            f"SELECT ROUND(SUM(premium_amount * {prem_eff} * {vol_eff}) / NULLIF(SUM({vol_eff}), 0), 2) AS a "
+            "FROM luxauto_policy_view WHERE lower(effective_range) <= %(cur)s",
             P,
         )["a"]
 
@@ -317,29 +374,32 @@ def build_snapshot(conn) -> dict:
         # non-authoritative - so we never date-filter the claims here. Written GWP is
         # premium_amount off the bound book (NOT indicative_premium). Guarded: if the
         # claims table is absent, emit null rather than a fabricated ratio.
+        # written_gwp (overlay-aware): premium- and volume-weighted. Premium overlay
+        # ripples into the LR DENOMINATOR here (premium↑ -> LR↓). Identity -> plain SUM.
         written_gwp = q1(
             cur,
-            "SELECT ROUND(SUM(premium_amount), 2) AS s FROM luxauto_policy_view "
-            "WHERE lower(effective_range) <= %(cur)s",
+            f"SELECT ROUND(SUM(premium_amount * {prem_eff} * {vol_eff}), 2) AS s "
+            "FROM luxauto_policy_view WHERE lower(effective_range) <= %(cur)s",
             P,
         )["s"]
         incurred_losses = None
         ultimate_loss_ratio = None
         if q1(cur, "SELECT to_regclass('public.canonical_policy_period_claims') IS NOT NULL AS ok")["ok"]:
-            # ULTIMATE incurred over the REVEALED policies: claims are revealed WITH
-            # their policy (effective month <= cursor), NEVER filtered by date_of_loss.
+            # ULTIMATE incurred over the REVEALED policies: claims revealed WITH their
+            # policy (effective month <= cursor), NEVER by date_of_loss. loss overlay
+            # scales the NUMERATOR (loss[m]); volume weights the month slice.
+            loss_eff_p = _f("lossF", _MI_EFF_P)
             incurred_losses = q1(
                 cur,
-                "SELECT ROUND(SUM(c.incurred), 2) AS s "
+                f"SELECT ROUND(SUM(c.incurred * {loss_eff_p} * {vol_eff_p}), 2) AS s "
                 "FROM canonical_policy_period_claims c "
                 "JOIN luxauto_policy_view p ON p.policy_id = c.policy_id "
                 "WHERE lower(p.effective_range) <= %(cur)s",
                 P,
             )["s"]
-            # Gate the headline (tightening #1): suppress until enough policies are
-            # revealed so month-1 small-n (~0.86) can't bounce the tile. incurred_losses
-            # (the $ component) is still emitted for the tooltip.
-            if incurred_losses is not None and written_gwp and bound >= LOSS_RATIO_MIN_REVEALED_BINDS:
+            # Gate the headline (tightening #1) on the PLAIN revealed-bind count so
+            # month-1 small-n (~0.86) can't bounce it; overlays don't change the gate.
+            if incurred_losses is not None and written_gwp and revealed_binds >= LOSS_RATIO_MIN_REVEALED_BINDS:
                 ultimate_loss_ratio = round(float(incurred_losses) / float(written_gwp), 4)
 
         tiles = {
@@ -364,17 +424,17 @@ def build_snapshot(conn) -> dict:
         # (computed once above, shared with bind_ratio so the two cannot disagree).
         mix = dict(frozen_mix)
 
-        # ---- by_state (states with >= 1 application) ---------------------- #
+        # ---- by_state (states with >= 1 application; volume-weighted count) ---- #
         cur.execute(
-            "SELECT garaging_state AS state, count(DISTINCT application_id) AS n "
+            f"SELECT garaging_state AS state, ROUND(SUM({vol_sub}))::bigint AS n "
             "FROM luxauto_insured_view "
             "WHERE garaging_state IS NOT NULL AND submitted_at <= %(cur)s "
-            "GROUP BY garaging_state HAVING count(DISTINCT application_id) >= 1 "
+            "GROUP BY garaging_state HAVING count(*) >= 1 "
             "ORDER BY n DESC, garaging_state",
             P,
         )
         by_state = [
-            {"state": r["state"].strip(), "applications": int(r["n"])}
+            {"state": r["state"].strip(), "applications": int(r["n"] or 0)}
             for r in cur.fetchall()
         ]
 
@@ -384,14 +444,14 @@ def build_snapshot(conn) -> dict:
         # (ADR 0041 STEP THREE addendum). A DISTINCT key from by_state (application
         # counts) - additive, not an overwrite. Counts only; no premium read here.
         cur.execute(
-            "SELECT garaging_state AS state, count(*) AS n "
+            f"SELECT garaging_state AS state, ROUND(SUM({vol_eff}))::bigint AS n "
             "FROM luxauto_policy_view "
             "WHERE garaging_state IS NOT NULL AND lower(effective_range) <= %(cur)s "
             "GROUP BY garaging_state ORDER BY n DESC, garaging_state",
             P,
         )
         by_state_bound = [
-            {"state": r["state"].strip(), "bound_policy_count": int(r["n"])}
+            {"state": r["state"].strip(), "bound_policy_count": int(r["n"] or 0)}
             for r in cur.fetchall()
         ]
 
@@ -418,15 +478,20 @@ def build_snapshot(conn) -> dict:
                 "ORDER BY ri.month_index",
                 P,
             )
-            rate_trend = [
-                {
+            # rate_trend avg_bound_premium takes the premium overlay per month (price
+            # line bends with the scenario); rate_index (softening) is not overlaid.
+            premF = factors["premium"]
+            rate_trend = []
+            for r in cur.fetchall():
+                mi = int(r["month_index"])
+                base_avg = r["avg_bound_premium"]
+                f = premF[mi] if 0 <= mi < len(premF) else 1.0
+                rate_trend.append({
                     "month": r["month"],
-                    "month_index": int(r["month_index"]),
+                    "month_index": mi,
                     "rate_index": _num(r["rate_index"]),
-                    "avg_bound_premium": _num(r["avg_bound_premium"]),
-                }
-                for r in cur.fetchall()
-            ]
+                    "avg_bound_premium": _num(round(float(base_avg) * f, 2) if base_avg is not None else None),
+                })
 
         # ---- states (identity + synthetic flag only) ---------------------- #
         # synthetic is derived in SQL from the honest markers; no rating values.
@@ -603,10 +668,21 @@ def build_snapshot(conn) -> dict:
             "cursor": (_iso(pb_cur) if pb_cur != FAR_FUTURE else None),
         }
 
+        # ---- scenario (ADR 0048): name/label + modeled marker, additive ----- #
+        # is_modeled true => the board shows "scenario · modeled figures" (magnitudes
+        # bent by the overlay); false => plain scenario/playback (pace only). The
+        # synthetic footnote always stays regardless.
+        scenario = {
+            "name": scen_name,
+            "label": scen_label,
+            "is_modeled": bool(scen_is_modeled),
+        }
+
     return {
         "generated_at": _iso(datetime.now(timezone.utc)),
         "tiles": tiles,
         "playback": playback,
+        "scenario": scenario,
         "disposition_mix": mix,
         "by_state": by_state,
         "by_state_bound": by_state_bound,

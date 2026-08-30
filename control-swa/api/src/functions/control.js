@@ -155,13 +155,32 @@ async function writeBlobJson(name, obj) {
   });
 }
 
+// ADR 0048: the set of valid scenario names is the LIVE list the VM agent publishes
+// into status.json (from scenario_defs) - so a scenario added by INSERT is accepted
+// with no code change. This API has NO DB access (bright line); it reads a blob the
+// agent already writes. Falls back to the committed five if status is unavailable.
+async function validScenarioNames() {
+  try {
+    const st = await readBlobJson(STATUS_BLOB);
+    const list = st && Array.isArray(st.scenarios)
+      ? st.scenarios.map((s) => s && s.name).filter(Boolean) : null;
+    if (list && list.length) return list;
+  } catch (_) { /* fall through to the committed five */ }
+  return PRESET_NAMES;
+}
+
+function presetRate(preset) {
+  return (PRESETS[preset] && PRESETS[preset].rate_per_min) || 2.0;
+}
+
 // Read the current desired intent, or a safe default. Validates/repairs fields.
 async function readIntent() {
   const raw = (await readBlobJson(INTENT_BLOB)) || {};
+  const valid = await validScenarioNames();
   const state = raw.state === 'paused' ? 'paused' : 'running';
-  const preset = PRESET_NAMES.includes(raw.preset) ? raw.preset : DEFAULT_PRESET;
+  const preset = valid.includes(raw.preset) ? raw.preset : DEFAULT_PRESET;
   let rate = Number(raw.rate_per_min);
-  if (!Number.isFinite(rate)) rate = PRESETS[preset].rate_per_min;
+  if (!Number.isFinite(rate)) rate = presetRate(preset);
   rate = Math.min(Math.max(rate, RATE_MIN), RATE_MAX);
   return { state, preset, rate_per_min: rate };
 }
@@ -222,8 +241,9 @@ app.http('control-preset', {
     const body = await parseBody(request);
     if (body === null) return json(400, { error: 'bad_json' });
     const preset = body.preset;
-    if (!PRESET_NAMES.includes(preset)) {
-      return json(400, { error: 'unknown_preset', valid: PRESET_NAMES });
+    const valid = await validScenarioNames();
+    if (!valid.includes(preset)) {
+      return json(400, { error: 'unknown_preset', valid });
     }
     try {
       const intent = await readIntent();
@@ -233,7 +253,7 @@ app.http('control-preset', {
       const rate = Number(body.rate_per_min);
       intent.rate_per_min = Number.isFinite(rate)
         ? Math.min(Math.max(rate, RATE_MIN), RATE_MAX)
-        : PRESETS[preset].rate_per_min;
+        : presetRate(preset);
       const out = await writeIntent(intent, auth.principal);
       return json(200, { ok: true, intent: out });
     } catch (err) {
