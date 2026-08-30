@@ -115,6 +115,34 @@ HUMAN_MINUTES_PER_SUBMISSION = 90   # 1.5 hr (human baseline)
 AI_MINUTES_PER_SUBMISSION = 2       # modeled automated pass
 FTE_HOURS_PER_YEAR = 2080           # for the optional human-scale framing
 
+# ---- Playback (ADR 0047): the exporter is cursor-aware ---------------------- #
+# The playback driver advances a single cursor (demo_playback_state.current_position,
+# a timestamptz) and NEVER inserts into the book. Every tile reveals only rows whose
+# authoritative time key <= cursor: applications.submitted_at (app-grain) or
+# lower(effective_range) (policy-grain; == submitted-month for binds, 0 mismatches).
+# Claims are revealed WITH their policy (ultimate development), NEVER by date_of_loss
+# (which runs into 2027 and would recreate the emerged-basis bug killed in STEP FIVE).
+# ADDITIVE/back-compat: if demo_playback_state is absent (or NULL), the cursor is a
+# far-future sentinel so `<= cursor` reveals the whole $71M book == today's snapshot.
+from datetime import datetime as _dt  # noqa: E402  (module already imports datetime)
+FAR_FUTURE = _dt(9999, 12, 31, tzinfo=timezone.utc)
+# The loss-ratio tile stays on the ULTIMATE basis over revealed policies, but is
+# suppressed ("—") until enough policies are revealed: month 1 alone (506 binds)
+# swings LR to ~0.86 (small-n), so the headline would bounce. From ~1,000 revealed
+# binds it settles into a tight 0.52-0.63 band and lands 0.5600 at full playback.
+LOSS_RATIO_MIN_REVEALED_BINDS = 1000
+
+
+def _playback_cursor(cur):
+    """Resolve the playback cursor. Far-future when there is no playback state, so
+    every `<= cursor` filter reveals the whole book (back-compat / full snapshot)."""
+    if not q1(cur, "SELECT to_regclass('public.demo_playback_state') IS NOT NULL AS ok")["ok"]:
+        return FAR_FUTURE
+    row = q1(cur, "SELECT current_position FROM demo_playback_state LIMIT 1")
+    if not row or row["current_position"] is None:
+        return FAR_FUTURE
+    return row["current_position"]
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s dashboard-exporter: %(message)s",
@@ -182,29 +210,46 @@ def q1(cur, sql, params=None):
 # --------------------------------------------------------------------------- #
 def build_snapshot(conn) -> dict:
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        # Playback cursor (ADR 0047). Every tile below reveals only rows with its
+        # authoritative time key <= P["cur"]. Far-future when no playback -> full book.
+        P = {"cur": _playback_cursor(cur)}
+
         # ---- tiles -------------------------------------------------------- #
+        # Revealed applications (app-grain, applications.submitted_at). NULL
+        # submitted_at (unsubmitted drafts) is naturally excluded by `<=`.
         apps_total = q1(
             cur,
-            "SELECT count(DISTINCT application_id) AS n FROM luxauto_insured_view",
+            "SELECT count(*) AS n FROM applications WHERE submitted_at <= %(cur)s",
+            P,
         )["n"]
 
         in_uw = q1(
             cur,
-            "SELECT count(*) AS n FROM luxauto_underwriter_review_view "
-            "WHERE override_status = 'pending'",
+            "SELECT count(*) AS n FROM luxauto_underwriter_review_view v "
+            "WHERE override_status = 'pending' AND EXISTS ("
+            "  SELECT 1 FROM applications a WHERE a.application_id = v.application_id "
+            "    AND a.submitted_at <= %(cur)s)",
+            P,
         )["n"]
 
-        # quotes is empty in this seed -> 0, honestly, not synthesized.
+        # quotes are bound-only in this load; revealed via their application's submitted_at.
         quotes_issued = q1(
             cur,
-            "SELECT count(*) AS n FROM quotes WHERE status IN ('issued','bound')",
+            "SELECT count(*) AS n FROM quotes q WHERE q.status IN ('issued','bound') AND EXISTS ("
+            "  SELECT 1 FROM applications a WHERE a.application_id = q.application_id "
+            "    AND a.submitted_at <= %(cur)s)",
+            P,
         )["n"]
 
         # 'bound' policies. NOTE (STEP 0): policy_status_t has no 'bound' member
         # (its values are active/cancelled/expired/nonrenewed); in this model a
         # policies row exists only once a policy is bound, so the presence of a
-        # luxauto_policy_view row IS the bind. Count those rows.
-        bound = q1(cur, "SELECT count(*) AS n FROM luxauto_policy_view")["n"]
+        # luxauto_policy_view row IS the bind. Count those revealed by effective month.
+        bound = q1(
+            cur,
+            "SELECT count(*) AS n FROM luxauto_policy_view WHERE lower(effective_range) <= %(cur)s",
+            P,
+        )["n"]
 
         # Frozen disposition counts (ADR 0046): the SINGLE source for BOTH the
         # headline disposition_mix and bind_ratio, so the two can never disagree.
@@ -212,8 +257,12 @@ def build_snapshot(conn) -> dict:
         frozen_mix = {"bind": 0, "refer": 0, "decline": 0}
         if q1(cur, "SELECT to_regclass('public.canonical_load_disposition') IS NOT NULL AS ok")["ok"]:
             cur.execute(
-                "SELECT artifact_disposition AS d, count(*) AS n "
-                "FROM canonical_load_disposition GROUP BY artifact_disposition"
+                "SELECT cld.artifact_disposition AS d, count(*) AS n "
+                "FROM canonical_load_disposition cld "
+                "JOIN applications a ON a.application_id = cld.application_id "
+                "WHERE a.submitted_at <= %(cur)s "
+                "GROUP BY cld.artifact_disposition",
+                P,
             )
             for row in cur.fetchall():
                 if row["d"] in frozen_mix:
@@ -234,7 +283,9 @@ def build_snapshot(conn) -> dict:
                 cur,
                 "SELECT COALESCE(SUM(pv.current_appraised_value), 0) AS s "
                 "FROM luxauto_policy_vehicle_view pv "
-                "JOIN luxauto_policy_view p ON p.policy_id = pv.policy_id",
+                "JOIN luxauto_policy_view p ON p.policy_id = pv.policy_id "
+                "WHERE lower(p.effective_range) <= %(cur)s",
+                P,
             )["s"]
         else:
             tiv_basis = "submitted"
@@ -243,7 +294,8 @@ def build_snapshot(conn) -> dict:
                 "SELECT COALESCE(SUM(v.current_appraised_value), 0) AS s "
                 "FROM vehicles v "
                 "JOIN applications a ON a.application_id = v.application_id "
-                "WHERE a.status = 'submitted'",
+                "WHERE a.status = 'submitted' AND a.submitted_at <= %(cur)s",
+                P,
             )["s"]
 
         # avg_premium: the softened WRITTEN premium on bound policies (ADR 0046),
@@ -252,7 +304,9 @@ def build_snapshot(conn) -> dict:
         # -> SQL NULL -> Python None -> JSON null, which the dashboard renders as a dash.
         avg_premium = q1(
             cur,
-            "SELECT ROUND(AVG(premium_amount), 2) AS a FROM luxauto_policy_view",
+            "SELECT ROUND(AVG(premium_amount), 2) AS a FROM luxauto_policy_view "
+            "WHERE lower(effective_range) <= %(cur)s",
+            P,
         )["a"]
 
         # ultimate_loss_ratio (ADR 0044/0046): the AUTHORITATIVE, PC-driving loss
@@ -263,14 +317,29 @@ def build_snapshot(conn) -> dict:
         # non-authoritative - so we never date-filter the claims here. Written GWP is
         # premium_amount off the bound book (NOT indicative_premium). Guarded: if the
         # claims table is absent, emit null rather than a fabricated ratio.
-        written_gwp = q1(cur, "SELECT ROUND(SUM(premium_amount), 2) AS s FROM luxauto_policy_view")["s"]
+        written_gwp = q1(
+            cur,
+            "SELECT ROUND(SUM(premium_amount), 2) AS s FROM luxauto_policy_view "
+            "WHERE lower(effective_range) <= %(cur)s",
+            P,
+        )["s"]
         incurred_losses = None
         ultimate_loss_ratio = None
         if q1(cur, "SELECT to_regclass('public.canonical_policy_period_claims') IS NOT NULL AS ok")["ok"]:
+            # ULTIMATE incurred over the REVEALED policies: claims are revealed WITH
+            # their policy (effective month <= cursor), NEVER filtered by date_of_loss.
             incurred_losses = q1(
-                cur, "SELECT ROUND(SUM(incurred), 2) AS s FROM canonical_policy_period_claims"
+                cur,
+                "SELECT ROUND(SUM(c.incurred), 2) AS s "
+                "FROM canonical_policy_period_claims c "
+                "JOIN luxauto_policy_view p ON p.policy_id = c.policy_id "
+                "WHERE lower(p.effective_range) <= %(cur)s",
+                P,
             )["s"]
-            if incurred_losses is not None and written_gwp:
+            # Gate the headline (tightening #1): suppress until enough policies are
+            # revealed so month-1 small-n (~0.86) can't bounce the tile. incurred_losses
+            # (the $ component) is still emitted for the tooltip.
+            if incurred_losses is not None and written_gwp and bound >= LOSS_RATIO_MIN_REVEALED_BINDS:
                 ultimate_loss_ratio = round(float(incurred_losses) / float(written_gwp), 4)
 
         tiles = {
@@ -299,9 +368,10 @@ def build_snapshot(conn) -> dict:
         cur.execute(
             "SELECT garaging_state AS state, count(DISTINCT application_id) AS n "
             "FROM luxauto_insured_view "
-            "WHERE garaging_state IS NOT NULL "
+            "WHERE garaging_state IS NOT NULL AND submitted_at <= %(cur)s "
             "GROUP BY garaging_state HAVING count(DISTINCT application_id) >= 1 "
-            "ORDER BY n DESC, garaging_state"
+            "ORDER BY n DESC, garaging_state",
+            P,
         )
         by_state = [
             {"state": r["state"].strip(), "applications": int(r["n"])}
@@ -316,8 +386,9 @@ def build_snapshot(conn) -> dict:
         cur.execute(
             "SELECT garaging_state AS state, count(*) AS n "
             "FROM luxauto_policy_view "
-            "WHERE garaging_state IS NOT NULL "
-            "GROUP BY garaging_state ORDER BY n DESC, garaging_state"
+            "WHERE garaging_state IS NOT NULL AND lower(effective_range) <= %(cur)s "
+            "GROUP BY garaging_state ORDER BY n DESC, garaging_state",
+            P,
         )
         by_state_bound = [
             {"state": r["state"].strip(), "bound_policy_count": int(r["n"])}
@@ -341,9 +412,11 @@ def build_snapshot(conn) -> dict:
                 "LEFT JOIN ( "
                 "  SELECT to_char(lower(effective_range),'YYYY-MM') AS ym, "
                 "         ROUND(AVG(premium_amount), 2) AS avg_bound_premium "
-                "  FROM luxauto_policy_view GROUP BY 1 "
+                "  FROM luxauto_policy_view WHERE lower(effective_range) <= %(cur)s GROUP BY 1 "
                 ") pv ON pv.ym = ri.month "
-                "ORDER BY ri.month_index"
+                "WHERE ri.month <= to_char(%(cur)s::timestamptz, 'YYYY-MM') "
+                "ORDER BY ri.month_index",
+                P,
             )
             rate_trend = [
                 {
@@ -402,9 +475,13 @@ def build_snapshot(conn) -> dict:
                 ORDER BY d.created_at DESC
                 LIMIT 1
             ) dr ON true
+            WHERE EXISTS (SELECT 1 FROM applications a
+                          WHERE a.application_id = r.application_id
+                            AND a.submitted_at <= %(cur)s)
             ORDER BY r.evaluated_at DESC
             LIMIT 12
-            """
+            """,
+            P,
         )
         recent = []
         for r in cur.fetchall():
@@ -465,10 +542,11 @@ def build_snapshot(conn) -> dict:
                 ORDER BY ve.year DESC NULLS LAST
                 LIMIT 1
             ) v ON true
-            WHERE i.submitted_at IS NOT NULL
+            WHERE i.submitted_at IS NOT NULL AND i.submitted_at <= %(cur)s
             ORDER BY i.submitted_at DESC
             LIMIT 40
-            """
+            """,
+            P,
         )
         pipeline_events = []
         for r in cur.fetchall():
@@ -516,9 +594,19 @@ def build_snapshot(conn) -> dict:
             "basis": "modeled",
         }
 
+        # ---- playback (ADR 0047): the current reveal cursor, additive ------- #
+        # active=false (cursor far-future / no playback state) means the snapshot is
+        # the full $71M book. When active, cursor is the demo-time position revealed.
+        pb_cur = P["cur"]
+        playback = {
+            "active": pb_cur != FAR_FUTURE,
+            "cursor": (_iso(pb_cur) if pb_cur != FAR_FUTURE else None),
+        }
+
     return {
         "generated_at": _iso(datetime.now(timezone.utc)),
         "tiles": tiles,
+        "playback": playback,
         "disposition_mix": mix,
         "by_state": by_state,
         "by_state_bound": by_state_bound,

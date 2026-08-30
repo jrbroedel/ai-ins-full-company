@@ -845,6 +845,22 @@ def _interruptible_sleep(seconds: float) -> None:
 
 
 def run_loop() -> int:
+    # RETIRED (ADR 0047). Fabrication is replaced by PLAYBACK: the frozen $71M
+    # canonical book (ADR 0046) is the source of truth and is revealed over demo-time
+    # by scripts/lib/playback_driver.py advancing a cursor - nothing is ever inserted,
+    # so the book cannot be polluted and every tile foots to the artifact at all times.
+    # This write path (materialize -> submit_application -> create_quote, the last an
+    # UN-softened re-rate that grew the book past $71M) is disabled so it can never run,
+    # even if this module's systemd unit is unmasked by mistake. The module's guard/
+    # connect/_counts/PRESETS constants remain for the control agent to import.
+    raise SystemExit(
+        "RETIRED: the synthetic generator's fabrication loop is disabled (ADR 0047). "
+        "The demo now runs on PLAYBACK of the frozen $71M book - use the playback "
+        "driver (scripts/playback-driver.sh); this INSERT path is retired so the "
+        "canonical load cannot be polluted."
+    )
+
+    # --- unreachable below (kept for history; never executes) ---
     signal.signal(signal.SIGTERM, _handle_stop)
     signal.signal(signal.SIGINT, _handle_stop)
 
@@ -1012,9 +1028,17 @@ def _run(cmd, label) -> None:
 
 
 def reprovision(assume_yes: bool) -> int:
-    """The one destructive path: a full re-provision of luxauto_demo from the
-    existing sanctioned scripts, verbatim. Authors no new DDL, disables no audit
-    trigger, uses no session_replication_role, touches only luxauto_demo."""
+    """DISABLED (ADR 0047). This path DROP SCHEMAs luxauto_demo and rebuilds it to the
+    CURATED 5-app seed - which would DESTROY the frozen $71M canonical load (ADR 0046).
+    Under playback, Reset REWINDS the cursor (scripts/playback-driver.sh --rewind), it
+    never rebuilds the DB. This destructive path is retired so it can never run."""
+    raise SystemExit(
+        "DISABLED: --reprovision DROPs and rebuilds luxauto_demo to the curated seed, "
+        "which would destroy the canonical $71M load (ADR 0046/0047). Reset now REWINDS "
+        "the playback cursor instead (scripts/playback-driver.sh --rewind). This "
+        "destructive path is retired and no longer executes."
+    )
+    # --- unreachable below (kept for history; never executes) ---
     if not assume_yes:
         raise SystemExit(
             "REFUSING: --reprovision is destructive (it DROPs and rebuilds all of "

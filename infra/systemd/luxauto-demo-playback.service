@@ -1,0 +1,43 @@
+# Supervision unit for the investor-demo PLAYBACK driver (ADR 0047).
+#
+# Long-lived Service (not a timer): a continuous loop that advances one cursor row
+# (demo_playback_state) so the read-only exporter reveals the frozen $71M book over
+# demo-time. It NEVER inserts into the book - its only write is that one cursor row -
+# so a relaunch on reboot is harmless (unlike the retired fabricator, whose write +
+# DROP-reprovision path is why THAT unit is masked). Safe to enable.
+#
+# Runs as azureuser (the identity whose managed identity holds the Key Vault access
+# this job needs), same as the exporter and the former generator.
+#
+# Install / enable:
+#   sudo cp infra/systemd/luxauto-demo-playback.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now luxauto-demo-playback.service
+#
+# Retire the old fabricator alongside it (stop + disable + MASK so its write+DROP
+# path can never auto-start, including on reboot):
+#   sudo systemctl stop luxauto-synthetic-generator.service
+#   sudo systemctl disable luxauto-synthetic-generator.service
+#   sudo systemctl mask luxauto-synthetic-generator.service
+
+[Unit]
+Description=luxauto demo playback driver (reveals the frozen $71M book over demo-time; read-only except one cursor row)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=azureuser
+WorkingDirectory=/home/azureuser/ai-ins-full-company
+ExecStart=/home/azureuser/ai-ins-full-company/scripts/playback-driver.sh
+# Keep the loop alive across transient faults; the driver reconnects on a dropped
+# DB connection on its own, so a restart here is only for a hard crash.
+Restart=always
+RestartSec=5
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

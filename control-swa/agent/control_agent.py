@@ -87,10 +87,12 @@ STATUS_BLOB = "status.json"
 
 CONTROL_FILE = sg.CONTROL_FILE
 NONCE_STATE_FILE = os.path.join(os.path.dirname(CONTROL_FILE), ".last-reset-nonce")
-GENERATOR_UNIT = "luxauto-synthetic-generator.service"
-REPROVISION_CMD = [
-    os.path.join(_REPO_ROOT, "scripts", "synthetic-generator.sh"),
-    "--reprovision", "--yes",
+# ADR 0047: the live component is the PLAYBACK driver, and Reset REWINDS the cursor -
+# NOT the retired DROP/reprovision (which would destroy the canonical $71M load).
+PLAYBACK_UNIT = "luxauto-demo-playback.service"
+REWIND_CMD = [
+    os.path.join(_REPO_ROOT, "scripts", "playback-driver.sh"),
+    "--rewind",
 ]
 
 _STOP = False
@@ -263,15 +265,17 @@ def maybe_run_reset(container):
     except Exception:
         pass
 
-    log.warning("running sanctioned reprovision: %s", " ".join(REPROVISION_CMD))
-    proc = subprocess.run(REPROVISION_CMD, cwd=_REPO_ROOT, env=os.environ.copy(),
+    # ADR 0047: Reset == REWIND the playback cursor to the start (empty board), a tiny
+    # one-row UPDATE. It NEVER drops/reprovisions - the book is untouched.
+    log.warning("running playback rewind: %s", " ".join(REWIND_CMD))
+    proc = subprocess.run(REWIND_CMD, cwd=_REPO_ROOT, env=os.environ.copy(),
                           capture_output=True, text=True)
     tail = "\n".join(((proc.stdout or "") + (proc.stderr or "")).strip().splitlines()[-8:])
     if proc.returncode == 0:
-        log.info("reprovision OK (nonce %s)", nonce)
+        log.info("rewind OK (nonce %s)", nonce)
         _last_reset = {"nonce": nonce, "status": "ok", "at": _now_iso(), "detail_tail": tail}
     else:
-        log.error("reprovision FAILED rc=%s (nonce %s)", proc.returncode, nonce)
+        log.error("rewind FAILED rc=%s (nonce %s)", proc.returncode, nonce)
         _last_reset = {"nonce": nonce, "status": "failed", "at": _now_iso(),
                        "detail_tail": tail}
     _write_last_nonce(nonce)  # processed either way; never loop on one request
@@ -283,7 +287,7 @@ def maybe_run_reset(container):
 def generator_liveness():
     # Prefer systemd if the unit is installed; fall back to a process check.
     try:
-        r = subprocess.run(["systemctl", "is-active", GENERATOR_UNIT],
+        r = subprocess.run(["systemctl", "is-active", PLAYBACK_UNIT],
                            capture_output=True, text=True)
         state = (r.stdout or "").strip()
         if state in ("active", "activating"):
@@ -293,7 +297,7 @@ def generator_liveness():
     except Exception:
         pass
     try:
-        r = subprocess.run(["pgrep", "-f", "synthetic_generator.py"],
+        r = subprocess.run(["pgrep", "-f", "playback_driver.py"],
                            capture_output=True, text=True)
         return {"alive": bool(r.stdout.strip()), "method": "pgrep"}
     except Exception:
