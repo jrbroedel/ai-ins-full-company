@@ -275,6 +275,22 @@ def build_snapshot(conn) -> dict:
             for r in cur.fetchall()
         ]
 
+        # ---- by_state_bound (BOUND-policy count per garaging state, ADR 0046) --- #
+        # The risk-footprint tile colors states by bound-policy count off the frozen
+        # bound book (luxauto_policy_view), with FIXED frozen bin edges in the frontend
+        # (ADR 0041 STEP THREE addendum). A DISTINCT key from by_state (application
+        # counts) - additive, not an overwrite. Counts only; no premium read here.
+        cur.execute(
+            "SELECT garaging_state AS state, count(*) AS n "
+            "FROM luxauto_policy_view "
+            "WHERE garaging_state IS NOT NULL "
+            "GROUP BY garaging_state ORDER BY n DESC, garaging_state"
+        )
+        by_state_bound = [
+            {"state": r["state"].strip(), "bound_policy_count": int(r["n"])}
+            for r in cur.fetchall()
+        ]
+
         # ---- states (identity + synthetic flag only) ---------------------- #
         # synthetic is derived in SQL from the honest markers; no rating values.
         cur.execute(
@@ -421,6 +437,7 @@ def build_snapshot(conn) -> dict:
         "tiles": tiles,
         "disposition_mix": mix,
         "by_state": by_state,
+        "by_state_bound": by_state_bound,
         "states": states,
         "recent_activity": recent,
         "pipeline_events": pipeline_events,

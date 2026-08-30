@@ -215,3 +215,28 @@ changed 7-key → 3-key, consumed only by the donut). `quotes_issued == bound ==
 accepted bound-only shape and was left as-is. The frontend also relabels were already present
 (Submissions / Underwriting[simulated] / Refer to Underwriting); the synthetic + simulated markers
 remain visible per the third-party-surface rule.
+
+## Addendum (2026-08-30) — risk-colored state footprint (ADR 0046 STEP THREE)
+
+The "National Footprint" tile now colors each state by **BOUND-POLICY COUNT** (off the frozen bound
+book `luxauto_policy_view`), replacing the prior application-count / 3-live-ratio-bin shading. The
+exporter adds a DISTINCT key `by_state_bound` (`{state, bound_policy_count}`, 50 states, Σ = 7,655);
+`by_state` (application counts) is unchanged, and `snapshot.js` needed no change (verbatim
+passthrough). Counts only — no premium read.
+
+**FIXED, FROZEN bin edges** (5 bins), derived ONCE from this book's per-state bound distribution and
+**hard-coded in the frontend `riskBin()` — never recomputed live** (the frozen-facts rule, ADR 0043/0046):
+
+| Bin | Label | Bound-count edge | States on this book |
+|---|---|---|---|
+| 1 | Lowest | ≤104 | 9 |
+| 2 | Low | 105–115 | 9 |
+| 3 | Medium | 116–136 | 20 |
+| 4 | Elevated | 137–249 | 8 (actual 212–239) |
+| 5 | Highest | ≥250 | 4 (FL 334 / NY 365 / TX 384 / CA 447) |
+
+Edges sit on the **natural breaks of the bimodal distribution** (the generator's populous-boost): the
+empty 137–211 gap is the Medium/Elevated boundary so nothing straddles it, and the big-4 isolate as
+Highest. Populations 9/9/20/8/4 are unequal **by design** — fixed thresholds on bimodal data, not
+equal-population quantiles. A 5-swatch legend (Lowest→Highest with ranges) and per-state tooltips
+("STATE · N bound policies") were added; the synthetic marker stays on the caption + footnote.
