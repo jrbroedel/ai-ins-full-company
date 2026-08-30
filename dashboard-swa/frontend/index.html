@@ -127,7 +127,7 @@
   .echk.done .box{background:rgba(107,124,146,.25)}
 
   /* ---- Band: totals ---- */
-  .totals{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:20px}
+  .totals{display:grid;grid-template-columns:repeat(8,1fr);gap:12px;margin-bottom:20px}
   .tile{
     background:var(--ground-2);border:1px solid var(--line);border-radius:var(--radius);
     padding:15px 16px;position:relative;overflow:hidden;
@@ -270,12 +270,13 @@
   <!-- TOTALS -->
   <section class="totals">
     <div class="tile"><div class="label">Applications</div><div class="val" id="t-apps">—</div><div class="delta">submitted to date</div></div>
-    <div class="tile"><div class="label">In Underwriting</div><div class="val" id="t-uw">18</div><div class="delta">awaiting review</div></div>
+    <div class="tile"><div class="label">Flagged for Review</div><div class="val" id="t-uw">18</div><div class="delta">awaiting review</div></div>
     <div class="tile"><div class="label">Quotes Issued</div><div class="val" id="t-quotes">31</div><div class="delta">indicative premiums</div></div>
     <div class="tile"><div class="label">Bind Ratio</div><div class="val" id="t-bind">—</div><div class="delta">bound / all submissions</div></div>
     <div class="tile"><div class="label">Bound</div><div class="val" id="t-bound">19</div><div class="delta">policies in force</div></div>
     <div class="tile"><div class="label">Total Insured Value</div><div class="val small" id="t-tiv">$14.9M</div><div class="delta">across active book</div></div>
     <div class="tile"><div class="label">Avg Premium</div><div class="val small" id="t-avg">—</div><div class="delta">written · annual (bound)</div></div>
+    <div class="tile"><div class="label">Loss Ratio</div><div class="val" id="t-lr">—</div><div class="delta">ultimate · incurred ÷ written</div></div>
   </section>
 
   <!-- RATE TREND -->
@@ -440,6 +441,12 @@ function renderTiles(t){
   document.getElementById("t-bind").textContent = ((t.bind_ratio || 0) * 100).toFixed(1) + "%";
   document.getElementById("t-tiv").textContent = moneyK(t.total_insured_value);
   document.getElementById("t-avg").textContent = money(t.avg_premium);
+  // Loss Ratio: the ULTIMATE, PC-driving figure (incurred / written, all claims to full
+  // development) - NOT the emerged-to-date basis. Tooltip ties it to the deck's 0.5600.
+  const lrEl=document.getElementById("t-lr");
+  lrEl.textContent = (t.ultimate_loss_ratio==null) ? "—" : (t.ultimate_loss_ratio*100).toFixed(1)+"%";
+  if(t.ultimate_loss_ratio!=null && t.incurred_losses!=null && t.written_gwp!=null)
+    lrEl.title = `${moneyK(t.incurred_losses)} incurred ÷ ${moneyK(t.written_gwp)} written = ${t.ultimate_loss_ratio.toFixed(4)} · ultimate (full development), not emerged-to-date`;
 }
 
 // ---------- disposition donut (FROZEN verdict: bind / refer / decline) ----------

@@ -243,6 +243,24 @@ def build_snapshot(conn) -> dict:
             "SELECT ROUND(AVG(premium_amount), 2) AS a FROM luxauto_policy_view",
         )["a"]
 
+        # ultimate_loss_ratio (ADR 0044/0046): the AUTHORITATIVE, PC-driving loss
+        # ratio = Σ incurred (ALL 453 claims to full development, loss dates run into
+        # 2027) / written GWP. This is the deck's 0.5600. It is DELIBERATELY NOT the
+        # emerged-to-date basis (losses inside the 12-month window / cumulative GWP
+        # ~0.30, = monthly_aggregates.cumulative_loss_ratio) which ADR 0044 marks
+        # non-authoritative - so we never date-filter the claims here. Written GWP is
+        # premium_amount off the bound book (NOT indicative_premium). Guarded: if the
+        # claims table is absent, emit null rather than a fabricated ratio.
+        written_gwp = q1(cur, "SELECT ROUND(SUM(premium_amount), 2) AS s FROM luxauto_policy_view")["s"]
+        incurred_losses = None
+        ultimate_loss_ratio = None
+        if q1(cur, "SELECT to_regclass('public.canonical_policy_period_claims') IS NOT NULL AS ok")["ok"]:
+            incurred_losses = q1(
+                cur, "SELECT ROUND(SUM(incurred), 2) AS s FROM canonical_policy_period_claims"
+            )["s"]
+            if incurred_losses is not None and written_gwp:
+                ultimate_loss_ratio = round(float(incurred_losses) / float(written_gwp), 4)
+
         tiles = {
             "applications_total": int(apps_total),
             "in_underwriting": int(in_uw),
@@ -252,6 +270,9 @@ def build_snapshot(conn) -> dict:
             "total_insured_value": _num(tiv),
             "tiv_basis": tiv_basis,
             "avg_premium": _num(avg_premium),
+            "ultimate_loss_ratio": _num(ultimate_loss_ratio),
+            "incurred_losses": _num(incurred_losses),
+            "written_gwp": _num(written_gwp),
         }
 
         # ---- disposition_mix (FROZEN verdict bind/refer/decline, ADR 0046) --- #

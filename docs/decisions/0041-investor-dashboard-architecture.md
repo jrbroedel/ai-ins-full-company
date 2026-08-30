@@ -268,3 +268,32 @@ at month 1: **modeled rate (price/risk)** and **realized average bound premium**
   green) — a falling line in that green would read as green-going-down-is-bad, and a
   softening-market average is neutral data, not a bad outcome. Caption carries the honesty framing
   (price −24% vs realized −29% is MIX, not a 29% price cut) and the synthetic marker.
+
+## Addendum (2026-08-30) — loss-ratio tile (ADR 0046 STEP FIVE; cross-ref 0044)
+
+An eighth totals tile shows the **ULTIMATE loss ratio 56.0%** — the PC-driving, deck-reconciling
+figure. **Ultimate, NOT emerged** (the landmine of this step): the book carries two loss ratios far
+apart —
+- **Ultimate 0.5600** = Σ incurred ($39,928,679.10, all 453 claims to full development; loss dates
+  run into 2027) ÷ written GWP ($71,301,212.64). Authoritative, matches `summary.loss_ratio` and
+  Kent's deck.
+- **Emerged-to-date ~0.30** = only losses whose date-of-loss falls inside the 12-month operating
+  window ÷ cumulative GWP = `monthly_aggregates[].cumulative_loss_ratio`, explicitly
+  non-authoritative (ADR 0044). Showing it as the headline would drop the PC band 10%→30% and
+  contradict the deck.
+
+Exporter adds `tiles.ultimate_loss_ratio = ROUND(SUM(incurred)/SUM(premium_amount), 4)` off
+`canonical_policy_period_claims` + `luxauto_policy_view` — **no date filter**, so it can never become
+the emerged basis; `premium_amount` (written), never `indicative_premium`; plus `incurred_losses` and
+`written_gwp` for the tooltip. Guarded (null if the claims table is absent). Verified 0.5600 to 4dp
+vs direct SQL; confirmed the snapshot carries **no bare/emerged `loss_ratio` key** the tile could
+mis-bind to. The tile renders "56.0%" (board % convention), sub-label "ultimate · incurred ÷
+written", tooltip "$39.9M incurred ÷ $71.3M written = 0.5600 · ultimate (full development), not
+emerged-to-date". The totals grid went `repeat(7)`→`repeat(8)`; the ≤1200px 3-col reflow is
+unchanged. `snapshot.js` untouched (verbatim passthrough).
+
+The "In Underwriting" tile was relabeled **"Flagged for Review"** (value/source unchanged, still the
+engine MANUAL_REVIEW_REQUIRED count 2,528 off the review view) to disambiguate it from the donut's
+"Referred to underwriting" slice (the frozen refer OUTCOME, 789). The tile is an engine ACTION
+(submissions the AI routed to a human); the donut is the frozen final disposition — both correct, but
+the near-identical wording implied a reconciliation that doesn't exist (cross-ref 0046 STEP 0).
