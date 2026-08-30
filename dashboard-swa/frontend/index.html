@@ -189,6 +189,16 @@
   .trendbox svg{width:100%;height:auto;display:block}
   .trend-cap{font-size:10.5px;color:var(--faint);margin-top:10px}
 
+  /* time saved (MODELED estimate - deliberately set apart from the measured KPI strip) */
+  .efficiency{margin-bottom:20px}
+  .eff-panel{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+  .eff-headline{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .eff-mult{font-family:'Fraunces',serif;font-size:34px;font-weight:600;color:var(--brass);line-height:1}
+  .eff-mult-label{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .eff-detail{text-align:right}
+  .eff-hours{font-family:'Fraunces',serif;font-size:20px;color:var(--ivory);line-height:1.1}
+  .eff-sub{font-size:10.5px;color:var(--faint);margin-top:4px}
+
   /* feed */
   .feed{display:flex;flex-direction:column;gap:0;max-height:300px;overflow:hidden}
   .fitem{display:flex;gap:11px;padding:10px 0;border-bottom:1px solid var(--line);animation:cardin .5s ease}
@@ -278,6 +288,18 @@
     <div class="tile"><div class="label">Avg Premium</div><div class="val small" id="t-avg">—</div><div class="delta">written · annual (bound)</div></div>
     <div class="tile"><div class="label">Loss Ratio</div><div class="val" id="t-lr">—</div><div class="delta">ultimate · incurred ÷ written</div></div>
   </section>
+
+  <!-- TIME SAVED (modeled) -->
+  <section class="efficiency"><div class="panel eff-panel">
+    <div class="eff-headline">
+      <span class="eff-mult" id="ts-mult">—</span>
+      <span class="eff-mult-label">less underwriting labor than manual</span>
+    </div>
+    <div class="eff-detail">
+      <div class="eff-hours" id="ts-hours">—</div>
+      <div class="eff-sub" id="ts-sub">modeled estimate</div>
+    </div>
+  </div></section>
 
   <!-- RATE TREND -->
   <section class="trend"><div class="panel">
@@ -531,6 +553,26 @@ function renderMap(){
   document.getElementById("mapbox").innerHTML=svg;
 }
 
+// ---------- time saved (MODELED estimate, not a measured DB fact) ----------
+// Headline is the LABOR multiple (90 min human / 2 min AI = 45x) - deliberately
+// "less underwriting labor", NOT "faster": it's a throughput/effort ratio, not a
+// wall-clock latency claim. All values derive from snapshot.time_saving, which the
+// exporter computes from the live applications_total. The visible sub-label AND the
+// tooltip both carry the "modeled" qualifier, on top of the board's synthetic footnote.
+function renderEfficiency(ts){
+  if(!ts) return;
+  set("ts-mult", ts.multiple!=null ? ts.multiple+"×" : "—");
+  set("ts-hours", ts.hours_saved!=null
+    ? "≈"+Math.round(ts.hours_saved).toLocaleString()+" underwriting-hours saved" : "—");
+  const hrHuman = (ts.human_minutes_per_submission!=null) ? ts.human_minutes_per_submission/60 : null;
+  set("ts-sub", (hrHuman!=null && ts.submissions!=null)
+    ? `modeled · ${hrHuman} hr human vs ~${ts.ai_minutes_per_submission} min AI · ${ts.submissions.toLocaleString()} submissions`
+    : "modeled estimate");
+  const el=document.getElementById("ts-hours");
+  if(el && ts.human_hours!=null && ts.ai_hours!=null)
+    el.title = `${Math.round(ts.human_hours).toLocaleString()} human-hours (~${ts.human_fte_years} FTE-years) vs ${Math.round(ts.ai_hours).toLocaleString()} automated · modeled estimate`;
+}
+
 // ---------- rate trend (two lines, indexed to 100 at month 1) ----------
 // Line 1 modeled rate = softening index; Line 2 realized = avg bound premium. BOTH
 // normalized to 100 at month 1 so the ~-24% price vs ~-29% realized gap shows on one
@@ -655,6 +697,7 @@ function renderAll(){
   renderFeed(snapshot.recent_activity);
   renderMap();
   renderTrend();
+  renderEfficiency(snapshot.time_saving);
 }
 
 // ---------- clock + freshness ----------

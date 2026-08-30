@@ -297,3 +297,30 @@ engine MANUAL_REVIEW_REQUIRED count 2,528 off the review view) to disambiguate i
 "Referred to underwriting" slice (the frozen refer OUTCOME, 789). The tile is an engine ACTION
 (submissions the AI routed to a human); the donut is the frozen final disposition — both correct, but
 the near-identical wording implied a reconciliation that doesn't exist (cross-ref 0046 STEP 0).
+
+## Addendum (2026-08-30) — time-saving panel (ADR 0046 STEP SIX, final tile)
+
+A compact "Time Saved" panel (its own `.panel`, set apart from the measured KPI strip) shows the
+underwriting-labor saved by automation across the whole book. **This is a MODELED/illustrative
+estimate, NOT a measured DB fact** — the one number on the board that isn't measured, so it carries
+its own explicit "modeled" qualifier IN ADDITION to the board's synthetic footnote (deliberate
+double-labeling).
+
+- **Assumptions (named, parameterized in the exporter for one-line retuning):**
+  `HUMAN_MINUTES_PER_SUBMISSION = 90` (Kent's 1.5 hr/car human baseline) and
+  `AI_MINUTES_PER_SUBMISSION = 2` (a conservative modeled end-to-end automated pass —
+  intake + enrichment latency + referral eval + rating + quote — NOT a measured runtime).
+- **Denominator = ALL submissions** (a human reviews every car, not just binds), read from the LIVE
+  `applications_total`, never hard-coded, so the saving scales with volume.
+- **Exporter** emits additive `time_saving = {submissions, human/ai minutes, human_hours, ai_hours,
+  hours_saved, human_fte_years, multiple, basis:"modeled"}`. On the frozen 10,500-book:
+  human 15,750 h / AI 350 h / **saved 15,400 h** / **45×** labor ratio / ~7.6 FTE-years. Counts
+  only, no premium read; `snapshot.js` untouched (verbatim passthrough).
+- **Frontend** headline is **"45×"** with the label **"less underwriting labor than manual"** —
+  deliberately NOT "faster": 45× is a throughput/effort ratio (90 min vs 2 min per file), and
+  "faster" would imply a wall-clock latency claim this tile does not measure. Secondary line
+  "≈15,400 underwriting-hours saved"; sub-label "modeled · 1.5 hr human vs ~2 min AI · 10,500
+  submissions"; tooltip "15,750 human-hours (~7.6 FTE-years) vs 350 automated · modeled estimate".
+
+This is the final dashboard tile of the refresh; AI SHAP is a separate scoping conversation
+(real-ML-vs-representation), not bolted on here.

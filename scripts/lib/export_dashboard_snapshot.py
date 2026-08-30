@@ -103,6 +103,18 @@ REFERRAL_ACTIONS = [
     "HARD_DECLINE_COMPLIANCE",
 ]
 
+# Time-saving tile: a MODELED comparison (NOT a measured runtime). Both constants are
+# named + parameterized here so retuning the appetite knobs is a one-line edit.
+#   - HUMAN: Kent's figure for a human underwriter to work one car end-to-end.
+#   - AI: a conservative, defensible modeled end-to-end automated pass (intake +
+#     enrichment latency + referral eval + rating + quote). NOT a measured latency.
+# Applied to ALL submissions (a human reviews every car that comes in, not just binds),
+# so both sides are apples-to-apples. The denominator is read from the live
+# applications_total, never hard-coded, so the saving scales if volume ever changes.
+HUMAN_MINUTES_PER_SUBMISSION = 90   # 1.5 hr (human baseline)
+AI_MINUTES_PER_SUBMISSION = 2       # modeled automated pass
+FTE_HOURS_PER_YEAR = 2080           # for the optional human-scale framing
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s dashboard-exporter: %(message)s",
@@ -484,6 +496,26 @@ def build_snapshot(conn) -> dict:
                 }
             )
 
+        # ---- time_saving (MODELED comparison, ADR 0046 STEP SIX) ------------- #
+        # Underwriting time saved by automation across the whole book. Derived from
+        # the LIVE applications_total (never hard-coded) and the two named modeled
+        # constants above, so it scales with volume. basis='modeled' is explicit:
+        # the AI minutes are a defensible assumption, NOT a measured runtime.
+        ts_subs = int(apps_total)
+        ts_human_hours = round(ts_subs * HUMAN_MINUTES_PER_SUBMISSION / 60, 1)
+        ts_ai_hours = round(ts_subs * AI_MINUTES_PER_SUBMISSION / 60, 1)
+        time_saving = {
+            "submissions": ts_subs,
+            "human_minutes_per_submission": HUMAN_MINUTES_PER_SUBMISSION,
+            "ai_minutes_per_submission": AI_MINUTES_PER_SUBMISSION,
+            "human_hours": ts_human_hours,
+            "ai_hours": ts_ai_hours,
+            "hours_saved": round(ts_human_hours - ts_ai_hours, 1),
+            "human_fte_years": round(ts_human_hours / FTE_HOURS_PER_YEAR, 1),
+            "multiple": round(HUMAN_MINUTES_PER_SUBMISSION / AI_MINUTES_PER_SUBMISSION),
+            "basis": "modeled",
+        }
+
     return {
         "generated_at": _iso(datetime.now(timezone.utc)),
         "tiles": tiles,
@@ -491,6 +523,7 @@ def build_snapshot(conn) -> dict:
         "by_state": by_state,
         "by_state_bound": by_state_bound,
         "rate_trend": rate_trend,
+        "time_saving": time_saving,
         "states": states,
         "recent_activity": recent,
         "pipeline_events": pipeline_events,
