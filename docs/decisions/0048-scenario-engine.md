@@ -85,3 +85,27 @@ surviving a from-scratch rebuild until promoted into `scenario_seed.py`.
   with no code change (and exercised `volume`).
 - Activation remains a SEPARATE deploy step (ADR 0047): restart the exporter onto this code, install +
   enable the playback unit, stop/disable/mask the generator, redeploy the control + dashboard SWAs.
+
+## Addendum (2026-08-30) — cursor-ownership fix + activation-checklist lesson
+
+Go-live (STEP 5) surfaced two things:
+
+1. **Driver cursor-ownership bug (fixed).** `playback_driver.run_loop` kept the cursor position in an
+   in-memory `pos` and never re-read `demo_playback_state.current_position`, so the standalone
+   `--rewind` process the agent spawns for Reset was **clobbered within ~1 tick** by the loop's own
+   `set_position(conn, pos, …)` (the paused/running/full branches). Result: Reset=rewind and
+   pause-then-rewind (park) did not stick — the board would not empty. (Data safety was never at risk:
+   Reset runs rewind, never reprovision; book counts stayed 10,500/7,655/$71.3M.) **Fix — make the DB the
+   source of truth:** the loop now re-reads `current_position` at the TOP of every tick (`read_position`,
+   one small SELECT); RUNNING advances from the DB value and writes it back (so a reset while running
+   rewinds then replays forward — expected); PAUSED and full-idle hold the DB position and write ONLY
+   mode+scenario (`set_scenario`, never the position) so an external rewind sticks while the scenario
+   still follows a preset switch for the overlay. Verified: park sticks at 2025-07-31 across many ticks;
+   reset-while-running rewinds→replays; play still foots to the artifact to the cent; pause freezes;
+   book unchanged. Only `scripts/lib/playback_driver.py` changed.
+
+2. **Activation checklist lesson.** The go-live activation restarted the exporter and installed the
+   playback unit but **left the control-agent running its old (pre-0047/0048) code** — so Reset still
+   pointed at reprovision and `status.json` carried no scenario list. Activation MUST also
+   `systemctl restart luxauto-demo-control-agent` (it runs the modified `control_agent.py`), not just
+   the exporter. Add it to the activation runbook.

@@ -163,6 +163,29 @@ def set_position(conn, pos: datetime, mode: str, scenario: str) -> None:
     conn.commit()
 
 
+def read_position(conn) -> datetime:
+    """Re-read the cursor from the DB - the SOURCE OF TRUTH each tick. The driver's
+    in-memory position is derived, never authoritative across ticks, so an external
+    write (the agent's standalone --rewind) is honored instead of being clobbered."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT current_position FROM demo_playback_state WHERE id")
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def set_scenario(conn, mode: str, scenario: str) -> None:
+    """Update mode + scenario ONLY, leaving current_position untouched, so a paused
+    (or full-idle) tick never rewrites the cursor - an external rewind sticks. The
+    scenario still follows a preset switch so the exporter's overlay keeps up."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE demo_playback_state SET mode = %s, scenario = %s, "
+            "updated_at = now() WHERE id",
+            (mode, scenario),
+        )
+    conn.commit()
+
+
 def scenario_pace(conn, name: str) -> dict:
     """Read the active scenario's pace JSON from scenario_defs; default if absent."""
     with conn.cursor() as cur:
@@ -277,37 +300,39 @@ def run_loop() -> int:
         elapsed = now - last_tick
         last_tick = now
 
-        if ctrl["state"] == "paused":
-            if last_state != "paused":
-                log.info("state -> paused: clock frozen at %s (board holds; nothing written)",
-                         _fmt(pos))
-            last_state = "paused"
-            # Keep the scenario name current even while paused, so the exporter's overlay
-            # follows a preset switch without waiting for the clock to advance.
-            try:
-                set_position(conn, pos, "paused", scenario)
-            except Exception:
-                pass
-            _sleep(TICK_SECONDS)
-            continue
-        if last_state != "running":
-            log.info("state -> running: revealing from %s", _fmt(pos))
-        last_state = "running"
-
-        # Advance the cursor by elapsed real-time * speed, clamped at the window end.
+        # THE FIX (cursor ownership): re-read current_position from the DB every tick.
+        # The DB row is the source of truth; in-memory position is derived, never
+        # authoritative across ticks - so an external write (the agent's standalone
+        # --rewind) is honored, not clobbered. All DB work is wrapped so a dropped
+        # connection reconnects on the next tick instead of silently stalling.
         try:
-            if pos < WINDOW_END:
-                pos = min(pos + timedelta(days=days_per_second(pace, ctrl["rate_per_min"], pos) * elapsed), WINDOW_END)
-                mode = "full" if pos >= WINDOW_END else "playing"
-                set_position(conn, pos, mode, scenario)
-                if mode == "full":
-                    log.info("reached window end -> full book revealed; idling until rewind")
+            pos = read_position(conn)
+            if pos is None:                    # row vanished somehow -> re-seed
+                pos = ensure_state(conn)
+
+            if ctrl["state"] == "paused":
+                if last_state != "paused":
+                    log.info("state -> paused: clock frozen at %s (board holds)", _fmt(pos))
+                last_state = "paused"
+                # Hold EXACTLY the DB position (do NOT rewrite it): update only mode +
+                # scenario, so a pause-then-rewind (park) sticks while the scenario still
+                # follows a preset switch for the exporter's overlay.
+                set_scenario(conn, "paused", scenario)
             else:
-                # Already full; keep the scenario name current (overlay follows a switch).
-                set_position(conn, pos, "full", scenario)
+                if last_state != "running":
+                    log.info("state -> running: revealing from %s", _fmt(pos))
+                last_state = "running"
+                if pos < WINDOW_END:
+                    pos = min(pos + timedelta(days=days_per_second(pace, ctrl["rate_per_min"], pos) * elapsed), WINDOW_END)
+                    mode = "full" if pos >= WINDOW_END else "playing"
+                    set_position(conn, pos, mode, scenario)   # advanced-from-DB value
+                    if mode == "full":
+                        log.info("reached window end -> full book revealed; idling until rewind")
+                else:
+                    # Already full: keep scenario/mode current WITHOUT rewriting position,
+                    # so an external rewind at full is not clobbered (next tick replays).
+                    set_scenario(conn, "full", scenario)
         except (psycopg2.OperationalError, psycopg2.InterfaceError) as exc:
-            # Connection dropped (the old fabricator's silent-freeze failure mode).
-            # Reconnect on the next tick; NEVER let the cursor silently stall.
             log.error("DB connection error (%s); reconnecting next tick", exc)
             try:
                 conn.close()
@@ -322,13 +347,13 @@ def run_loop() -> int:
         if conn is None and not _STOP:
             try:
                 conn = connect()
-                pos = ensure_state(conn)
-                log.info("reconnected; resumed at cursor %s", _fmt(pos))
+                ensure_state(conn)  # ensures the row exists; does not move the cursor
+                log.info("reconnected")
             except Exception as rexc:
                 log.error("reconnect failed (will retry): %s", rexc)
                 _sleep(TICK_SECONDS)
 
-    log.info("exiting; cursor at %s", _fmt(pos))
+    log.info("exiting")
     try:
         if conn is not None:
             conn.close()
