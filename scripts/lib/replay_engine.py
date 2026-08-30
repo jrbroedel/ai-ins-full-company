@@ -84,8 +84,8 @@ CANON_DIR = ROOT / "sample-data" / "canonical"
 DEFAULT_ARTIFACT = CANON_DIR / "canonical_dataset.json"
 
 # The one frozen artifact this engine is allowed to play back. Fail-closed.
-EXPECT_SHA = "0a3d67e8774e8cd15fba1c8ab9fa484cd433ac71665a04ca040d9db96b3a9811"
-ADR = "0043"
+EXPECT_SHA = "faa3c9b7f4d50478223133535cb16904b63533f656f3a522176ef0d756814095"
+ADR = "0045"
 SEED = 20260827
 MODE = "replay"
 
@@ -338,22 +338,23 @@ def atomic_write_json(obj, out_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Reconciliation gate
 # ---------------------------------------------------------------------------
-# ADR 0044 targets ($57M re-freeze), reconciled EXACTLY (to the cent / stated
-# precision) at m12. Supersedes the ~$23M ADR 0043 headline numbers.
+# ADR 0045 targets ($71M re-freeze by volume), reconciled EXACTLY (to the cent /
+# stated precision) at m12. Supersedes the $57M ADR 0044 headline numbers; only
+# the bind volume moved (value_scale and claim_frequency held).
 RECON_TARGETS = {
-    "submissions_to_date": 8414,
-    "bound_to_date": 6089,
-    "gwp_to_date": 56932078.70,
-    "avg_premium": 9349.99,
+    "submissions_to_date": 10500,
+    "bound_to_date": 7655,
+    "gwp_to_date": 71301212.64,
+    "avg_premium": 9314.33,
     "loss_ratio_to_date": 0.5600,
-    "incurred_losses_to_date": 31881964.07,
-    "premium_change_pct_m1_to_current": -30.0,
+    "incurred_losses_to_date": 39928679.10,
+    "premium_change_pct_m1_to_current": -29.2,
 }
 
 
 def reconcile(engine: ReplayEngine):
     """Run headless over all 12 months and check the final state EXACTLY against
-    the ADR 0043 targets. Returns (ok, checks, series)."""
+    the ADR 0045 targets. Returns (ok, checks, series)."""
     series = engine.run_headless()
     final = series[-1]
     h = final["headline"]
@@ -417,7 +418,7 @@ def cmd_reconcile(engine: ReplayEngine, dump_out: Path | None) -> int:
               f"{_fmt_money(a['incurred_losses_to_date']):>14} "
               f"{st['declines']['count_to_date']:5d}")
     print()
-    print("Gate checks (against ADR 0043 targets):")
+    print("Gate checks (against ADR 0045 targets):")
     for c in checks:
         mark = "PASS" if c["pass"] else "FAIL"
         print(f"  [{mark}] {c['metric']:38s} expected={c['expected']} got={c['got']}")
