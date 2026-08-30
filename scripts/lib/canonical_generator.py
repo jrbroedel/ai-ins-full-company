@@ -4,8 +4,8 @@ Canonical 12-month demo dataset generator (ADR 0043, Build 1: generate-and-freez
 WHAT THIS IS
 ------------
 A DETERMINISTIC, seeded generator that produces the single frozen source of
-truth for the investor demo: one 12-month synthetic operating year (~2,400 bound
-policies / ~$23M GWP) from which BOTH Kent's Excel deliverables AND the live-demo
+truth for the investor demo: one 12-month synthetic operating year (~7,600 bound
+policies / ~$71M GWP at value_scale=1.9) from which BOTH Kent's Excel deliverables AND the live-demo
 replay derive, so they cannot disagree ("generate-once, freeze, derive-
 everything" - ADR 0043).
 
@@ -65,7 +65,7 @@ Env knobs (all optional; defaults produce the ADR 0043 full year):
   CANON_SUBMISSIONS     target total submissions (default 3300)
   CANON_MONTHS          number of months (default 12; smaller = scaled test run)
   CANON_START_YM        operating-year start as YYYY-MM (default 2025-08)
-  CANON_VALUE_SCALE     global multiplier on agreed values (GWP tuning; default 1.0)
+  CANON_VALUE_SCALE     global multiplier on agreed values (GWP tuning; default 1.9)
 """
 import argparse
 import hashlib
@@ -791,7 +791,7 @@ def main(argv) -> int:
 
     artifact = {
         "schema_version": "canonical-dataset-v1",
-        "adr": "0043",
+        "adr": "0045",
         "generator": "scripts/lib/canonical_generator.py",
         "seed": seed,
         "operating_year_start": f"{start_ym[0]:04d}-{start_ym[1]:02d}",
@@ -818,7 +818,7 @@ def main(argv) -> int:
 
     manifest = {
         "schema_version": "canonical-manifest-v1",
-        "adr": "0043",
+        "adr": "0045",
         "seed": seed,
         "months": months,
         "operating_year_start": f"{start_ym[0]:04d}-{start_ym[1]:02d}",
