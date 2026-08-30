@@ -1,3 +1,7 @@
+> **ARCHIVED — DEPRECATED.** This documents the retired **pptxgenjs** deck path. Current decks are **python-pptx**-based (pptxgenjs is rescue-only). The rendered `torque-underwriters-investor-deck.pptx` described below was stale ($23M GWP) and has been **removed**; the current investor and technical decks live on `demo/investor-preview`. Kept for historical reference only.
+
+---
+
 # Torque Underwriters — Investor Deck
 
 Working-draft investor briefing (Kent's scaffold; investors are the ultimate audience).
