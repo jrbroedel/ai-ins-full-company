@@ -251,10 +251,10 @@
     <div class="tile"><div class="label">Applications</div><div class="val" id="t-apps">—</div><div class="delta">submitted to date</div></div>
     <div class="tile"><div class="label">In Underwriting</div><div class="val" id="t-uw">18</div><div class="delta">awaiting review</div></div>
     <div class="tile"><div class="label">Quotes Issued</div><div class="val" id="t-quotes">31</div><div class="delta">indicative premiums</div></div>
-    <div class="tile"><div class="label">Bind Ratio</div><div class="val" id="t-bind">61%</div><div class="delta">bound / quotes issued</div></div>
+    <div class="tile"><div class="label">Bind Ratio</div><div class="val" id="t-bind">—</div><div class="delta">bound / all submissions</div></div>
     <div class="tile"><div class="label">Bound</div><div class="val" id="t-bound">19</div><div class="delta">policies in force</div></div>
     <div class="tile"><div class="label">Total Insured Value</div><div class="val small" id="t-tiv">$14.9M</div><div class="delta">across active book</div></div>
-    <div class="tile"><div class="label">Avg Premium</div><div class="val small" id="t-avg">$38,778</div><div class="delta">indicative, annual</div></div>
+    <div class="tile"><div class="label">Avg Premium</div><div class="val small" id="t-avg">—</div><div class="delta">written · annual (bound)</div></div>
   </section>
 
   <!-- LOWER -->
@@ -264,16 +264,14 @@
       <div class="donut-wrap">
         <svg class="donut" viewBox="0 0 42 42">
           <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--ground-3)" stroke-width="6"></circle>
-          <circle id="arc-proceed" cx="21" cy="21" r="15.9" fill="none" stroke="var(--proceed)" stroke-width="6" stroke-dasharray="57.252427184466015 42.747572815533985" stroke-dashoffset="25" transform="rotate(-90 21 21)"></circle>
-          <circle id="arc-review" cx="21" cy="21" r="15.9" fill="none" stroke="var(--review)" stroke-width="6" stroke-dasharray="22.300970873786408 77.69902912621359" stroke-dashoffset="-33.252427184466015" transform="rotate(-90 21 21)"></circle>
-          <circle id="arc-senior" cx="21" cy="21" r="15.9" fill="none" stroke="var(--senior)" stroke-width="6" stroke-dasharray="9.679611650485436 90.32038834951456" stroke-dashoffset="-56.55339805825243" transform="rotate(-90 21 21)"></circle>
-          <circle id="arc-decline" cx="21" cy="21" r="15.9" fill="none" stroke="var(--decline)" stroke-width="6" stroke-dasharray="6.766990291262135 93.23300970873787" stroke-dashoffset="-67.23300970873787" transform="rotate(-90 21 21)"></circle>
+          <circle id="arc-bind" cx="21" cy="21" r="15.9" fill="none" stroke="var(--proceed)" stroke-width="6" stroke-dasharray="0 100" stroke-dashoffset="25" transform="rotate(-90 21 21)"></circle>
+          <circle id="arc-refer" cx="21" cy="21" r="15.9" fill="none" stroke="var(--review)" stroke-width="6" stroke-dasharray="0 100" stroke-dashoffset="25" transform="rotate(-90 21 21)"></circle>
+          <circle id="arc-decline" cx="21" cy="21" r="15.9" fill="none" stroke="var(--decline)" stroke-width="6" stroke-dasharray="0 100" stroke-dashoffset="25" transform="rotate(-90 21 21)"></circle>
         </svg>
         <div class="donut-legend">
-          <div class="dl-row"><i style="background:var(--proceed)"></i><span class="dl-name">Auto-proceed</span><span class="dl-val" id="m-proceed">60</span></div>
-          <div class="dl-row"><i style="background:var(--review)"></i><span class="dl-name">Manual review</span><span class="dl-val" id="m-review">24</span></div>
-          <div class="dl-row"><i style="background:var(--senior)"></i><span class="dl-name">Refer to Underwriting</span><span class="dl-val" id="m-senior">11</span></div>
-          <div class="dl-row"><i style="background:var(--decline)"></i><span class="dl-name">Decline / compliance</span><span class="dl-val" id="m-decline">8</span></div>
+          <div class="dl-row"><i style="background:var(--proceed)"></i><span class="dl-name">Bound</span><span class="dl-val" id="m-bind">—</span></div>
+          <div class="dl-row"><i style="background:var(--review)"></i><span class="dl-name">Referred to underwriting</span><span class="dl-val" id="m-refer">—</span></div>
+          <div class="dl-row"><i style="background:var(--decline)"></i><span class="dl-name">Declined</span><span class="dl-val" id="m-decline">—</span></div>
         </div>
       </div>
     </div>
@@ -386,22 +384,23 @@ function renderTiles(t){
   set("t-uw", t.in_underwriting);
   set("t-quotes", t.quotes_issued);
   set("t-bound", t.bound);
-  document.getElementById("t-bind").textContent = Math.round((t.bind_ratio || 0) * 100) + "%";
+  document.getElementById("t-bind").textContent = ((t.bind_ratio || 0) * 100).toFixed(1) + "%";
   document.getElementById("t-tiv").textContent = moneyK(t.total_insured_value);
   document.getElementById("t-avg").textContent = money(t.avg_premium);
 }
 
-// ---------- disposition donut (7 real actions -> 4 buckets) ----------
+// ---------- disposition donut (FROZEN verdict: bind / refer / decline) ----------
+// Reads snapshot.disposition_mix, which is the frozen artifact outcome (ADR 0046),
+// NOT the engine's referral action. The activity feed + pipeline animation still
+// speak the 7 engine actions via bucket() - those are a separate, untouched read.
 function renderDonut(mixData){
-  const b = {proceed:0, review:0, senior:0, decline:0};
-  Object.entries(mixData || {}).forEach(([action, n]) => { b[bucket(action).k] += (n || 0); });
-  const total = (b.proceed + b.review + b.senior + b.decline) || 1;
-  set("m-proceed", b.proceed); set("m-review", b.review);
-  set("m-senior", b.senior);   set("m-decline", b.decline);
-  setArc("arc-proceed", b.proceed/total*100, 0);
-  setArc("arc-review",  b.review/total*100,  b.proceed/total*100);
-  setArc("arc-senior",  b.senior/total*100,  (b.proceed+b.review)/total*100);
-  setArc("arc-decline", b.decline/total*100, (b.proceed+b.review+b.senior)/total*100);
+  const m = mixData || {};
+  const bind = m.bind||0, refer = m.refer||0, decline = m.decline||0;
+  const total = (bind + refer + decline) || 1;
+  set("m-bind", bind); set("m-refer", refer); set("m-decline", decline);
+  setArc("arc-bind",    bind/total*100,    0);
+  setArc("arc-refer",   refer/total*100,   bind/total*100);
+  setArc("arc-decline", decline/total*100, (bind+refer)/total*100);
 }
 function setArc(id,pct,offsetPct){
   const el=document.getElementById(id); if(!el) return;

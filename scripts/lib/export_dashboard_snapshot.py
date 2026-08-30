@@ -194,8 +194,24 @@ def build_snapshot(conn) -> dict:
         # luxauto_policy_view row IS the bind. Count those rows.
         bound = q1(cur, "SELECT count(*) AS n FROM luxauto_policy_view")["n"]
 
-        # Divide-by-zero guarded: 0 when there are no issued quotes yet.
-        bind_ratio = round(bound / quotes_issued, 4) if quotes_issued else 0
+        # Frozen disposition counts (ADR 0046): the SINGLE source for BOTH the
+        # headline disposition_mix and bind_ratio, so the two can never disagree.
+        # (Guarded: if the frozen table is absent, fall back honestly to empty.)
+        frozen_mix = {"bind": 0, "refer": 0, "decline": 0}
+        if q1(cur, "SELECT to_regclass('public.canonical_load_disposition') IS NOT NULL AS ok")["ok"]:
+            cur.execute(
+                "SELECT artifact_disposition AS d, count(*) AS n "
+                "FROM canonical_load_disposition GROUP BY artifact_disposition"
+            )
+            for row in cur.fetchall():
+                if row["d"] in frozen_mix:
+                    frozen_mix[row["d"]] = int(row["n"])
+                else:
+                    log.warning("frozen disposition not in known set: %r", row["d"])
+        frozen_total = sum(frozen_mix.values())
+        # bind_ratio = bound / ALL submissions (frozen), NOT bound/quotes_issued -
+        # quotes are bound-only in this load so that ratio is ~1.0 (ADR 0046).
+        bind_ratio = round(frozen_mix["bind"] / frozen_total, 4) if frozen_total else 0
 
         # total_insured_value: prefer bound policy vehicles; fall back to the
         # appraised value on submitted applications' vehicles when nothing is
@@ -218,11 +234,13 @@ def build_snapshot(conn) -> dict:
                 "WHERE a.status = 'submitted'",
             )["s"]
 
-        # avg_premium: null-safe. AVG over an empty set is SQL NULL -> Python
-        # None -> JSON null, which the dashboard renders as a dash.
+        # avg_premium: the softened WRITTEN premium on bound policies (ADR 0046),
+        # NOT luxauto_quote_rating_view.indicative_premium (the un-softened re-rate
+        # the hybrid load exists to avoid). Null-safe: AVG over no bound policies
+        # -> SQL NULL -> Python None -> JSON null, which the dashboard renders as a dash.
         avg_premium = q1(
             cur,
-            "SELECT AVG(indicative_premium) AS a FROM luxauto_quote_rating_view",
+            "SELECT ROUND(AVG(premium_amount), 2) AS a FROM luxauto_policy_view",
         )["a"]
 
         tiles = {
@@ -236,20 +254,13 @@ def build_snapshot(conn) -> dict:
             "avg_premium": _num(avg_premium),
         }
 
-        # ---- disposition_mix (all seven keys, always) --------------------- #
-        mix = {a: 0 for a in REFERRAL_ACTIONS}
-        cur.execute(
-            "SELECT most_severe_action::text AS action, count(*) AS n "
-            "FROM luxauto_application_referral_view GROUP BY most_severe_action"
-        )
-        for row in cur.fetchall():
-            # Every value the view can produce is one of the seven; guard anyway
-            # so an unexpected label surfaces loudly rather than being dropped.
-            if row["action"] in mix:
-                mix[row["action"]] = int(row["n"])
-            else:
-                log.warning("disposition value not in known set: %r", row["action"])
-                mix[row["action"]] = int(row["n"])
+        # ---- disposition_mix (FROZEN verdict bind/refer/decline, ADR 0046) --- #
+        # NOT the engine's referral action (which collapses refer+decline into
+        # MANUAL_REVIEW and emits zero declines - ADR 0046 STEP 0). decision_log /
+        # the referral view still drive reason codes, recent_activity and
+        # pipeline_events below; only this headline mix reads the frozen table
+        # (computed once above, shared with bind_ratio so the two cannot disagree).
+        mix = dict(frozen_mix)
 
         # ---- by_state (states with >= 1 application) ---------------------- #
         cur.execute(

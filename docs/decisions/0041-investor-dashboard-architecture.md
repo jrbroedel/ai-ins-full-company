@@ -188,3 +188,30 @@ Recorded, not yet implemented:
   redeploy; must be fixed so redeploys don't break login.
 - **Node 20 runtime EOL** on both Function Apps (Azure nudging to a newer runtime) — maintenance.
 - **App Insights skipped on the control API deploy** — optional telemetry.
+
+## Addendum (2026-08-30) — exporter reads FROZEN sources (ADR 0046 STEP TWO)
+
+With the frozen $71M canonical book loaded into `luxauto_demo` (ADR 0046), three exporter reads
+were repointed from re-derived views to the frozen facts, so the board shows frozen values, never
+re-derived ones. `scripts/lib/export_dashboard_snapshot.py`:
+
+- **`avg_premium`** now reads `AVG(premium_amount)` off `luxauto_policy_view` (the SOFTENED written
+  premium, **$9,314.33**), NOT `luxauto_quote_rating_view.indicative_premium` (the un-softened
+  re-rate, $10,726.55, that the hybrid load exists to avoid). Any premium total likewise comes from
+  `premium_amount`.
+- **`disposition_mix`** now reads `bind`/`refer`/`decline` from `canonical_load_disposition`
+  (**7,655 / 789 / 2,056 = 72.90 / 7.51 / 19.58 %**), NOT the engine's `most_severe_action` (which
+  collapses refer+decline into MANUAL_REVIEW and emits zero declines — ADR 0046 STEP 0). The
+  frontend "Disposition Mix" donut was reworked from the 7-engine-action → 4-bucket grouping to
+  three frozen slices (Bound / Referred to underwriting / Declined).
+- **`bind_ratio`** now = `count(bind) / count(*)` from `canonical_load_disposition` (**0.7290**),
+  NOT `bound / quotes_issued` (~1.0 under the bound-only load). Sourced from the SAME frozen query
+  as `disposition_mix` so the two can never disagree.
+
+Untouched: `recent_activity` and `pipeline_events` still read `most_severe_action` (engine
+disposition) — reason codes, the activity feed and the pipeline animation remain engine-driven.
+The snapshot schema stayed back-compatible (same top-level keys; `disposition_mix`'s internal shape
+changed 7-key → 3-key, consumed only by the donut). `quotes_issued == bound == 7,655` is the
+accepted bound-only shape and was left as-is. The frontend also relabels were already present
+(Submissions / Underwriting[simulated] / Refer to Underwriting); the synthetic + simulated markers
+remain visible per the third-party-surface rule.
