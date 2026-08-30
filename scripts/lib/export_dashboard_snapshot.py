@@ -291,6 +291,37 @@ def build_snapshot(conn) -> dict:
             for r in cur.fetchall()
         ]
 
+        # ---- rate_trend (12-month two-line series, ADR 0046 STEP FOUR) ------- #
+        # Line 1 rate_index = the modeled softening (price/risk) from
+        # canonical_rate_index (a loaded generation parameter, kept in the DB so the
+        # rate line reconciles to the deck's ~-24% rather than being re-derived).
+        # Line 2 avg_bound_premium = AVG(premium_amount) off the frozen bound book,
+        # grouped by the policy's EFFECTIVE month (lower(effective_range)) - the column
+        # that foots to the artifact's monthly_aggregates to the cent. Premium only;
+        # no indicative_premium. Guarded: empty if the rate-index table is absent.
+        rate_trend = []
+        if q1(cur, "SELECT to_regclass('public.canonical_rate_index') IS NOT NULL AS ok")["ok"]:
+            cur.execute(
+                "SELECT ri.month, ri.month_index, ri.softening_index AS rate_index, "
+                "       pv.avg_bound_premium "
+                "FROM canonical_rate_index ri "
+                "LEFT JOIN ( "
+                "  SELECT to_char(lower(effective_range),'YYYY-MM') AS ym, "
+                "         ROUND(AVG(premium_amount), 2) AS avg_bound_premium "
+                "  FROM luxauto_policy_view GROUP BY 1 "
+                ") pv ON pv.ym = ri.month "
+                "ORDER BY ri.month_index"
+            )
+            rate_trend = [
+                {
+                    "month": r["month"],
+                    "month_index": int(r["month_index"]),
+                    "rate_index": _num(r["rate_index"]),
+                    "avg_bound_premium": _num(r["avg_bound_premium"]),
+                }
+                for r in cur.fetchall()
+            ]
+
         # ---- states (identity + synthetic flag only) ---------------------- #
         # synthetic is derived in SQL from the honest markers; no rating values.
         cur.execute(
@@ -438,6 +469,7 @@ def build_snapshot(conn) -> dict:
         "disposition_mix": mix,
         "by_state": by_state,
         "by_state_bound": by_state_bound,
+        "rate_trend": rate_trend,
         "states": states,
         "recent_activity": recent,
         "pipeline_events": pipeline_events,

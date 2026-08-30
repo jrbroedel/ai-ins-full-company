@@ -240,3 +240,31 @@ empty 137–211 gap is the Medium/Elevated boundary so nothing straddles it, and
 Highest. Populations 9/9/20/8/4 are unequal **by design** — fixed thresholds on bimodal data, not
 equal-population quantiles. A 5-swatch legend (Lowest→Highest with ranges) and per-state tooltips
 ("STATE · N bound policies") were added; the synthetic marker stays on the caption + footnote.
+
+## Addendum (2026-08-30) — rate-trend two-line graph (ADR 0046 STEP FOUR)
+
+A "Rate Trend" panel plots two monthly series over the frozen operating year, both indexed to 100
+at month 1: **modeled rate (price/risk)** and **realized average bound premium**.
+
+- **Rate index loaded into the DB.** The modeled softening index is a GENERATION parameter, not an
+  emergent DB fact; loading it keeps the DB the single source so the rate line reconciles to the
+  deck's ~-24% instead of being re-derived or read live from the artifact. New demo-load table
+  `canonical_rate_index(month PK, month_index, softening_index)` — 12 rows from the artifact's
+  `monthly_aggregates` (m1=1.0 → m12=0.761 = **−23.9%**). Created + populated idempotently by
+  `load_canonical_to_demo.py` (Phase F, so a rebuild recreates it) AND by the standalone one-shot
+  `scripts/load-rate-index-to-demo.sh --rate-index-only` (no rebuild; the path used on the
+  already-loaded DB). Same prod guard as the ADR 0046 loader.
+- **Exporter** emits additive key `rate_trend` (12 rows: `{month, month_index, rate_index,
+  avg_bound_premium}`). `rate_index` = softening from `canonical_rate_index`; `avg_bound_premium`
+  = `ROUND(AVG(premium_amount),2)` off `luxauto_policy_view` grouped by the policy's EFFECTIVE month
+  (`lower(effective_range)`) — the column that foots to `monthly_aggregates` to the cent on all 12
+  months. Realized m1 $11,341.35 → m12 $8,032.68 = **−29.2%**. No `indicative_premium` read.
+  `snapshot.js` unchanged (verbatim passthrough).
+- **Frontend** renders an inline-SVG two-line chart (no libs): both series normalized to 100 at
+  month 1 so the −24% (price) vs −29% (realized) gap sits on one axis; the realized line ends
+  visibly below the rate line. A 6mo/1yr toggle is a client-side x-window over the same 12-row
+  series (6mo = `month_index ≥ 6`), no refetch. Tooltips show month + $avg + index. **The realized
+  line uses the neutral slate `--muted`, deliberately NOT `--proceed`** (the board's "bound/good"
+  green) — a falling line in that green would read as green-going-down-is-bad, and a
+  softening-market average is neutral data, not a bad outcome. Caption carries the honesty framing
+  (price −24% vs realized −29% is MIX, not a 29% price cut) and the synthetic marker.

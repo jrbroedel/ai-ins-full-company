@@ -208,6 +208,16 @@ CREATE TABLE IF NOT EXISTS canonical_policy_period_claims (
   status        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_canon_claims_policy ON canonical_policy_period_claims(policy_id);
+
+-- Per-month modeled rate (softening) index from the artifact's monthly_aggregates.
+-- The softening index is a GENERATION parameter, not an emergent DB fact; loading it
+-- keeps the DB the single source so the dashboard's rate-trend line reconciles to the
+-- deck's ~-24% instead of being re-derived or read live from the artifact (ADR 0046).
+CREATE TABLE IF NOT EXISTS canonical_rate_index (
+  month           TEXT PRIMARY KEY,
+  month_index     INT NOT NULL,
+  softening_index NUMERIC NOT NULL
+);
 """
 
 # Transient (pg_temp) helper: does ALL of one submission's work in a single call,
@@ -298,6 +308,32 @@ $fn$ LANGUAGE plpgsql;
 """
 
 
+def load_rate_index(cur, data):
+    """Create + populate canonical_rate_index from the artifact's monthly_aggregates.
+    Idempotent (ON CONFLICT upsert), so it is safe both inside a full rebuild load
+    and as the standalone --rate-index-only one-shot against an already-loaded DB."""
+    from psycopg2.extras import execute_values
+    # DDL is carried in CREATE_TABLES for the rebuild path; ensure it exists here too
+    # so the standalone one-shot works against an already-loaded DB.
+    cur.execute(
+        "CREATE TABLE IF NOT EXISTS canonical_rate_index ("
+        " month TEXT PRIMARY KEY, month_index INT NOT NULL, softening_index NUMERIC NOT NULL)"
+    )
+    rows = [(m["month"], int(m["month_index"]), m["softening_index"])
+            for m in data["monthly_aggregates"]]
+    execute_values(
+        cur,
+        "INSERT INTO canonical_rate_index (month, month_index, softening_index) VALUES %s "
+        "ON CONFLICT (month) DO UPDATE SET month_index = EXCLUDED.month_index, "
+        "softening_index = EXCLUDED.softening_index",
+        rows,
+    )
+    cur.execute("SELECT count(*) FROM canonical_rate_index")
+    n = cur.fetchone()[0]
+    print(f"canonical_rate_index: {n} rows (m1={rows[0][2]}, m12={rows[-1][2]})")
+    return n
+
+
 def full_load(cur, data):
     subs = data["submissions"]
     helper_sql = (CREATE_HELPER
@@ -347,12 +383,33 @@ def main(argv):
     ap.add_argument("--artifact", default=DEFAULT_ARTIFACT)
     ap.add_argument("--force", action="store_true",
                     help="allow load even if applications table is non-empty (default: refuse)")
+    ap.add_argument("--rate-index-only", action="store_true",
+                    help="ONLY create+populate canonical_rate_index (no other writes) - the "
+                         "standalone one-shot for an already-loaded DB (STEP FOUR, ADR 0046)")
     args = ap.parse_args(argv)
 
     guard_env()
     data = load_artifact(args.artifact)
     snap = data["rating_snapshot"]
     subs = data["submissions"]
+
+    if args.rate_index_only:
+        conn = psycopg2.connect()
+        conn.autocommit = False
+        try:
+            with conn.cursor() as cur:
+                guard_live(cur)  # asserts current_database()=='luxauto_demo', refuses prod
+                print("== rate-index-only (canonical_rate_index) ==")
+                load_rate_index(cur, data)
+            conn.commit()
+            print("COMMIT OK")
+        except Exception:
+            conn.rollback()
+            print("ROLLED BACK.")
+            raise
+        finally:
+            conn.close()
+        return 0
 
     conn = psycopg2.connect()
     conn.autocommit = False
@@ -376,6 +433,8 @@ def main(argv):
             print("== C/D/E. hybrid load ==")
             cur.execute(CREATE_TABLES)
             counts = full_load(cur, data)
+            print("== F. rate index ==")
+            load_rate_index(cur, data)
 
         conn.commit()
         print("COMMIT OK")
