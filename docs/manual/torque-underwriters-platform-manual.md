@@ -234,13 +234,13 @@ The things Kent can actually pull and show. This is the "pull documents to show 
 
 - **Quotes** — priced offers, each carrying the variables that drove the price.
 - **Decision logs** — per application, the record of which referral rules fired (with `reason_code`s) and which permitted variables drove the price. This is the audit and adverse-action artifact.
-- **The canonical demo dataset (ADR 0043)** — a frozen, hash-verified artifact representing a full synthetic book run through the platform: on the order of **3,300 submissions, ~2,414 bound, ~$23.02M GWP**, with a **loss ratio of ~0.5604** on the *technical (rater) basis* (pure risk premium ÷ charged GWP). The artifact is content-addressed by SHA-256 (`965b986a29d24a4c33685af599c8be4eeb503fb2…`, truncated — confirm the full hash against the artifact) so anyone can prove they're looking at the exact same dataset.
+- **The canonical demo dataset (ADRs 0043/0045/0049)** — a frozen, hash-verified artifact representing a full synthetic book run through the platform: **10,500 submissions, 7,655 bound, $71.30M GWP**, with an **ultimate loss ratio of 0.5600** (total incurred policy-period losses ÷ bound GWP, per the ADR 0044 loss-model recalibration). The artifact is content-addressed by SHA-256 (`5a2be288360c84289225ee75ff782c947bcb6a014f7627cb16a7d45946789ac2`) so anyone can prove they're looking at the exact same dataset.
 - **`snapshot.json`** — the read-only export the dashboard renders from, written by the exporter service off the demo DB.
 - **The live investor dashboard** (`dashboard.ironcliffvertex.com`) — the rendered portfolio view.
 - **The control panel** (`control.ironcliffvertex.com`) — drives the demo.
 - **Bordereaux** — the structured premium/claims reports an MGA submits up to its syndicates; the templates exist in the program workbook and are the reporting artifact the whole data model is designed to feed.
 
-**A precise note on the loss-ratio basis**, because it matters for anyone reading the number: the ~0.5604 loss ratio is on the **technical (rater) basis** — pure risk premium divided by charged GWP — **not** the more familiar incurred-losses ÷ earned-premium accounting basis. The documentation correcting this framing is a pending ADR (0044 / an extension to 0043). Stating the basis explicitly is the difference between a defensible number and a misleading one.
+**A precise note on the loss-ratio basis**, because it matters for anyone reading the number: the 0.5600 loss ratio is on an **ultimate incurred basis** — total incurred policy-period losses divided by bound GWP — as recalibrated and documented in ADR 0044. It is not a technical (pure-risk ÷ charged) figure. Stating the basis explicitly is the difference between a defensible number and a misleading one.
 
 ---
 
@@ -261,7 +261,7 @@ Last known reference points (re-verify — these are "last known," not live): `m
 
 **CI verification.** The deploy pipeline runs on the self-hosted GitHub Actions runner on the VM. The correct way to verify a CI change is to confirm the **specific new step appears in the job's step list** — not merely that the job went green (a green run can skip the step you care about). Because the unauthenticated GitHub API is rate-limited, check run status either directly on the VM or via the Actions tab on github.com rather than scripting against `api.github.com` anonymously.
 
-**The demo database.** The `~3,300 submissions / ~2,414 bound / ~$23.02M GWP` figures are not asserted — they're queryable. Point at the `luxauto_demo` database and count. The exporter service reads the same data into `snapshot.json`, so the dashboard and a direct DB query should agree.
+**The demo database.** The `10,500 submissions / 7,655 bound / $71.30M GWP` figures are not asserted — they're queryable. Point at the `luxauto_demo` database and count. The exporter service reads the same data into `snapshot.json`, so the dashboard and a direct DB query should agree. (The 26 name-only reattributions of ADR 0049 postdate the demo-DB load; counts and GWP are unaffected.)
 
 **The canonical artifact hash.** The frozen dataset is content-addressed by SHA-256. Re-hash the artifact and compare — if it matches, you're provably looking at the same dataset the loss ratio and PC band were computed from.
 
@@ -289,7 +289,7 @@ A manual that only lists what works isn't trustworthy. Here's what is *not* done
 
 **Softening / replay (Build 3).** The frozen artifact encodes a 12-month premium-softening trend as a per-month index. The live `create_quote()` RPC re-rates **without** softening. Build 3 must consume the artifact's premiums directly (rather than re-rating through the RPC), or softening must become a rating-input dimension — otherwise the live demo board would show un-softened premiums that contradict the softening story.
 
-**Loss-ratio basis documentation.** The correction that the ~0.5604 figure is on the technical (rater) basis, not incurred ÷ earned, needs to land as ADR 0044 / an extension to ADR 0043.
+**Loss-ratio basis documentation.** Landed as ADR 0044 (loss-model recalibration); the 0.5600 figure is on the ultimate incurred ÷ bound-GWP basis described there.
 
 **Renewal workflow.** Named but entirely undesigned — the largest remaining unscoped piece of the platform.
 
