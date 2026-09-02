@@ -1,0 +1,280 @@
+{
+ "Delacroix, Everett": {
+  "state": "KS",
+  "original_seq": 3,
+  "added": [
+   {
+    "seq": 54,
+    "month_index": 0,
+    "orig_applicant": "Ingrid Whitlock",
+    "make": "Singer",
+    "model": "911 Reimagined",
+    "agreed_value": 945000,
+    "bound_premium": 13490.32,
+    "effective_date": "2025-08-13"
+   },
+   {
+    "seq": 751,
+    "month_index": 1,
+    "orig_applicant": "Anouk Thistlewood",
+    "make": "Maserati",
+    "model": "GranTurismo",
+    "agreed_value": 570000,
+    "bound_premium": 6503.51,
+    "effective_date": "2025-09-30"
+   },
+   {
+    "seq": 1421,
+    "month_index": 2,
+    "orig_applicant": "Fenwick Thistlewood",
+    "make": "Alfa Romeo",
+    "model": "8C 2900",
+    "agreed_value": 1170000,
+    "bound_premium": 7055.52,
+    "effective_date": "2025-10-18"
+   },
+   {
+    "seq": 2207,
+    "month_index": 3,
+    "orig_applicant": "Anouk Ashcombe",
+    "make": "Bentley",
+    "model": "Continental GT",
+    "agreed_value": 445000,
+    "bound_premium": 5615.93,
+    "effective_date": "2025-11-11"
+   },
+   {
+    "seq": 3007,
+    "month_index": 4,
+    "orig_applicant": "Ottilie Ashcombe",
+    "make": "Lamborghini",
+    "model": "Huracan EVO",
+    "agreed_value": 1950000,
+    "bound_premium": 26172.65,
+    "effective_date": "2025-12-15"
+   },
+   {
+    "seq": 4085,
+    "month_index": 5,
+    "orig_applicant": "Wilhelmina Chattopadhyay",
+    "make": "McLaren",
+    "model": "750S",
+    "agreed_value": 920000,
+    "bound_premium": 14351.48,
+    "effective_date": "2026-01-23"
+   },
+   {
+    "seq": 4940,
+    "month_index": 6,
+    "orig_applicant": "Sunniva Castellanos",
+    "make": "BMW",
+    "model": "M8 Competition",
+    "agreed_value": 365000,
+    "bound_premium": 4404.92,
+    "effective_date": "2026-02-16"
+   },
+   {
+    "seq": 5752,
+    "month_index": 7,
+    "orig_applicant": "Ingrid Larsson",
+    "make": "Ferrari",
+    "model": "SF90 Stradale",
+    "agreed_value": 1150000,
+    "bound_premium": 14256.51,
+    "effective_date": "2026-03-31"
+   },
+   {
+    "seq": 6805,
+    "month_index": 8,
+    "orig_applicant": "Emiliano Bellandi",
+    "make": "Mercedes-Benz",
+    "model": "AMG GT",
+    "agreed_value": 860000,
+    "bound_premium": 8496.64,
+    "effective_date": "2026-04-09"
+   },
+   {
+    "seq": 8729,
+    "month_index": 10,
+    "orig_applicant": "Cassius Nakashima",
+    "make": "Aston Martin",
+    "model": "DB5",
+    "agreed_value": 925000,
+    "bound_premium": 5567.42,
+    "effective_date": "2026-06-24"
+   },
+   {
+    "seq": 9746,
+    "month_index": 11,
+    "orig_applicant": "Sunniva Pennington",
+    "make": "Ferrari",
+    "model": "296 GTB",
+    "agreed_value": 1155000,
+    "bound_premium": 12869.23,
+    "effective_date": "2026-07-03"
+   },
+   {
+    "seq": 218,
+    "month_index": 0,
+    "orig_applicant": "Mireille Ashcombe",
+    "make": "Bentley",
+    "model": "4.5 Litre",
+    "agreed_value": 710000,
+    "bound_premium": 4937.85,
+    "effective_date": "2025-08-17"
+   },
+   {
+    "seq": 994,
+    "month_index": 1,
+    "orig_applicant": "Marisol Vasquez",
+    "make": "Porsche",
+    "model": "911 Turbo S",
+    "agreed_value": 1065000,
+    "bound_premium": 10281.87,
+    "effective_date": "2025-09-20"
+   },
+   {
+    "seq": 1679,
+    "month_index": 2,
+    "orig_applicant": "Sunniva Vandermeer",
+    "make": "Aston Martin",
+    "model": "DB12",
+    "agreed_value": 295000,
+    "bound_premium": 3924.17,
+    "effective_date": "2025-10-26"
+   },
+   {
+    "seq": 3755,
+    "month_index": 4,
+    "orig_applicant": "Beatrix Thistlewood",
+    "make": "Mercedes-Benz",
+    "model": "280SL Pagoda",
+    "agreed_value": 500000,
+    "bound_premium": 3607.13,
+    "effective_date": "2025-12-14"
+   },
+   {
+    "seq": 4378,
+    "month_index": 5,
+    "orig_applicant": "Wilhelmina Okonkwo",
+    "make": "Jaguar",
+    "model": "E-Type Series 1",
+    "agreed_value": 1950000,
+    "bound_premium": 12167.56,
+    "effective_date": "2026-01-10"
+   }
+  ]
+ },
+ "Vasquez, Aurelio": {
+  "state": "CA",
+  "original_seq": 704,
+  "added": [
+   {
+    "seq": 12,
+    "month_index": 0,
+    "orig_applicant": "Callum Thistlewood",
+    "make": "Maserati",
+    "model": "GranTurismo",
+    "agreed_value": 1415000,
+    "bound_premium": 19823.35,
+    "effective_date": "2025-08-30"
+   },
+   {
+    "seq": 710,
+    "month_index": 1,
+    "orig_applicant": "Cassius Pennington",
+    "make": "Ferrari",
+    "model": "296 GTB",
+    "agreed_value": 785000,
+    "bound_premium": 18218.6,
+    "effective_date": "2025-09-10"
+   },
+   {
+    "seq": 1432,
+    "month_index": 2,
+    "orig_applicant": "Thaddeus Whitlock",
+    "make": "Lamborghini",
+    "model": "Huracan EVO",
+    "agreed_value": 1125000,
+    "bound_premium": 22216.16,
+    "effective_date": "2025-10-23"
+   },
+   {
+    "seq": 2199,
+    "month_index": 3,
+    "orig_applicant": "Fitzgerald Chattopadhyay",
+    "make": "Mercedes-Benz",
+    "model": "AMG GT",
+    "agreed_value": 720000,
+    "bound_premium": 10959.94,
+    "effective_date": "2025-11-16"
+   },
+   {
+    "seq": 2991,
+    "month_index": 4,
+    "orig_applicant": "Horace Vasquez",
+    "make": "BMW",
+    "model": "M8 Competition",
+    "agreed_value": 500000,
+    "bound_premium": 7588.72,
+    "effective_date": "2025-12-07"
+   },
+   {
+    "seq": 3925,
+    "month_index": 5,
+    "orig_applicant": "Callum Delacroix",
+    "make": "Jaguar",
+    "model": "E-Type Series 1",
+    "agreed_value": 510000,
+    "bound_premium": 5011.71,
+    "effective_date": "2026-01-20"
+   },
+   {
+    "seq": 4741,
+    "month_index": 6,
+    "orig_applicant": "Callum Chattopadhyay",
+    "make": "Bentley",
+    "model": "Continental GT",
+    "agreed_value": 665000,
+    "bound_premium": 9680.12,
+    "effective_date": "2026-02-01"
+   }
+  ]
+ },
+ "Harrington, Lorenzo": {
+  "state": "MA",
+  "original_seq": 1366,
+  "added": [
+   {
+    "seq": 59,
+    "month_index": 0,
+    "orig_applicant": "Callum Vandermeer",
+    "make": "Ferrari",
+    "model": "275 GTB/4",
+    "agreed_value": 445000,
+    "bound_premium": 5037.74,
+    "effective_date": "2025-08-11"
+   },
+   {
+    "seq": 795,
+    "month_index": 1,
+    "orig_applicant": "Anouk Ashcombe",
+    "make": "Mercedes-Benz",
+    "model": "280SL Pagoda",
+    "agreed_value": 1090000,
+    "bound_premium": 9369.32,
+    "effective_date": "2025-09-23"
+   },
+   {
+    "seq": 1368,
+    "month_index": 2,
+    "orig_applicant": "Lorenzo Okonkwo",
+    "make": "Lamborghini",
+    "model": "Huracan EVO",
+    "agreed_value": 560000,
+    "bound_premium": 12159.46,
+    "effective_date": "2025-10-07"
+   }
+  ]
+ }
+}

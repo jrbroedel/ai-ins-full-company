@@ -1,0 +1,182 @@
+{
+ "Delacroix": {
+  "1": {
+   "technical": 3383.57112152824,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0147"
+  },
+  "2": {
+   "technical": 20321.0659002393,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0152"
+  },
+  "3": {
+   "technical": 5700.06081891175,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0153"
+  },
+  "4": {
+   "technical": 5782.20633794172,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0154"
+  },
+  "5": {
+   "technical": 5007.04813249504,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0155"
+  },
+  "6": {
+   "technical": 25765.4148598482,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0156"
+  },
+  "7": {
+   "technical": 13530.9181031874,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0157"
+  },
+  "8": {
+   "technical": 3661.40933169091,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0158"
+  },
+  "9": {
+   "technical": 13693.7291151184,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0159"
+  },
+  "10": {
+   "technical": 6894.94629481337,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0160"
+  },
+  "11": {
+   "technical": 6226.24678897177,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0161"
+  },
+  "12": {
+   "technical": 13748.6744532026,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0162"
+  },
+  "13": {
+   "technical": 4250.04361901809,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0163"
+  },
+  "14": {
+   "technical": 7136.57907789581,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0164"
+  },
+  "15": {
+   "technical": 3932.10381231839,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0165"
+  },
+  "16": {
+   "technical": 4521.78386943854,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0166"
+  },
+  "17": {
+   "technical": 8920.11624912979,
+   "zone": "Severe convective - hail alley (high)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0167"
+  }
+ },
+ "Vasquez": {
+  "1": {
+   "technical": 12685.3012983654,
+   "zone": "Wildfire - moderate hazard",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0148"
+  },
+  "2": {
+   "technical": 23311.0570522836,
+   "zone": "Wildfire - moderate hazard",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0168"
+  },
+  "3": {
+   "technical": 19962.6055290988,
+   "zone": "Wildfire - moderate hazard",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0169"
+  },
+  "4": {
+   "technical": 22497.8174871535,
+   "zone": "Wildfire - moderate hazard",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0170"
+  },
+  "5": {
+   "technical": 10979.7730038693,
+   "zone": "Wildfire - moderate hazard",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0171"
+  },
+  "6": {
+   "technical": 8451.6753776357,
+   "zone": "Wildfire - moderate hazard",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0172"
+  },
+  "7": {
+   "technical": 6510.10729092949,
+   "zone": "Wildfire - moderate hazard",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0173"
+  },
+  "8": {
+   "technical": 11378.7086304738,
+   "zone": "Wildfire - moderate hazard",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0174"
+  }
+ },
+ "Harrington": {
+  "1": {
+   "technical": 14412.6235723266,
+   "zone": "Tier 3 - Coastal wind (25-100 miles)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0149"
+  },
+  "2": {
+   "technical": 6932.57646026653,
+   "zone": "Tier 3 - Coastal wind (25-100 miles)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0175"
+  },
+  "3": {
+   "technical": 11138.8587707997,
+   "zone": "Tier 3 - Coastal wind (25-100 miles)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0176"
+  },
+  "4": {
+   "technical": 11104.489172425,
+   "zone": "Tier 3 - Coastal wind (25-100 miles)",
+   "status": "AUTO-BIND",
+   "cert": "TQ-C-2026-0177"
+  }
+ }
+}

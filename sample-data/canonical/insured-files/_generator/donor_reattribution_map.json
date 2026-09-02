@@ -1,0 +1,191 @@
+{
+ "reattributions": [
+  {
+   "seq": 54,
+   "from": "Ingrid Whitlock",
+   "to": "Everett Delacroix",
+   "vin": "MX3NXHGDGZ734ATNV",
+   "bound_premium": 13490.32
+  },
+  {
+   "seq": 751,
+   "from": "Anouk Thistlewood",
+   "to": "Everett Delacroix",
+   "vin": "39PK2S583ZTR3C52Y",
+   "bound_premium": 6503.51
+  },
+  {
+   "seq": 1421,
+   "from": "Fenwick Thistlewood",
+   "to": "Everett Delacroix",
+   "vin": "R9GH2S10TKF5SEZ9Y",
+   "bound_premium": 7055.52
+  },
+  {
+   "seq": 2207,
+   "from": "Anouk Ashcombe",
+   "to": "Everett Delacroix",
+   "vin": "PSBNK80D0PC23Z48T",
+   "bound_premium": 5615.93
+  },
+  {
+   "seq": 3007,
+   "from": "Ottilie Ashcombe",
+   "to": "Everett Delacroix",
+   "vin": "343939XG6KN9W29UZ",
+   "bound_premium": 26172.65
+  },
+  {
+   "seq": 4085,
+   "from": "Wilhelmina Chattopadhyay",
+   "to": "Everett Delacroix",
+   "vin": "P2VFMH3D5H8GEXZXE",
+   "bound_premium": 14351.48
+  },
+  {
+   "seq": 4940,
+   "from": "Sunniva Castellanos",
+   "to": "Everett Delacroix",
+   "vin": "DPAP49XNAJS07EFY5",
+   "bound_premium": 4404.92
+  },
+  {
+   "seq": 5752,
+   "from": "Ingrid Larsson",
+   "to": "Everett Delacroix",
+   "vin": "U28JU8T6Z0YSYNHDW",
+   "bound_premium": 14256.51
+  },
+  {
+   "seq": 6805,
+   "from": "Emiliano Bellandi",
+   "to": "Everett Delacroix",
+   "vin": "L6N2N8TMCDB5D1PWB",
+   "bound_premium": 8496.64
+  },
+  {
+   "seq": 8729,
+   "from": "Cassius Nakashima",
+   "to": "Everett Delacroix",
+   "vin": "KDAZWGC39VHP3HJNE",
+   "bound_premium": 5567.42
+  },
+  {
+   "seq": 9746,
+   "from": "Sunniva Pennington",
+   "to": "Everett Delacroix",
+   "vin": "1CB7D89FNGGD1KX3Y",
+   "bound_premium": 12869.23
+  },
+  {
+   "seq": 218,
+   "from": "Mireille Ashcombe",
+   "to": "Everett Delacroix",
+   "vin": "8PVDW1S1DEKJ0S1F7",
+   "bound_premium": 4937.85
+  },
+  {
+   "seq": 994,
+   "from": "Marisol Vasquez",
+   "to": "Everett Delacroix",
+   "vin": "F48F5214PGYEXC8R9",
+   "bound_premium": 10281.87
+  },
+  {
+   "seq": 1679,
+   "from": "Sunniva Vandermeer",
+   "to": "Everett Delacroix",
+   "vin": "1LNF2T951A1979DW6",
+   "bound_premium": 3924.17
+  },
+  {
+   "seq": 3755,
+   "from": "Beatrix Thistlewood",
+   "to": "Everett Delacroix",
+   "vin": "6Z3F0P386XLCD3XUN",
+   "bound_premium": 3607.13
+  },
+  {
+   "seq": 4378,
+   "from": "Wilhelmina Okonkwo",
+   "to": "Everett Delacroix",
+   "vin": "UXM2W9G2R24KR7PUW",
+   "bound_premium": 12167.56
+  },
+  {
+   "seq": 12,
+   "from": "Callum Thistlewood",
+   "to": "Aurelio Vasquez",
+   "vin": "1Y7NEJZ5550ZB203F",
+   "bound_premium": 19823.35
+  },
+  {
+   "seq": 710,
+   "from": "Cassius Pennington",
+   "to": "Aurelio Vasquez",
+   "vin": "EEJ2NE71N3P47G76V",
+   "bound_premium": 18218.6
+  },
+  {
+   "seq": 1432,
+   "from": "Thaddeus Whitlock",
+   "to": "Aurelio Vasquez",
+   "vin": "S4A359GJNZLLGXJGR",
+   "bound_premium": 22216.16
+  },
+  {
+   "seq": 2199,
+   "from": "Fitzgerald Chattopadhyay",
+   "to": "Aurelio Vasquez",
+   "vin": "JA0GKHYY2TGAGVK9U",
+   "bound_premium": 10959.94
+  },
+  {
+   "seq": 2991,
+   "from": "Horace Vasquez",
+   "to": "Aurelio Vasquez",
+   "vin": "R8V0Y1PFHG2JMJ87U",
+   "bound_premium": 7588.72
+  },
+  {
+   "seq": 3925,
+   "from": "Callum Delacroix",
+   "to": "Aurelio Vasquez",
+   "vin": "1R1BW6MVA9ESPAA9E",
+   "bound_premium": 5011.71
+  },
+  {
+   "seq": 4741,
+   "from": "Callum Chattopadhyay",
+   "to": "Aurelio Vasquez",
+   "vin": "XK8B3GADK1VDR45KB",
+   "bound_premium": 9680.12
+  },
+  {
+   "seq": 59,
+   "from": "Callum Vandermeer",
+   "to": "Lorenzo Harrington",
+   "vin": "PR39BTFUPC2MT96F5",
+   "bound_premium": 5037.74
+  },
+  {
+   "seq": 795,
+   "from": "Anouk Ashcombe",
+   "to": "Lorenzo Harrington",
+   "vin": "B8BCYPCFBN1T568FK",
+   "bound_premium": 9369.32
+  },
+  {
+   "seq": 1368,
+   "from": "Lorenzo Okonkwo",
+   "to": "Lorenzo Harrington",
+   "vin": "UL6R2X0KYJWNJ50RW",
+   "bound_premium": 12159.46
+  }
+ ],
+ "count": 26,
+ "note": "Name-only reattribution of 26 donor policies to Delacroix (16), Vasquez (7), Harrington (3). Premiums, VINs, months, states, money waterfalls untouched. Emails keep canon.<seq> provenance.",
+ "updated_sha256": "5a2be288360c84289225ee75ff782c947bcb6a014f7627cb16a7d45946789ac2",
+ "frozen_original_sha256": "faa3c9b7f4d50478223133535cb16904b63533f656f3a522176ef0d756814095",
+ "date": "2026-09-02"
+}
