@@ -48,7 +48,7 @@ az functionapp show -n "$FUNC_NAME" -g "$RG" -o none 2>/dev/null || \
 az functionapp create -n "$FUNC_NAME" -g "$RG" \
   --storage-account "$FUNC_STORAGE" \
   --flexconsumption-location "$LOCATION" \
-  --runtime node --runtime-version 20 \
+  --runtime node --runtime-version 24 \
   --assign-identity '[system]' -o none
 az functionapp update -n "$FUNC_NAME" -g "$RG" --set httpsOnly=true -o none
 
