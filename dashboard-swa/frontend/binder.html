@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Torque Underwriters — Binder Performance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#12243A; --ink-2:#3D5573; --ink-3:#7D8FA6;
+  --paper:#EEF1F5; --card:#FFFFFF; --rule:#D3DBE4;
+  --ox:#7B2D3B; --ox-soft:#B9707C; --brass:#B08D2F; --brass-soft:#E4D2A0;
+  --teal:#1F6F6B; --warn:#9A3412;
+  --disp:"Archivo",'Helvetica Neue',Arial,sans-serif;
+  --body:"Inter",-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,'SF Mono',Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding:0 24px 72px}
+
+/* ---------- slip header ---------- */
+.slip{background:var(--ink);color:#EEF1F5;margin:0 -24px 28px;padding:26px 24px 0}
+.slip-in{max-width:1240px;margin:0 auto}
+.slip h1{font-family:var(--disp);font-weight:700;font-size:clamp(23px,3.4vw,35px);
+  letter-spacing:-.022em;margin:0 0 3px;line-height:1.05}
+.slip .sub{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:#8FA6C0;margin:0 0 20px}
+.slipgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));
+  border-top:1px solid #2B3F58}
+.slipgrid div{padding:11px 14px 13px;border-right:1px solid #2B3F58}
+.slipgrid div:last-child{border-right:none}
+.slipgrid dt{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:#7C93AE;margin:0 0 4px}
+.slipgrid dd{margin:0;font-family:var(--mono);font-size:13.5px;font-weight:500;color:#F2F6FA}
+
+/* ---------- kpi ---------- */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);margin-bottom:30px}
+.kpi{background:var(--card);padding:16px 17px 17px}
+.kpi .lab{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:7px}
+.kpi .val{font-family:var(--mono);font-size:23px;font-weight:600;letter-spacing:-.02em;line-height:1}
+.kpi .fo{font-size:12px;color:var(--ink-2);margin-top:6px}
+.kpi.ox .val{color:var(--ox)}
+
+/* ---------- sections ---------- */
+section{margin-bottom:34px}
+.head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+  border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:6px}
+.head h2{font-family:var(--disp);font-weight:600;font-size:20px;letter-spacing:-.015em;margin:0}
+.head .tag{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);margin-left:auto}
+.lede{font-size:13.5px;color:var(--ink-2);margin:9px 0 18px;max-width:78ch}
+
+/* ---------- dial (signature) ---------- */
+.dialwrap{display:grid;grid-template-columns:290px 1fr;gap:26px;align-items:stretch;
+  background:var(--card);border:1px solid var(--rule);padding:20px}
+.dialbox{border-right:1px solid var(--rule);padding-right:24px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center}
+.dialread{font-family:var(--mono);font-size:38px;font-weight:600;letter-spacing:-.03em;
+  color:var(--ox);line-height:1;margin-top:-4px}
+.dialcap{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ink-3);margin-top:9px;text-align:center}
+input[type=range]{width:100%;margin:16px 0 4px;accent-color:var(--ox);height:22px}
+.marks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;
+  color:var(--ink-3);width:100%}
+.dialside{display:flex;flex-direction:column;justify-content:center;gap:14px}
+.presets{display:flex;gap:8px;flex-wrap:wrap}
+.presets button{font-family:var(--mono);font-size:11px;letter-spacing:.05em;padding:7px 11px;
+  border:1px solid var(--rule);background:var(--paper);color:var(--ink-2);cursor:pointer;border-radius:0}
+.presets button:hover{border-color:var(--ox);color:var(--ox)}
+.presets button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.toggles{display:flex;gap:20px;flex-wrap:wrap;font-size:13px;align-items:center}
+.toggles label{display:flex;gap:7px;align-items:center;cursor:pointer}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule)}
+.readout div{background:var(--card);padding:11px 13px}
+.readout dt{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:4px}
+.readout dd{margin:0;font-family:var(--mono);font-size:16px;font-weight:600}
+
+/* ---------- notices ---------- */
+.notice{border-left:3px solid var(--brass);background:#FBF6E9;padding:13px 16px;font-size:13.5px;
+  color:#5C4A16;margin:0 0 18px}
+.notice.stop{border-left-color:var(--warn);background:#FCF0EA;color:#6B2A12}
+.notice b{font-weight:600}
+
+/* ---------- charts ---------- */
+.chart{background:var(--card);border:1px solid var(--rule);padding:18px 18px 10px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);padding:12px 2px 4px}
+.legend i{display:inline-block;width:11px;height:11px;margin-right:6px;vertical-align:-1px}
+.legend i.ln{height:0;border-top:2px solid;width:15px;vertical-align:4px}
+
+/* ---------- table ---------- */
+.scroll{overflow-x:auto;background:var(--card);border:1px solid var(--rule)}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12px}
+th,td{padding:8px 11px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--rule)}
+th{background:var(--ink);color:#DCE6F0;font-weight:500;font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;position:sticky;top:0}
+th:first-child,td:first-child{text-align:left}
+tbody tr:hover{background:#F5F8FB}
+tfoot td{font-weight:600;background:#E8EDF3;border-top:2px solid var(--ink)}
+.neg{color:var(--ox)}
+
+footer{border-top:1px solid var(--rule);padding-top:18px;font-size:12.5px;color:var(--ink-2);
+  max-width:88ch}
+footer h3{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 8px}
+footer li{margin-bottom:6px}
+@media (max-width:820px){
+  .dialwrap{grid-template-columns:1fr}
+  .dialbox{border-right:none;border-bottom:1px solid var(--rule);padding:0 0 20px}
+}
+@media (prefers-reduced-motion:no-preference){
+  .bar,.pt{transition:all .28s cubic-bezier(.4,0,.2,1)}
+}
+</style>
+</head>
+<body>
+
+<div class="slip"><div class="slip-in">
+  <h1>Binder performance — exotic &amp; collector automobile</h1>
+  <p class="sub">Torque Underwriters · monthly rolling · prepared 31 Aug 2026</p>
+  <dl class="slipgrid">
+    <div><dt>UMR</dt><dd>B1234EXOTIC26</dd></div>
+    <div><dt>Binder</dt><dd>BA-EXO-2026-01</dd></div>
+    <div><dt>Period</dt><dd>Aug 25 – Jul 26</dd></div>
+    <div><dt>Years of account</dt><dd>2025 / 2026</dd></div>
+    <div><dt>Panel</dt><dd>10 × 10% line</dd></div>
+    <div><dt>Commission</dt><dd>12.5 / 12.5 / 75</dd></div>
+    <div><dt>Risk code</dt><dd>MT</dd></div>
+  </dl>
+</div></div>
+
+<div class="wrap">
+
+<div class="kpis" id="kpis"></div>
+
+<section>
+  <div class="head"><h2>Loss ratio assumption</h2><span class="tag">Signature input</span></div>
+  <p class="lede">The claims bordereaux has not arrived yet. Until it does, the book is running on an
+    underwriter estimate of 56%. Every profit commission figure below is driven by this one dial.</p>
+
+  <div class="notice stop"><b>Running on a 56% estimate.</b> The uploaded bordereaux is an
+    <em>underwriting</em> bordereaux — it reports policies bound, not claims notified. The loss ratio is an
+    underwriter estimate pending the claims bordereaux, so treat the profit commission as provisional and
+    not as cash: on a Lloyd's binder it settles 24–36 months after the year of account closes, and it
+    reverses if experience deteriorates.</div>
+
+  <div class="dialwrap">
+    <div class="dialbox">
+      <svg viewBox="0 0 200 128" width="200" height="128" aria-hidden="true" id="gauge"></svg>
+      <div class="dialread" id="lrRead">56.0%</div>
+      <div class="dialcap">Assumed incurred loss ratio<br>on earned premium</div>
+    </div>
+    <div class="dialside">
+      <div>
+        <input type="range" id="lr" min="35" max="75" step="0.5" value="56"
+               aria-label="Assumed incurred loss ratio">
+        <div class="marks"><span>35%</span><span>45%</span><span>55%</span><span>60% hurdle</span><span>75%</span></div>
+      </div>
+      <div class="presets" id="presets">
+        <button data-lr="56" aria-pressed="true">Current 56%</button>
+        <button data-lr="53.95">Priced 53.95%</button>
+        <button data-lr="50">Favourable 50%</button>
+        <button data-lr="62">Trigger fails 62%</button>
+      </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="scale"> Sliding scale instead of flat 15%</label>
+      </div>
+      <dl class="readout" id="readout"></dl>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head"><h2>Profit commission, rolling by month</h2><span class="tag">Earned basis</span></div>
+  <p class="lede">Profit commission accrues on premium <em>earned</em>, not written, and is calculated
+    separately for each year of account. Bars show the movement booked in each month; the line is the
+    cumulative accrual across both years.</p>
+  <div class="chart">
+    <svg id="pcChart" viewBox="0 0 960 340" role="img" aria-label="Profit commission accrual by month"></svg>
+    <div class="legend">
+      <span><i style="background:#7B2D3B"></i>YOA 2025 movement</span>
+      <span><i style="background:#B9707C"></i>YOA 2026 movement</span>
+      <span><i class="ln" style="border-color:#12243A"></i>Cumulative accrual</span>
+      <span><i style="background:#F0E7CE;border:1px solid #B08D2F"></i>Premium earned to date (right axis)</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head"><h2>Operating profitability, rolling by month</h2><span class="tag">Written basis</span></div>
+  <p class="lede">Revenue is Torque's own 12.5% commission plus policy and inspection fees, recognised when
+    the policy is bound. Costs are the expense budget on its monthly phasing, with the retail commission
+    line replaced by what was actually paid away each month.</p>
+  <div class="chart">
+    <svg id="prChart" viewBox="0 0 960 340" role="img" aria-label="Monthly revenue, cost and operating profit"></svg>
+    <div class="legend">
+      <span><i style="background:#1F6F6B"></i>Commission &amp; fee revenue</span>
+      <span><i style="background:#C3CFDB"></i>Operating cost</span>
+      <span><i class="ln" style="border-color:#12243A"></i>Operating margin, 3-month rolling (right axis)</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head"><h2>Monthly detail</h2><span class="tag">All figures 100%</span></div>
+  <div class="scroll"><table id="tbl">
+    <thead><tr>
+      <th>Period</th><th>YOA</th><th>Policies</th><th>GWP written</th><th>Earned in month</th>
+      <th>Cumulative earned</th><th>Revenue</th><th>Cost</th><th>Operating profit</th>
+      <th>Margin</th><th>PC movement</th><th>PC cumulative</th>
+    </tr></thead>
+    <tbody></tbody><tfoot></tfoot>
+  </table></div>
+</section>
+
+<footer>
+  <h3>What this rests on</h3>
+  <ul>
+    <li>Premium, commission, fees and policy counts are the reported book: 7,655 bound policies from
+      <span style="font-family:var(--mono)">bdx_uw_MASTER_2025-08_to_2026-07.xlsx</span>. Nothing is re-rated.</li>
+    <li>Earning is straight pro rata on days from the effective date. The bordereaux carries no expiry
+      column, so a 12-month term is assumed — if the book is written on longer terms, every earned figure
+      here is overstated.</li>
+    <li>The 56% loss ratio is an underwriter estimate, not reported experience. For reference, the priced
+      loss ratio of 53.95% is derived from the rating matrix loadings (gross-up divisor 0.58
+      over the 1.075 risk margin) and applies because every risk was written exactly at technical premium.
+      is what the book was rated to produce — the estimate sits 2.0 points above it.</li>
+    <li>No reinsurance is deducted from the profit commission premium — confirmed as not applicable to
+      this binder.</li>
+    <li>Commission stack: capacity allows 25% in total, of which Torque retains 12.5% and the producing
+      broker takes 12.5%, leaving 75% net to the ten syndicates. The profit statement deducts the whole
+      25% because that is what the syndicate pays away; the revenue trend below counts only Torque's 12.5%.</li>
+    <li>Costs are the plan, not actuals. Only the retail commission line has been replaced with reported
+      figures. Headcount, salaries and parent allocations remain unvalidated assumptions.</li>
+    <li>1,620 policies — 21% of the book — were written below the $5,000 minimum premium, and the surplus
+      lines tax rate is blank on every row. Neither affects profit commission, but both block invoicing.</li>
+    <li>The bordereaux marks its own rows as synthetic demonstration data.</li>
+  </ul>
+</footer>
+</div>
+
+<script>
+const DATA = {"months":[{"period":"2025-08","yoa":2025,"policies":506,"gwp":5738724.24,"mga":717340.47,"broker":717340.47,"fees":206350.0,"ntc":4304043.3,"earnedMonth":251120.37,"cumEarned25":251120.36991780848,"cumEarned26":0.0,"otherOpex":224009.0625,"budgetOpex":849009.0625},{"period":"2025-09","yoa":2025,"policies":477,"gwp":4895410.03,"mga":611926.26,"broker":611926.26,"fees":189200.0,"ntc":3671557.51,"earnedMonth":677993.27,"cumEarned25":929113.6352876701,"cumEarned26":0.0,"otherOpex":240022.3125,"budgetOpex":865022.3125},{"period":"2025-10","yoa":2025,"policies":605,"gwp":6379037.33,"mga":797379.7,"broker":797379.7,"fees":242000.0,"ntc":4784277.93,"earnedMonth":1180389.67,"cumEarned25":2109503.3094520527,"cumEarned26":0.0,"otherOpex":239009.0625,"budgetOpex":864009.0625},{"period":"2025-11","yoa":2025,"policies":575,"gwp":5722205.8,"mga":715275.76,"broker":715275.76,"fees":233500.0,"ntc":4291654.28,"earnedMonth":1646131.67,"cumEarned25":3755634.9767945176,"cumEarned26":0.0,"otherOpex":224009.0625,"budgetOpex":849009.0625},{"period":"2025-12","yoa":2025,"policies":626,"gwp":6069719.25,"mga":758714.91,"broker":758714.91,"fees":251350.0,"ntc":4552289.43,"earnedMonth":2204920.36,"cumEarned25":5960555.338273967,"cumEarned26":0.0,"otherOpex":228022.3125,"budgetOpex":853022.3125},{"period":"2026-01","yoa":2026,"policies":615,"gwp":5862159.73,"mga":732769.89,"broker":732769.89,"fees":243750.0,"ntc":4396619.95,"earnedMonth":2702176.04,"cumEarned25":8407015.601698624,"cumEarned26":255715.77473972607,"otherOpex":310176.5625000001,"budgetOpex":935176.5625000001},{"period":"2026-02","yoa":2026,"policies":658,"gwp":6262331.1,"mga":782791.3,"broker":782791.3,"fees":261050.0,"ntc":4696748.5,"earnedMonth":2906664.99,"cumEarned25":10616721.646082189,"cumEarned26":952674.7169041092,"otherOpex":244009.0625,"budgetOpex":869009.0625},{"period":"2026-03","yoa":2026,"policies":742,"gwp":6599426.47,"mga":824928.31,"broker":824928.31,"fees":295200.0,"ntc":4949569.85,"earnedMonth":3758631.81,"cumEarned25":13063181.909506846,"cumEarned26":2264846.2664383557,"otherOpex":497772.3125,"budgetOpex":1122772.3125},{"period":"2026-04","yoa":2026,"policies":649,"gwp":5935117.0,"mga":741889.55,"broker":741889.55,"fees":258400.0,"ntc":4451337.9,"earnedMonth":4159670.81,"cumEarned25":15430724.09991781,"cumEarned26":4056974.885342465,"otherOpex":252009.0625,"budgetOpex":877009.0625},{"period":"2026-05","yoa":2026,"policies":671,"gwp":5545070.29,"mga":693133.82,"broker":693133.82,"fees":267850.0,"ntc":4158802.65,"earnedMonth":4787766.13,"cumEarned25":17877184.363342468,"cumEarned26":6398280.755068483,"otherOpex":224009.0625,"budgetOpex":849009.0625},{"period":"2026-06","yoa":2026,"policies":824,"gwp":6612903.55,"mga":826612.82,"broker":826612.82,"fees":325900.0,"ntc":4959677.91,"earnedMonth":5122436.18,"cumEarned25":20244726.553753432,"cumEarned26":9153174.747698607,"otherOpex":238022.3125,"budgetOpex":863022.3125},{"period":"2026-07","yoa":2026,"policies":707,"gwp":5679107.85,"mga":709888.49,"broker":709888.49,"fees":282450.0,"ntc":4259330.87,"earnedMonth":5822430.88,"cumEarned25":22691186.81717809,"cumEarned26":12529145.368219156,"otherOpex":232009.0625,"budgetOpex":857009.0625}],"params":{"ceding":0.25,"mgaShare":0.125,"brokerShare":0.125,"expAllow":0.05,"hurdle":0.6,"pcFlat":0.15,"pricedLR":0.5395348837209302,"gwpTotal":71301212.64,"policies":7655,"mgaTotal":8912651.28,"feeTotal":3057000}};
+const P = DATA.params, M = DATA.months;
+const NB=["Aug 25","Sep 25","Oct 25","Nov 25","Dec 25","Jan 26","Feb 26","Mar 26","Apr 26","May 26","Jun 26","Jul 26"];
+const OX="#7B2D3B", OXS="#B9707C", INK="#12243A", BRASS="#B08D2F", TEAL="#1F6F6B", GREY="#C3CFDB", RULE="#D3DBE4", INK3="#7D8FA6";
+
+const fM = v => (v<0?"−":"")+"$"+(Math.abs(v)/1e6).toFixed(2)+"m";
+const fK = v => (v<0?"−":"")+"$"+Math.abs(v).toLocaleString("en-US",{maximumFractionDigits:0});
+const fP = v => (v*100).toFixed(1)+"%";
+const el = id => document.getElementById(id);
+
+/* sliding scale from the rating matrix / model Assumptions */
+const BANDS=[[0,.40,.30],[.40,.45,.25],[.45,.50,.20],[.50,.55,.15],[.55,.60,.10]];
+function pcRate(lr,useScale){
+  if(lr>=P.hurdle) return 0;
+  if(!useScale) return P.pcFlat;
+  for(const [lo,hi,r] of BANDS) if(lr>=lo && lr<hi) return r;
+  return 0;
+}
+/* profit commission on a cumulative gross-earned figure for one year of account */
+function pcFor(grossEarned,lr,useScale){
+  if(grossEarned<=0) return 0;
+  const nep = grossEarned;
+  const incurred = grossEarned*lr;            // no reinsurance applies on this binder
+  if(lr>=P.hurdle) return 0;                  // trigger tested on the same gross footing
+  const profit = nep - incurred - nep*P.expAllow - nep*P.ceding;
+  return Math.max(0,profit)*pcRate(lr,useScale);
+}
+
+function compute(){
+  const lr=parseFloat(el("lr").value)/100, useScale=el("scale").checked;
+  let prevC=0, cumRev=0, cumCost=0;
+  const rows=M.map((m,i)=>{
+    const pc25=pcFor(m.cumEarned25,lr,useScale);
+    const pc26=pcFor(m.cumEarned26,lr,useScale);
+    const cum=pc25+pc26, mv=cum-prevC; prevC=cum;
+    const rev=m.mga+m.fees, cost=m.otherOpex, prof=rev-cost;
+    cumRev+=rev; cumCost+=cost;
+    return {...m, i, name:NB[i], pc25, pc26, cumPC:cum, pcMove:mv,
+            cumEarned:m.cumEarned25+m.cumEarned26, rev, cost, prof,
+            margin: rev? prof/rev : 0, cumRev, cumCost, cumProf:cumRev-cumCost};
+  });
+  /* 3-month rolling margin */
+  rows.forEach((r,i)=>{
+    const s=Math.max(0,i-2), w=rows.slice(s,i+1);
+    const rv=w.reduce((a,b)=>a+b.rev,0), pf=w.reduce((a,b)=>a+b.prof,0);
+    r.roll = rv? pf/rv : 0;
+  });
+  return {rows,lr,useScale};
+}
+
+/* ---------- gauge ---------- */
+function gauge(lr){
+  const g=el("gauge"), R=78, cx=100, cy=104, lo=.35, hi=.75;
+  const ang=t=>Math.PI*(1-Math.min(1,Math.max(0,(t-lo)/(hi-lo))));
+  const pt=(t,r)=>[cx+r*Math.cos(ang(t)), cy-r*Math.sin(ang(t))];
+  const arc=(a,b,r,w,c)=>{const[x1,y1]=pt(a,r),[x2,y2]=pt(b,r);
+    return `<path d="M${x1} ${y1} A${r} ${r} 0 0 1 ${x2} ${y2}" fill="none" stroke="${c}" stroke-width="${w}"/>`;};
+  let s=arc(lo,P.hurdle,R,11,"#DCE4EC")+arc(P.hurdle,hi,R,11,"#EBD9DC");
+  s+=arc(lo,Math.min(lr,hi),R,11,lr>=P.hurdle?OX:TEAL);
+  const [hx,hy]=pt(P.hurdle,R+9), [hx2,hy2]=pt(P.hurdle,R-9);
+  s+=`<line x1="${hx}" y1="${hy}" x2="${hx2}" y2="${hy2}" stroke="${INK}" stroke-width="2"/>`;
+  s+=`<text x="${hx-2}" y="${hy-6}" font-family="IBM Plex Mono,monospace" font-size="9" fill="${INK}" text-anchor="middle">60%</text>`;
+  const [nx,ny]=pt(lr,R-16);
+  s+=`<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="${INK}" stroke-width="2.5" stroke-linecap="round"/>`;
+  s+=`<circle cx="${cx}" cy="${cy}" r="4.5" fill="${INK}"/>`;
+  const [px]=pt(.5395,R+9), [,py]=pt(.5395,R+9);
+  s+=`<circle cx="${px}" cy="${py}" r="2.6" fill="${BRASS}"/>`;
+  s+=`<text x="${px}" y="${py-7}" font-family="IBM Plex Mono,monospace" font-size="8" fill="${BRASS}" text-anchor="middle">PRICED</text>`;
+  g.innerHTML=s;
+}
+
+/* ---------- chart helpers ---------- */
+const W=960,H=340,ML=74,MR=76,MT=22,MB=44;
+const IW=W-ML-MR, IH=H-MT-MB;
+function axes(xs,yTicks,fmtY,yTicks2,fmtY2){
+  let s=`<line x1="${ML}" y1="${MT+IH}" x2="${ML+IW}" y2="${MT+IH}" stroke="${INK}" stroke-width="1.4"/>`;
+  yTicks.forEach(t=>{
+    s+=`<line x1="${ML}" y1="${t.y}" x2="${ML+IW}" y2="${t.y}" stroke="${RULE}" stroke-width="1"/>`;
+    s+=`<text x="${ML-9}" y="${t.y+4}" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="10.5" fill="${INK3}">${fmtY(t.v)}</text>`;});
+  if(yTicks2) yTicks2.forEach(t=>{
+    s+=`<text x="${ML+IW+9}" y="${t.y+4}" font-family="IBM Plex Mono,monospace" font-size="10.5" fill="${BRASS}">${fmtY2(t.v)}</text>`;});
+  xs.forEach((n,i)=>{
+    const x=ML+IW*(i+.5)/xs.length;
+    s+=`<text x="${x}" y="${MT+IH+19}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="10" fill="${INK3}">${n}</text>`;});
+  return s;
+}
+function ticks(max,n,pad){const m=max*(pad||1.08)||1;const step=m/n;
+  return Array.from({length:n+1},(_,i)=>({v:step*i,y:MT+IH-IH*(i/n)}));}
+function path(pts,c,dash){return `<polyline class="pt" points="${pts.join(" ")}" fill="none" stroke="${c}" stroke-width="2.2" ${dash?'stroke-dasharray="5 4"':''} stroke-linejoin="round"/>`;}
+
+/* ---------- profit commission chart ---------- */
+function drawPC(rows){
+  const mv=rows.map(r=>r.pcMove);
+  const maxBar=Math.max(...mv,1), maxCum=Math.max(...rows.map(r=>r.cumPC),1);
+  const maxE=Math.max(...rows.map(r=>r.cumEarned),1);
+  const tk=ticks(Math.max(maxBar,maxCum),4);
+  const top=tk[tk.length-1].v;
+  const y=v=>MT+IH-IH*(v/top);
+  const bw=IW/rows.length*0.46;
+  let s=axes(rows.map(r=>r.name),tk,v=>v>=1e6?"$"+(v/1e6).toFixed(1)+"m":(v>=1000?"$"+Math.round(v/1e3)+"k":"$0"),
+             ticks(maxE,4),v=>"$"+(v/1e6).toFixed(0)+"m");
+  s+=`<text x="${ML+IW}" y="${MT-6}" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="10" fill="${BRASS}">PREMIUM EARNED TO DATE</text>`;
+  rows.forEach((r,i)=>{
+    const cx=ML+IW*(i+.5)/rows.length;
+    const parts=[[r.pcMove*(r.pc25/(r.pc25+r.pc26||1)),OX],[r.pcMove*(r.pc26/(r.pc25+r.pc26||1)),OXS]];
+    let base=MT+IH;
+    parts.forEach(([v,c])=>{ if(v<=0) return;
+      const h=IH*(v/top); base-=h;
+      s+=`<rect class="bar" x="${cx-bw/2}" y="${base}" width="${bw}" height="${Math.max(0,h)}" fill="${c}"/>`;});
+    s+=`<title>${r.name}</title>`;
+  });
+  const ey=v=>MT+IH-IH*(v/(maxE*1.08));
+  const area=rows.map((r,i)=>`${ML+IW*(i+.5)/rows.length},${ey(r.cumEarned)}`);
+  s=`<polygon points="${ML+IW*0.5/rows.length},${MT+IH} ${area.join(" ")} ${ML+IW*(rows.length-.5)/rows.length},${MT+IH}" fill="#F0E7CE" opacity=".75"/>`+s;
+  s+=path(area,BRASS,true);
+  s+=path(rows.map((r,i)=>`${ML+IW*(i+.5)/rows.length},${y(r.cumPC)}`),INK);
+  rows.forEach((r,i)=>{const cx=ML+IW*(i+.5)/rows.length;
+    s+=`<circle class="pt" cx="${cx}" cy="${y(r.cumPC)}" r="3" fill="#fff" stroke="${INK}" stroke-width="2"><title>${r.name} cumulative ${fK(r.cumPC)}</title></circle>`;});
+  if(rows[rows.length-1].cumPC<=0){
+    s+=`<text x="${ML+IW/2}" y="${MT+IH/2}" text-anchor="middle" font-family="Archivo,sans-serif" font-size="17" font-weight="600" fill="${OX}">Trigger fails — no profit commission at this loss ratio</text>`;}
+  el("pcChart").innerHTML=s;
+}
+
+/* ---------- profitability chart ---------- */
+function drawPR(rows){
+  const maxV=Math.max(...rows.map(r=>Math.max(r.rev,r.cost)),1);
+  const tk=ticks(maxV,4), top=tk[tk.length-1].v;
+  const y=v=>MT+IH-IH*(v/top);
+  const bw=IW/rows.length*0.30;
+  const mTop=Math.ceil(Math.max(...rows.map(r=>r.roll),.2)*10)/10+.1;
+  const my=v=>MT+IH-IH*(Math.max(0,Math.min(v,mTop))/mTop);
+  const mt=[]; for(let v=0;v<=mTop+1e-9;v+=mTop/4) mt.push({v,y:my(v)});
+  let s=axes(rows.map(r=>r.name),tk,v=>"$"+(v/1e6).toFixed(1)+"m",
+             mt,v=>(v*100).toFixed(0)+"%");
+  rows.forEach((r,i)=>{
+    const cx=ML+IW*(i+.5)/rows.length;
+    s+=`<rect class="bar" x="${cx-bw-1.5}" y="${y(r.rev)}" width="${bw}" height="${MT+IH-y(r.rev)}" fill="${TEAL}"><title>${r.name} revenue ${fK(r.rev)}</title></rect>`;
+    s+=`<rect class="bar" x="${cx+1.5}" y="${y(r.cost)}" width="${bw}" height="${MT+IH-y(r.cost)}" fill="${GREY}"><title>${r.name} cost ${fK(r.cost)}</title></rect>`;
+  });
+  s+=path(rows.map((r,i)=>`${ML+IW*(i+.5)/rows.length},${my(r.roll)}`),INK);
+  rows.forEach((r,i)=>{const cx=ML+IW*(i+.5)/rows.length;
+    s+=`<circle class="pt" cx="${cx}" cy="${my(r.roll)}" r="3" fill="#fff" stroke="${INK}" stroke-width="2"><title>${r.name} rolling margin ${fP(r.roll)}</title></circle>`;});
+  el("prChart").innerHTML=s;
+}
+
+/* ---------- kpis, readout, table ---------- */
+function draw(){
+  const {rows,lr}=compute(), last=rows[rows.length-1];
+  el("lrRead").textContent=(lr*100).toFixed(1)+"%";
+  gauge(lr);
+
+  el("kpis").innerHTML=[
+    ["GWP written",fM(P.gwpTotal),P.policies.toLocaleString()+" policies bound",""],
+    ["Premium earned",fM(last.cumEarned),(last.cumEarned/P.gwpTotal*100).toFixed(0)+"% of written",""],
+    ["Torque revenue",fM(P.mgaTotal+P.feeTotal),"commission "+fM(P.mgaTotal)+" · fees "+fM(P.feeTotal),""],
+    ["Operating profit",fM(last.cumProf),fP(last.cumProf/last.cumRev)+" margin",""],
+    ["Profit commission",fM(last.cumPC),lr>=P.hurdle?"trigger fails at this loss ratio":"estimate at "+fP(lr),"ox"],
+  ].map(([l,v,f,c])=>`<div class="kpi ${c}"><div class="lab">${l}</div><div class="val">${v}</div><div class="fo">${f}</div></div>`).join("");
+
+  el("readout").innerHTML=[
+    ["Rate applied",lr>=P.hurdle?"nil":fP(pcRate(lr,el("scale").checked))],
+    ["Headroom to hurdle",((P.hurdle-lr)*100).toFixed(1)+" pts"],
+    ["YOA 2025 accrual",fK(pcFor(M[11].cumEarned25,lr,el("scale").checked))],
+    ["YOA 2026 accrual",fK(pcFor(M[11].cumEarned26,lr,el("scale").checked))],
+  ].map(([t,d])=>`<div><dt>${t}</dt><dd>${d}</dd></div>`).join("");
+
+  drawPC(rows); drawPR(rows);
+
+  el("tbl").querySelector("tbody").innerHTML=rows.map(r=>`<tr>
+    <td>${r.period}</td><td>${r.yoa}</td><td>${r.policies}</td><td>${fK(r.gwp)}</td>
+    <td>${fK(r.earnedMonth)}</td><td>${fK(r.cumEarned)}</td><td>${fK(r.rev)}</td><td>${fK(r.cost)}</td>
+    <td class="${r.prof<0?'neg':''}">${fK(r.prof)}</td><td>${fP(r.margin)}</td>
+    <td>${fK(r.pcMove)}</td><td>${fK(r.cumPC)}</td></tr>`).join("");
+  const T=rows[rows.length-1];
+  el("tbl").querySelector("tfoot").innerHTML=`<tr><td>Total</td><td>—</td>
+    <td>${P.policies.toLocaleString()}</td><td>${fK(P.gwpTotal)}</td>
+    <td>${fK(T.cumEarned)}</td><td>${fK(T.cumEarned)}</td><td>${fK(T.cumRev)}</td>
+    <td>${fK(T.cumCost)}</td><td>${fK(T.cumProf)}</td><td>${fP(T.cumProf/T.cumRev)}</td>
+    <td>${fK(T.cumPC)}</td><td>${fK(T.cumPC)}</td></tr>`;
+}
+
+el("lr").addEventListener("input",()=>{
+  document.querySelectorAll("#presets button").forEach(b=>b.setAttribute("aria-pressed",
+    Math.abs(parseFloat(b.dataset.lr)-parseFloat(el("lr").value))<.01));
+  draw();});
+document.querySelectorAll("#presets button").forEach(b=>b.addEventListener("click",()=>{
+  el("lr").value=b.dataset.lr;
+  document.querySelectorAll("#presets button").forEach(x=>x.setAttribute("aria-pressed",x===b));
+  draw();}));
+el("scale").addEventListener("change",draw);
+draw();
+</script>
+</body>
+</html>
