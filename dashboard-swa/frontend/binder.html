@@ -127,7 +127,7 @@ footer li{margin-bottom:6px}
 
 <div class="slip"><div class="slip-in">
   <h1>Binder performance — exotic &amp; collector automobile</h1>
-  <p class="sub">Torque Underwriters · monthly rolling · prepared 31 Aug 2026</p>
+  <p class="sub">Torque Underwriters · monthly rolling · prepared 31 Aug 2026 · <span id="reveal-note">awaiting playback</span></p>
   <dl class="slipgrid">
     <div><dt>UMR</dt><dd>B1234EXOTIC26</dd></div>
     <div><dt>Binder</dt><dd>BA-EXO-2026-01</dd></div>
@@ -250,9 +250,98 @@ footer li{margin-bottom:6px}
 </div>
 
 <script>
-const DATA = {"months":[{"period":"2025-08","yoa":2025,"policies":506,"gwp":5738724.24,"mga":717340.47,"broker":717340.47,"fees":206350.0,"ntc":4304043.3,"earnedMonth":251120.37,"cumEarned25":251120.36991780848,"cumEarned26":0.0,"otherOpex":224009.0625,"budgetOpex":849009.0625},{"period":"2025-09","yoa":2025,"policies":477,"gwp":4895410.03,"mga":611926.26,"broker":611926.26,"fees":189200.0,"ntc":3671557.51,"earnedMonth":677993.27,"cumEarned25":929113.6352876701,"cumEarned26":0.0,"otherOpex":240022.3125,"budgetOpex":865022.3125},{"period":"2025-10","yoa":2025,"policies":605,"gwp":6379037.33,"mga":797379.7,"broker":797379.7,"fees":242000.0,"ntc":4784277.93,"earnedMonth":1180389.67,"cumEarned25":2109503.3094520527,"cumEarned26":0.0,"otherOpex":239009.0625,"budgetOpex":864009.0625},{"period":"2025-11","yoa":2025,"policies":575,"gwp":5722205.8,"mga":715275.76,"broker":715275.76,"fees":233500.0,"ntc":4291654.28,"earnedMonth":1646131.67,"cumEarned25":3755634.9767945176,"cumEarned26":0.0,"otherOpex":224009.0625,"budgetOpex":849009.0625},{"period":"2025-12","yoa":2025,"policies":626,"gwp":6069719.25,"mga":758714.91,"broker":758714.91,"fees":251350.0,"ntc":4552289.43,"earnedMonth":2204920.36,"cumEarned25":5960555.338273967,"cumEarned26":0.0,"otherOpex":228022.3125,"budgetOpex":853022.3125},{"period":"2026-01","yoa":2026,"policies":615,"gwp":5862159.73,"mga":732769.89,"broker":732769.89,"fees":243750.0,"ntc":4396619.95,"earnedMonth":2702176.04,"cumEarned25":8407015.601698624,"cumEarned26":255715.77473972607,"otherOpex":310176.5625000001,"budgetOpex":935176.5625000001},{"period":"2026-02","yoa":2026,"policies":658,"gwp":6262331.1,"mga":782791.3,"broker":782791.3,"fees":261050.0,"ntc":4696748.5,"earnedMonth":2906664.99,"cumEarned25":10616721.646082189,"cumEarned26":952674.7169041092,"otherOpex":244009.0625,"budgetOpex":869009.0625},{"period":"2026-03","yoa":2026,"policies":742,"gwp":6599426.47,"mga":824928.31,"broker":824928.31,"fees":295200.0,"ntc":4949569.85,"earnedMonth":3758631.81,"cumEarned25":13063181.909506846,"cumEarned26":2264846.2664383557,"otherOpex":497772.3125,"budgetOpex":1122772.3125},{"period":"2026-04","yoa":2026,"policies":649,"gwp":5935117.0,"mga":741889.55,"broker":741889.55,"fees":258400.0,"ntc":4451337.9,"earnedMonth":4159670.81,"cumEarned25":15430724.09991781,"cumEarned26":4056974.885342465,"otherOpex":252009.0625,"budgetOpex":877009.0625},{"period":"2026-05","yoa":2026,"policies":671,"gwp":5545070.29,"mga":693133.82,"broker":693133.82,"fees":267850.0,"ntc":4158802.65,"earnedMonth":4787766.13,"cumEarned25":17877184.363342468,"cumEarned26":6398280.755068483,"otherOpex":224009.0625,"budgetOpex":849009.0625},{"period":"2026-06","yoa":2026,"policies":824,"gwp":6612903.55,"mga":826612.82,"broker":826612.82,"fees":325900.0,"ntc":4959677.91,"earnedMonth":5122436.18,"cumEarned25":20244726.553753432,"cumEarned26":9153174.747698607,"otherOpex":238022.3125,"budgetOpex":863022.3125},{"period":"2026-07","yoa":2026,"policies":707,"gwp":5679107.85,"mga":709888.49,"broker":709888.49,"fees":282450.0,"ntc":4259330.87,"earnedMonth":5822430.88,"cumEarned25":22691186.81717809,"cumEarned26":12529145.368219156,"otherOpex":232009.0625,"budgetOpex":857009.0625}],"params":{"ceding":0.25,"mgaShare":0.125,"brokerShare":0.125,"expAllow":0.05,"hurdle":0.6,"pcFlat":0.15,"pricedLR":0.5395348837209302,"gwpTotal":71301212.64,"policies":7655,"mgaTotal":8912651.28,"feeTotal":3057000}};
-const P = DATA.params, M = DATA.months;
-const NB=["Aug 25","Sep 25","Oct 25","Nov 25","Dec 25","Jan 26","Feb 26","Mar 26","Apr 26","May 26","Jun 26","Jul 26"];
+// ============================================================================
+// LIVE, playback-driven binder (stage 1). The page is a PURE RENDERER over
+// binder_series.json, a FROZEN payload: kent_months holds Kent's 12 month rows
+// VERBATIM, params his plan-level constants VERBATIM, and days a 366-row daily
+// cumulative series (row 0 = explicit zero state; earned figures daily pro-rata,
+// verified to 8dp against Kent's rows). Every render derives from rebuildDATA():
+// completed months (month-end <= playback cursor) are Kent's rows verbatim; the
+// in-progress month is ONE synthesized row = cursor-day cums minus the sum of
+// the completed verbatim rows; at playback.active=false DATA.months is the
+// kent_months array itself (byte-faithful full book). Reveal semantics are
+// IDENTICAL to the AI panel on the ops board (index.html aiRowIndex), riding
+// the same 5s /api/snapshot poll; re-render only when the resolved row changes.
+// The loss-ratio dial, presets and sliding scale keep working — they recompute
+// over the revealed book. No number in the payload is recomputed or altered.
+// ============================================================================
+const SNAPSHOT_URL="/api/snapshot", POLL_MS=5000;
+let SERIES=null;      // frozen payload {kent_months, params, days}
+let P={hurdle:.6,pcFlat:.15,expAllow:.05,ceding:.25,pricedLR:.5395348837209302}; // overwritten by params verbatim on load
+let M=[];             // DATA.months for the current reveal (rebuilt per cursor row)
+let snapshot=null, curKey=null;
+
+/*__PURE_START__*/
+// Resolve the playback snapshot to a reveal state over the daily series — the
+// same decision order as the AI panel's aiRowIndex: zero first (tiles read 0),
+// then active/cursor (last days row with date <= cursor date), full book on
+// active=false; fallback without a playback block matches on bound count.
+function resolveReveal(snap,days){
+  const last=days.length-1;
+  if(!snap) return {mode:'zero',idx:0};
+  if(snap.tiles && snap.tiles.applications_total===0) return {mode:'zero',idx:0};
+  const pb=snap.playback;
+  if(pb && typeof pb.active==="boolean"){
+    if(!pb.active) return {mode:'full',idx:last};
+    if(!pb.cursor) return {mode:'zero',idx:0};
+    const cd=String(pb.cursor).slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(cd)) return {mode:'full',idx:last};
+    let idx=0;
+    for(let i=1;i<days.length;i++){ if(days[i].date<=cd) idx=i; else break; }
+    return idx===0 ? {mode:'zero',idx:0} : {mode:'cursor',idx:idx};
+  }
+  const bound=snap.tiles&&snap.tiles.bound;
+  if(bound==null) return {mode:'full',idx:last};
+  let idx=0;
+  for(let i=1;i<days.length;i++){ if(days[i].policies<=bound) idx=i; }
+  return idx===0 ? {mode:'zero',idx:0} : {mode:'cursor',idx:idx};
+}
+// 'YYYY-MM' -> its last calendar day 'YYYY-MM-DD'
+function monthEnd(period){
+  const y=+period.slice(0,4), m=+period.slice(5,7);
+  return period+"-"+String(new Date(Date.UTC(y,m,0)).getUTCDate()).padStart(2,"0");
+}
+// Rebuild DATA.months for one reveal state.
+//  zero   -> []                      (page renders its empty idiom)
+//  full   -> kent_months VERBATIM    (the byte-faithful full book)
+//  cursor -> completed months (month-end <= cursor date) as Kent's rows
+//            VERBATIM, plus one synthesized in-progress row: cursor-day cums
+//            minus the sum of the completed verbatim rows per field; yoa by
+//            calendar year; earnedMonth = cumEarned delta vs prior months;
+//            otherOpex/budgetOpex from Kent's row for that month.
+function rebuildDATA(payload,mode,row){
+  if(mode==='zero') return [];
+  if(mode==='full') return payload.kent_months;
+  const K=payload.kent_months, cd=row.date, cm=cd.slice(0,7);
+  const F=["policies","gwp","mga","broker","fees","ntc"];
+  const out=[], sums={policies:0,gwp:0,mga:0,broker:0,fees:0,ntc:0};
+  let prevEarned=0, cmDone=false;
+  for(const k of K){
+    if(monthEnd(k.period)<=cd){
+      out.push(k);                                   // completed: VERBATIM
+      F.forEach(f=>{sums[f]+=k[f];});
+      prevEarned=k.cumEarned25+k.cumEarned26;
+      if(k.period===cm) cmDone=true;
+    }
+  }
+  if(!cmDone){
+    const kRef=K.find(k=>k.period===cm)||{otherOpex:0,budgetOpex:0};
+    out.push({
+      period:cm, yoa:+cm.slice(0,4),
+      policies:row.policies-sums.policies, gwp:row.gwp-sums.gwp,
+      mga:row.mga-sums.mga, broker:row.broker-sums.broker,
+      fees:row.fees-sums.fees, ntc:row.ntc-sums.ntc,
+      earnedMonth:(row.e25+row.e26)-prevEarned,
+      cumEarned25:row.e25, cumEarned26:row.e26,
+      otherOpex:kRef.otherOpex, budgetOpex:kRef.budgetOpex,
+    });
+  }
+  return out;
+}
+/*__PURE_END__*/
+
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function mName(period){ return MON[+period.slice(5,7)-1]+" "+period.slice(2,4); }
 const OX="#7B2D3B", OXS="#B9707C", INK="#12243A", BRASS="#B08D2F", TEAL="#1F6F6B", GREY="#C3CFDB", RULE="#D3DBE4", INK3="#7D8FA6";
 
 const fM = v => (v<0?"−":"")+"$"+(Math.abs(v)/1e6).toFixed(2)+"m";
@@ -287,7 +376,7 @@ function compute(){
     const cum=pc25+pc26, mv=cum-prevC; prevC=cum;
     const rev=m.mga+m.fees, cost=m.otherOpex, prof=rev-cost;
     cumRev+=rev; cumCost+=cost;
-    return {...m, i, name:NB[i], pc25, pc26, cumPC:cum, pcMove:mv,
+    return {...m, i, name:mName(m.period), pc25, pc26, cumPC:cum, pcMove:mv,
             cumEarned:m.cumEarned25+m.cumEarned26, rev, cost, prof,
             margin: rev? prof/rev : 0, cumRev, cumCost, cumProf:cumRev-cumCost};
   });
@@ -396,24 +485,55 @@ function drawPR(rows){
 }
 
 /* ---------- kpis, readout, table ---------- */
+/* The page's empty/zero idiom: the same centred in-chart Archivo message style
+   the PC chart already uses for "Trigger fails" — never blanks. */
+function emptyChart(){
+  return `<text x="${ML+IW/2}" y="${MT+IH/2}" text-anchor="middle" font-family="Archivo,sans-serif" font-size="17" font-weight="600" fill="${INK3}">Awaiting playback — no bound business revealed</text>`;
+}
 function draw(){
-  const {rows,lr}=compute(), last=rows[rows.length-1];
+  const {rows,lr}=compute();
   el("lrRead").textContent=(lr*100).toFixed(1)+"%";
   gauge(lr);
 
+  if(!rows.length){   // zero state: empty idiom, dial stays live on plan params
+    el("kpis").innerHTML=[
+      ["GWP written","—","awaiting playback"],
+      ["Premium earned","—","awaiting playback"],
+      ["Torque revenue","—","awaiting playback"],
+      ["Operating profit","—","awaiting playback"],
+      ["Profit commission","—","awaiting playback"],
+    ].map(([l,v,f])=>`<div class="kpi"><div class="lab">${l}</div><div class="val">${v}</div><div class="fo">${f}</div></div>`).join("");
+    el("readout").innerHTML=[
+      ["Rate applied",lr>=P.hurdle?"nil":fP(pcRate(lr,el("scale").checked))],
+      ["Headroom to hurdle",((P.hurdle-lr)*100).toFixed(1)+" pts"],
+      ["YOA 2025 accrual",fK(0)],
+      ["YOA 2026 accrual",fK(0)],
+    ].map(([t,d])=>`<div><dt>${t}</dt><dd>${d}</dd></div>`).join("");
+    el("pcChart").innerHTML=emptyChart();
+    el("prChart").innerHTML=emptyChart();
+    el("tbl").querySelector("tbody").innerHTML="";
+    el("tbl").querySelector("tfoot").innerHTML="";
+    return;
+  }
+
+  const last=rows[rows.length-1];
+  /* revealed-book totals (equal Kent's params totals at full reveal) */
+  const totPol=rows.reduce((a,r)=>a+r.policies,0), totGwp=rows.reduce((a,r)=>a+r.gwp,0);
+  const totMga=rows.reduce((a,r)=>a+r.mga,0), totFees=rows.reduce((a,r)=>a+r.fees,0);
+
   el("kpis").innerHTML=[
-    ["GWP written",fM(P.gwpTotal),P.policies.toLocaleString()+" policies bound",""],
-    ["Premium earned",fM(last.cumEarned),(last.cumEarned/P.gwpTotal*100).toFixed(0)+"% of written",""],
-    ["Torque revenue",fM(P.mgaTotal+P.feeTotal),"commission "+fM(P.mgaTotal)+" · fees "+fM(P.feeTotal),""],
-    ["Operating profit",fM(last.cumProf),fP(last.cumProf/last.cumRev)+" margin",""],
+    ["GWP written",fM(totGwp),totPol.toLocaleString()+" policies bound",""],
+    ["Premium earned",fM(last.cumEarned),(totGwp?(last.cumEarned/totGwp*100).toFixed(0):"0")+"% of written",""],
+    ["Torque revenue",fM(totMga+totFees),"commission "+fM(totMga)+" · fees "+fM(totFees),""],
+    ["Operating profit",fM(last.cumProf),fP(last.cumRev?last.cumProf/last.cumRev:0)+" margin",""],
     ["Profit commission",fM(last.cumPC),lr>=P.hurdle?"trigger fails at this loss ratio":"estimate at "+fP(lr),"ox"],
   ].map(([l,v,f,c])=>`<div class="kpi ${c}"><div class="lab">${l}</div><div class="val">${v}</div><div class="fo">${f}</div></div>`).join("");
 
   el("readout").innerHTML=[
     ["Rate applied",lr>=P.hurdle?"nil":fP(pcRate(lr,el("scale").checked))],
     ["Headroom to hurdle",((P.hurdle-lr)*100).toFixed(1)+" pts"],
-    ["YOA 2025 accrual",fK(pcFor(M[11].cumEarned25,lr,el("scale").checked))],
-    ["YOA 2026 accrual",fK(pcFor(M[11].cumEarned26,lr,el("scale").checked))],
+    ["YOA 2025 accrual",fK(pcFor(last.cumEarned25,lr,el("scale").checked))],
+    ["YOA 2026 accrual",fK(pcFor(last.cumEarned26,lr,el("scale").checked))],
   ].map(([t,d])=>`<div><dt>${t}</dt><dd>${d}</dd></div>`).join("");
 
   drawPC(rows); drawPR(rows);
@@ -425,10 +545,34 @@ function draw(){
     <td>${fK(r.pcMove)}</td><td>${fK(r.cumPC)}</td></tr>`).join("");
   const T=rows[rows.length-1];
   el("tbl").querySelector("tfoot").innerHTML=`<tr><td>Total</td><td>—</td>
-    <td>${P.policies.toLocaleString()}</td><td>${fK(P.gwpTotal)}</td>
+    <td>${totPol.toLocaleString()}</td><td>${fK(totGwp)}</td>
     <td>${fK(T.cumEarned)}</td><td>${fK(T.cumEarned)}</td><td>${fK(T.cumRev)}</td>
-    <td>${fK(T.cumCost)}</td><td>${fK(T.cumProf)}</td><td>${fP(T.cumProf/T.cumRev)}</td>
+    <td>${fK(T.cumCost)}</td><td>${fK(T.cumProf)}</td><td>${fP(T.cumRev?T.cumProf/T.cumRev:0)}</td>
     <td>${fK(T.cumPC)}</td><td>${fK(T.cumPC)}</td></tr>`;
+}
+
+/* ---------- playback join (rides the same 5s snapshot poll as the ops board) ---------- */
+function applyReveal(){
+  if(!SERIES) return;
+  const st=resolveReveal(snapshot,SERIES.days);
+  const key=st.mode==='cursor'?SERIES.days[st.idx].date:st.mode;
+  if(key===curKey) return;                 // re-render on row change only
+  curKey=key;
+  M=rebuildDATA(SERIES,st.mode,st.mode==='cursor'?SERIES.days[st.idx]:null);
+  const note=el("reveal-note");
+  if(note) note.textContent =
+    st.mode==='zero' ? "awaiting playback" :
+    st.mode==='full' ? "full book" :
+    "revealed through "+SERIES.days[st.idx].date;
+  draw();
+}
+async function poll(){
+  try{
+    const res=await fetch(SNAPSHOT_URL,{headers:{Accept:"application/json"},cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    snapshot=await res.json();
+    applyReveal();
+  }catch(err){ console.warn("snapshot fetch failed:",err&&err.message?err.message:err); }
 }
 
 el("lr").addEventListener("input",()=>{
@@ -440,7 +584,18 @@ document.querySelectorAll("#presets button").forEach(b=>b.addEventListener("clic
   document.querySelectorAll("#presets button").forEach(x=>x.setAttribute("aria-pressed",x===b));
   draw();}));
 el("scale").addEventListener("change",draw);
-draw();
+
+(async function(){
+  draw();                                  // zero-state paint before data arrives
+  try{
+    const res=await fetch("/binder_series.json",{headers:{Accept:"application/json"},cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    SERIES=await res.json();
+  }catch(err){ console.warn("binder_series fetch failed:",err&&err.message?err.message:err); return; }
+  P=SERIES.params;                          // Kent's plan-level constants, VERBATIM
+  applyReveal();                            // zero state until the first snapshot lands
+  poll(); setInterval(poll,POLL_MS);
+})();
 </script>
 </body>
 </html>

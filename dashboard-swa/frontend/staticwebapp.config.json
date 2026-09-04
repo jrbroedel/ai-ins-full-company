@@ -31,6 +31,7 @@
     { "route": "/api/snapshot", "methods": ["GET"], "allowedRoles": ["authenticated"] },
     { "route": "/api/*", "allowedRoles": ["authenticated"] },
     { "route": "/master", "rewrite": "/master.html", "allowedRoles": ["authenticated"] },
+    { "route": "/master-static", "rewrite": "/master-static.html", "allowedRoles": ["authenticated"] },
     { "route": "/binder", "rewrite": "/binder.html", "allowedRoles": ["authenticated"] },
     { "route": "/*", "allowedRoles": ["authenticated"] }
   ],
