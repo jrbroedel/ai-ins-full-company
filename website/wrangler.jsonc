@@ -1,0 +1,12 @@
+// torque-website — Cloudflare Worker with static assets
+// Baseline reconstructed 2026-09-04 from the live site + Workers API
+// (original deploy directory unavailable). Live worker at reconstruction
+// time was an assets-only deployment: has_assets=true, has_modules=false,
+// no bindings, compatibility_date 2026-08-28.
+{
+  "name": "torque-website",
+  "compatibility_date": "2026-08-28",
+  "assets": {
+    "directory": "./public"
+  }
+}

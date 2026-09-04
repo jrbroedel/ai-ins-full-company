@@ -1,0 +1,2189 @@
+<!doctype html>
+<!--
+  TORQUE UNDERWRITING — scroll-driven film site
+  Reel 01 (frames 0001-0100): the survey — camera walks the car, rear to front.
+  Reel 02 (frames 0101-0200): on risk — the car moves, tracking side profile.
+  Built from the precision-editorial starter.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0d0a">
+  <meta name="description" content="Torque Underwriting — specialist insurance for exceptional automobiles. A Managing General Agent with delegated authority from Lloyd's of London.">
+  <title>Torque Underwriting — Specialist Motor Insurance</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,100..900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --carbon: #0a0d0a;
+      --carbon-soft: #131712;
+      --paper: #f2ede1;
+      --alloy: #a9a99b;
+      --racing: #22392b;
+      --livery: #c9a35c;
+      --signal: #d2652a;
+      --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+      --data: "IBM Plex Mono", ui-monospace, monospace;
+      --gutter: clamp(20px, 4.2vw, 72px);
+      --ease-out: cubic-bezier(.22, 1, .36, 1);
+      --line: rgba(242, 237, 225, .17);
+      --frame-progress: 0;
+      --title-wdth: 82;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      background: var(--carbon);
+      color: var(--paper);
+      font-family: var(--display);
+      scroll-behavior: auto;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--carbon);
+      color: var(--paper);
+      overflow-x: clip;
+    }
+
+    body.is-loading { overflow: hidden; }
+
+    a { color: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    :focus-visible { outline: 2px solid var(--livery); outline-offset: 5px; }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .loader {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      padding: max(24px, env(safe-area-inset-top)) var(--gutter) max(24px, env(safe-area-inset-bottom));
+      background: var(--carbon);
+      transition: clip-path 900ms var(--ease-out), visibility 900ms;
+      clip-path: inset(0 0 0 0);
+    }
+
+    .loader.is-done {
+      clip-path: inset(0 0 100% 0);
+      visibility: hidden;
+    }
+
+    .loader__mark {
+      align-self: center;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 24px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 18px;
+    }
+
+    .loader__number {
+      margin: 0;
+      font-family: var(--display);
+      font-size: clamp(92px, 22vw, 340px);
+      font-weight: 780;
+      font-variation-settings: "wdth" 78;
+      letter-spacing: -.075em;
+      line-height: .68;
+      color: var(--livery);
+    }
+
+    .loader__meta,
+    .micro {
+      font-family: var(--data);
+      font-size: 10px;
+      font-weight: 500;
+      line-height: 1.5;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .loader__meta { text-align: right; color: var(--alloy); }
+
+    .loader__foot {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 18px;
+      padding-top: 22px;
+    }
+
+    .loader__track,
+    .telemetry__track {
+      position: relative;
+      height: 1px;
+      overflow: hidden;
+      background: rgba(242, 237, 225, .24);
+    }
+
+    .loader__fill,
+    .telemetry__fill {
+      position: absolute;
+      inset: 0;
+      background: var(--livery);
+      transform: scaleX(0);
+      transform-origin: left;
+    }
+
+    .site-header {
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: 90;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto;
+      align-items: center;
+      gap: 20px;
+      min-height: 70px;
+      padding: max(16px, env(safe-area-inset-top)) var(--gutter) 12px;
+      /* blend moved to children so the login button stays legible */
+      pointer-events: none;
+    }
+
+    .site-header__brand {
+      justify-self: start;
+      font-size: 13px;
+      font-weight: 720;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .site-header__center { color: rgba(242, 237, 225, .72); }
+    .site-header__end { justify-self: end; text-align: right; color: rgba(242, 237, 225, .72); }
+
+    .sequence {
+      position: relative;
+      height: 850vh;
+      background: var(--carbon);
+    }
+
+    .stage {
+      position: sticky;
+      top: 0;
+      width: 100%;
+      height: 100svh;
+      overflow: hidden;
+      background: var(--carbon);
+      isolation: isolate;
+    }
+
+    #film-canvas {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .stage__scrim {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background:
+        linear-gradient(90deg, rgba(10, 13, 10, .62) 0%, rgba(10, 13, 10, .12) 32%, transparent 55%),
+        linear-gradient(270deg, rgba(10, 13, 10, .5) 0%, rgba(10, 13, 10, .08) 30%, transparent 52%),
+        linear-gradient(0deg, rgba(10, 13, 10, .7) 0%, transparent 34%);
+      opacity: var(--scrim-opacity, .78);
+      transition: opacity 500ms ease;
+      pointer-events: none;
+    }
+
+    .stage__grid {
+      position: absolute;
+      inset: 0 var(--gutter);
+      z-index: 2;
+      background-image: repeating-linear-gradient(
+        90deg,
+        transparent 0,
+        transparent calc(8.333% - 1px),
+        rgba(242, 237, 225, .06) calc(8.333% - 1px),
+        rgba(242, 237, 225, .06) 8.333%
+      );
+      mask-image: linear-gradient(180deg, transparent, black 14%, black 82%, transparent);
+      opacity: .5;
+      pointer-events: none;
+    }
+
+    .mobile-aperture { display: none; }
+
+    .chapters {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+    }
+
+    .chapter {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      align-content: center;
+      column-gap: clamp(10px, 1.2vw, 20px);
+      padding: 96px var(--gutter) 104px;
+      visibility: hidden;
+    }
+
+    .chapter.is-visible { visibility: visible; }
+
+    .chapter__copy {
+      position: relative;
+      align-self: center;
+    }
+
+    .chapter__eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 0 0 22px;
+      color: var(--paper);
+    }
+
+    .chapter__eyebrow::before {
+      content: "";
+      width: 26px;
+      height: 2px;
+      background: var(--livery);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 650ms 100ms var(--ease-out);
+    }
+
+    .chapter.is-visible .chapter__eyebrow::before { transform: scaleX(1); }
+
+    .reveal {
+      overflow: hidden;
+      padding-bottom: .08em;
+    }
+
+    .reveal > span {
+      display: block;
+      transform: translateY(112%);
+      transition: transform 760ms var(--ease-out);
+    }
+
+    .reveal:nth-child(3) > span { transition-delay: 90ms; }
+    .reveal:nth-child(4) > span { transition-delay: 160ms; }
+    .chapter.is-visible .reveal > span { transform: translateY(0); }
+
+    .chapter__title {
+      margin: 0;
+      font-size: clamp(54px, 8.2vw, 132px);
+      font-weight: 760;
+      font-variation-settings: "wdth" var(--title-wdth);
+      letter-spacing: -.068em;
+      line-height: .82;
+      text-transform: uppercase;
+      text-wrap: balance;
+      text-shadow: 0 1px 24px rgba(10, 13, 10, .55);
+    }
+
+    .chapter__deck {
+      max-width: 32rem;
+      margin: 26px 0 0;
+      font-size: clamp(17px, 1.55vw, 24px);
+      font-weight: 450;
+      line-height: 1.25;
+      letter-spacing: -.025em;
+      text-wrap: balance;
+      text-shadow: 0 1px 18px rgba(10, 13, 10, .6);
+    }
+
+    .chapter__fact {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 14px;
+      align-items: baseline;
+      margin-top: 32px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      color: var(--alloy);
+      max-width: 30rem;
+    }
+
+    .chapter__fact span:first-child { color: var(--livery); }
+
+    .chapter--hero { align-content: end; }
+    .chapter--hero .chapter__copy { grid-column: 1 / 10; padding-bottom: 4vh; }
+    .chapter--hero .chapter__title { font-size: clamp(96px, 17vw, 280px); line-height: .72; }
+    .chapter--hero .chapter__deck { margin-left: .52vw; max-width: 26rem; }
+
+    .chapter--right .chapter__copy { grid-column: 8 / 13; }
+    .chapter--left .chapter__copy { grid-column: 1 / 6; }
+
+    .chapter--sky { align-content: start; padding-top: 13vh; }
+    .chapter--sky .chapter__copy { grid-column: 1 / 7; }
+
+    .chapter--index { align-content: center; }
+    .chapter--index .chapter__copy { grid-column: 8 / 13; z-index: 2; }
+    .chapter__giant-index {
+      position: absolute;
+      z-index: -1;
+      left: var(--gutter);
+      top: 50%;
+      color: transparent;
+      font-size: clamp(260px, 44vw, 680px);
+      font-weight: 800;
+      font-variation-settings: "wdth" 78;
+      letter-spacing: -.06em;
+      line-height: .7;
+      -webkit-text-stroke: 1px rgba(201, 163, 92, .5);
+      transform: translateY(-48%);
+      opacity: 0;
+      transition: opacity 600ms ease, font-variation-settings 1000ms var(--ease-out);
+    }
+
+    .chapter.is-visible .chapter__giant-index {
+      opacity: 1;
+      font-variation-settings: "wdth" 105;
+    }
+
+    .chapter--split { align-content: start; padding-top: 15vh; }
+    .chapter--split .chapter__copy {
+      grid-column: 1 / 13;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: start;
+    }
+
+    .chapter--split .split-end { text-align: right; }
+    .chapter--split .chapter__title { font-size: clamp(70px, 11vw, 176px); }
+    .chapter--split .chapter__deck { grid-column: 2; justify-self: end; text-align: right; }
+
+    .chapter--final {
+      align-content: end;
+      background: linear-gradient(0deg, rgba(10, 13, 10, .88), rgba(10, 13, 10, 0) 64%);
+    }
+
+    .chapter--final .chapter__copy {
+      grid-column: 1 / 13;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 32px;
+      padding-bottom: 3vh;
+    }
+
+    .chapter--final .chapter__title { max-width: 9ch; }
+
+    .cta {
+      pointer-events: auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 40px;
+      min-width: min(100%, 280px);
+      min-height: 54px;
+      padding: 0 18px;
+      border: 1px solid rgba(242, 237, 225, .56);
+      background: rgba(10, 13, 10, .18);
+      color: var(--paper);
+      font-family: var(--data);
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-decoration: none;
+      text-transform: uppercase;
+      transition: color 250ms ease, background 250ms ease, border-color 250ms ease;
+    }
+
+    .cta::after { content: "↗"; font-size: 16px; }
+    .cta:hover { background: var(--livery); border-color: var(--livery); color: var(--carbon); }
+
+    .telemetry {
+      position: absolute;
+      inset: auto var(--gutter) max(18px, env(safe-area-inset-bottom));
+      z-index: 8;
+      display: grid;
+      grid-template-columns: auto auto minmax(100px, 1fr) auto auto;
+      align-items: center;
+      gap: 18px;
+      pointer-events: none;
+    }
+
+    .telemetry__reel { color: var(--signal); min-width: 15ch; }
+    .telemetry__fill {
+      transform: scaleX(var(--frame-progress));
+      will-change: transform;
+    }
+
+    .telemetry__chapter { min-width: 13ch; }
+    .telemetry__frame { color: var(--alloy); }
+
+    .scroll-cue {
+      display: inline-grid;
+      grid-template-columns: auto 18px;
+      align-items: center;
+      gap: 9px;
+      color: var(--paper);
+    }
+
+    .scroll-cue::after {
+      content: "";
+      width: 18px;
+      height: 18px;
+      border-right: 1px solid currentColor;
+      border-bottom: 1px solid currentColor;
+      transform: rotate(45deg) translate(-3px, 3px);
+      animation: cue 1.8s ease-in-out infinite;
+    }
+
+    @keyframes cue {
+      0%, 100% { transform: rotate(45deg) translate(-3px, 3px); opacity: .35; }
+      50% { transform: rotate(45deg) translate(1px, 7px); opacity: 1; }
+    }
+
+    .crest-act {
+      position: relative;
+      z-index: 9;
+      height: 230vh;
+      background: var(--carbon);
+      --crest-split: 0;
+    }
+
+    .crest-stage {
+      position: sticky;
+      top: 0;
+      display: grid;
+      place-items: center;
+      height: 100svh;
+      overflow: hidden;
+    }
+
+    .crest-title {
+      position: absolute;
+      z-index: 3;
+      margin: 0;
+      text-align: center;
+      font-size: clamp(38px, 5vw, 84px);
+      font-weight: 780;
+      font-variation-settings: "wdth" 88;
+      letter-spacing: -.06em;
+      line-height: .9;
+      text-transform: uppercase;
+      opacity: clamp(0, (var(--crest-split) - 0.35) * 2.2, 1);
+      transform: scale(calc(.955 + var(--crest-split) * .045));
+    }
+
+    .crest-title .crest-eyebrow {
+      display: block;
+      margin-bottom: 18px;
+      color: var(--livery);
+      font-weight: 500;
+      letter-spacing: .08em;
+      transform: none;
+    }
+
+    .crest-title::after {
+      content: "";
+      display: block;
+      width: calc(var(--crest-split) * 100%);
+      height: 1px;
+      margin: 26px auto 0;
+      background: var(--livery);
+    }
+
+    .crest-halves {
+      position: relative;
+      z-index: 2;
+      width: min(46vh, 420px);
+      aspect-ratio: 1;
+    }
+
+    .crest-half {
+      position: absolute;
+      inset: 0;
+    }
+
+    .crest-half img {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .crest-half--l {
+      clip-path: inset(0 50% 0 0);
+      transform: translateX(calc(var(--crest-split) * -34vw));
+    }
+
+    .crest-half--r {
+      clip-path: inset(0 0 0 50%);
+      transform: translateX(calc(var(--crest-split) * 34vw));
+    }
+
+    .editorial {
+      position: relative;
+      z-index: 10;
+      padding: clamp(100px, 13vw, 190px) var(--gutter);
+      background: var(--paper);
+      color: var(--carbon);
+    }
+
+    .editorial__head {
+      display: grid;
+      grid-template-columns: 1fr;
+      align-items: end;
+      gap: 40px;
+      padding-bottom: 28px;
+      border-bottom: 1px solid rgba(10, 13, 10, .26);
+    }
+
+    .editorial__aside {
+      justify-self: end;
+      max-width: 30rem;
+      margin: 0;
+      font-size: clamp(17px, 1.5vw, 23px);
+      line-height: 1.35;
+      letter-spacing: -.025em;
+    }
+
+    .contact-sheet {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: clamp(10px, 1.2vw, 20px);
+      margin-top: clamp(48px, 7vw, 104px);
+    }
+
+    .shot {
+      position: relative;
+      margin: 0;
+      overflow: hidden;
+      background: var(--carbon-soft);
+    }
+
+    .shot--lead { grid-column: 1 / 9; }
+    .shot--top { grid-column: 9 / 13; align-self: start; margin-top: 10vw; }
+    .shot--low { grid-column: 3 / 7; margin-top: 2vw; }
+    .shot--end { grid-column: 7 / 13; margin-top: 8vw; }
+
+    .shot img {
+      display: block;
+      width: 100%;
+      height: auto;
+      filter: saturate(.82) contrast(1.03);
+      transition: transform 900ms var(--ease-out), filter 500ms ease;
+    }
+
+    .shot:hover img { transform: scale(1.018); filter: saturate(1); }
+
+    .shot figcaption {
+      position: absolute;
+      inset: auto 0 0;
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: rgba(10, 13, 10, .78);
+      color: var(--paper);
+    }
+
+    .services {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: clamp(10px, 1.2vw, 20px);
+      margin-top: clamp(80px, 11vw, 150px);
+      padding-top: 24px;
+      border-top: 1px solid rgba(10, 13, 10, .26);
+    }
+
+    .service { padding-right: 16px; }
+
+    .service .micro { color: rgba(10, 13, 10, .55); }
+
+    .service h3 {
+      margin: 10px 0 8px;
+      font-size: clamp(20px, 1.8vw, 28px);
+      font-weight: 730;
+      font-variation-settings: "wdth" 90;
+      letter-spacing: -.035em;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+
+    .service p {
+      margin: 0;
+      max-width: 22rem;
+      font-size: 15px;
+      line-height: 1.5;
+      color: rgba(10, 13, 10, .78);
+    }
+
+    .editorial__note {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-top: clamp(80px, 12vw, 170px);
+      padding-top: 24px;
+      border-top: 1px solid rgba(10, 13, 10, .26);
+    }
+
+    .editorial__note strong {
+      max-width: 12ch;
+      font-size: clamp(36px, 5vw, 76px);
+      font-weight: 730;
+      font-variation-settings: "wdth" 90;
+      letter-spacing: -.055em;
+      line-height: .92;
+      text-transform: uppercase;
+    }
+
+    .editorial__note p {
+      justify-self: end;
+      max-width: 34rem;
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.55;
+    }
+
+    .site-footer {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 28px;
+      padding: 44px var(--gutter) max(44px, env(safe-area-inset-bottom));
+      border-top: 1px solid rgba(242, 237, 225, .14);
+      background: var(--carbon);
+      color: var(--alloy);
+    }
+
+    .site-footer p { margin: 0; max-width: 50rem; }
+    .site-footer a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      text-underline-offset: 4px;
+    }
+
+    @media (max-width: 780px) {
+      :root { --gutter: 20px; }
+
+      .site-header {
+        grid-template-columns: 1fr auto;
+        min-height: 58px;
+      }
+
+      .site-header__center { display: none; }
+      .sequence { height: 680vh; }
+
+      .stage__scrim {
+        background:
+          linear-gradient(180deg, rgba(10, 13, 10, .52), transparent 21%),
+          linear-gradient(0deg, rgba(10, 13, 10, .88), transparent 34%);
+      }
+
+      .stage__grid { opacity: .32; }
+
+      .mobile-aperture {
+        position: absolute;
+        z-index: 3;
+        top: calc(44% - 20.6vw);
+        left: 0;
+        display: block;
+        width: 100%;
+        height: 41.2vw;
+        border-top: 1px solid rgba(242, 237, 225, .22);
+        border-bottom: 1px solid rgba(242, 237, 225, .22);
+        pointer-events: none;
+      }
+
+      .chapter {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        align-content: end;
+        padding: 76px var(--gutter) 100px;
+      }
+
+      .chapter__copy,
+      .chapter--hero .chapter__copy,
+      .chapter--right .chapter__copy,
+      .chapter--left .chapter__copy,
+      .chapter--sky .chapter__copy,
+      .chapter--index .chapter__copy,
+      .chapter--final .chapter__copy {
+        grid-column: 1 / 7;
+      }
+
+      .chapter--sky { align-content: end; padding-top: 76px; }
+
+      .chapter__eyebrow { margin-bottom: 14px; }
+      .chapter__title { font-size: clamp(48px, 15vw, 78px); line-height: .84; }
+      .chapter__deck { max-width: 24rem; margin-top: 14px; font-size: 17px; }
+      .chapter__fact { margin-top: 16px; }
+
+      .chapter--hero { align-content: start; padding-top: 15vh; }
+      .chapter--hero .chapter__copy { padding-bottom: 0; }
+      .chapter--hero .chapter__title { font-size: clamp(80px, 26vw, 130px); }
+      .chapter--hero .chapter__deck { margin-left: 0; max-width: 18rem; }
+
+      .chapter--split { align-content: end; padding-top: 76px; }
+      .chapter--split .chapter__copy { display: block; }
+      .chapter--split .split-end { text-align: left; }
+      .chapter--split .chapter__deck { grid-column: auto; text-align: left; }
+
+      .chapter__giant-index {
+        left: auto;
+        right: -5vw;
+        top: 10vh;
+        font-size: 56vw;
+        transform: none;
+      }
+
+      .chapter--final { align-content: end; }
+      .chapter--final .chapter__copy { display: block; }
+      .chapter--final .chapter__title { max-width: 8ch; }
+      .chapter--final .cta { margin-top: 22px; }
+
+      .telemetry {
+        grid-template-columns: auto 1fr auto;
+        gap: 12px;
+      }
+
+      .telemetry__chapter { display: none; }
+      .telemetry__reel { min-width: 0; }
+      .scroll-cue { display: none; }
+
+      .loader__mark { display: block; }
+      .loader__number { font-size: 40vw; }
+      .loader__meta { margin-top: 22px; text-align: left; }
+
+      .crest-act { height: 200vh; }
+      .crest-halves { width: min(62vw, 300px); }
+      .crest-half--l { transform: translateX(calc(var(--crest-split) * -36vw)); }
+      .crest-half--r { transform: translateX(calc(var(--crest-split) * 36vw)); }
+      .crest-title { font-size: clamp(34px, 9.4vw, 58px); padding: 0 var(--gutter); }
+
+      .editorial { padding-top: 100px; padding-bottom: 100px; }
+      .editorial__head { grid-template-columns: 1fr; }
+      .editorial__aside { justify-self: start; }
+      .contact-sheet { grid-template-columns: repeat(6, 1fr); gap: 10px; }
+      .shot--lead { grid-column: 1 / 7; }
+      .shot--top { grid-column: 3 / 7; margin-top: 12vw; }
+      .shot--low { grid-column: 1 / 5; margin-top: 0; }
+      .shot--end { grid-column: 1 / 7; margin-top: 12vw; }
+      .services { grid-template-columns: 1fr 1fr; row-gap: 34px; }
+      .editorial__note { grid-template-columns: 1fr; gap: 32px; }
+      .editorial__note p { justify-self: start; }
+      .site-footer { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+      }
+      .sequence { height: 100svh; }
+      .crest-act { height: auto; }
+      .crest-stage {
+        position: static;
+        display: block;
+        height: auto;
+        padding: 90px var(--gutter) 40px;
+      }
+      .crest-title {
+        position: static;
+        opacity: 1;
+        transform: none;
+        margin-bottom: 48px;
+      }
+      .crest-title::after { width: 120px; }
+      .crest-halves { margin: 0 auto; }
+      .crest-half--l, .crest-half--r { transform: none; }
+      .chapter:not(.chapter--hero) { display: none; }
+      .chapter--hero { visibility: visible; }
+      .chapter--hero .reveal > span { transform: translateY(0); }
+      .chapter--hero .chapter__eyebrow::before { transform: scaleX(1); }
+      .telemetry { display: none; }
+    }
+
+    /* ---- Client login + portal ------------------------------------ */
+    .site-header__brand,
+    .site-header__center,
+    .site-header__end { mix-blend-mode: difference; }
+
+    .site-header__auth { justify-self: end; pointer-events: auto; }
+
+    .session { display: flex; align-items: center; gap: 12px; }
+    .session__user { color: var(--livery); }
+
+    .login-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      padding: 0 16px;
+      border: 1px solid rgba(242, 237, 225, .5);
+      background: rgba(10, 13, 10, .55);
+      color: var(--paper);
+      font-family: var(--data);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: color 200ms ease, background 200ms ease, border-color 200ms ease;
+    }
+
+    .login-btn:hover { background: var(--livery); border-color: var(--livery); color: var(--carbon); }
+    .login-btn--ghost { border-color: rgba(242, 237, 225, .28); background: transparent; }
+    .login-btn[hidden],
+    .session[hidden] { display: none; }
+
+    .auth {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: grid;
+      place-items: center;
+      padding: var(--gutter);
+    }
+
+    .auth[hidden] { display: none; }
+
+    .auth__scrim { position: absolute; inset: 0; background: rgba(6, 8, 6, .82); }
+
+    .auth__card {
+      position: relative;
+      width: min(100%, 430px);
+      padding: clamp(28px, 4vw, 44px);
+      border: 1px solid rgba(201, 163, 92, .42);
+      background: var(--carbon-soft);
+    }
+
+    .auth__eyebrow { color: var(--livery); margin: 0 0 14px; }
+
+    .auth__title {
+      margin: 0;
+      font-size: clamp(34px, 4.6vw, 52px);
+      font-weight: 780;
+      font-variation-settings: "wdth" 88;
+      letter-spacing: -.055em;
+      line-height: .9;
+      text-transform: uppercase;
+    }
+
+    .auth__note {
+      margin: 14px 0 26px;
+      max-width: 34ch;
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--alloy);
+    }
+
+    .auth__label { display: block; margin-bottom: 8px; color: var(--alloy); }
+
+    .auth__input {
+      width: 100%;
+      min-height: 46px;
+      margin-bottom: 20px;
+      padding: 0 14px;
+      border: 1px solid rgba(242, 237, 225, .26);
+      background: rgba(10, 13, 10, .75);
+      color: var(--paper);
+      font-family: var(--data);
+      font-size: 14px;
+    }
+
+    .auth__input:focus-visible { outline: 2px solid var(--livery); outline-offset: 2px; }
+
+    .auth__error { margin: -8px 0 18px; color: var(--signal); }
+    .auth__error[hidden] { display: none; }
+
+    .auth__submit {
+      width: 100%;
+      min-height: 50px;
+      border: 1px solid var(--livery);
+      background: var(--livery);
+      color: var(--carbon);
+      font-family: var(--data);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 200ms ease, color 200ms ease;
+    }
+
+    .auth__submit:hover { background: transparent; color: var(--livery); }
+
+    .auth__close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 44px;
+      height: 44px;
+      border: 0;
+      background: transparent;
+      color: var(--alloy);
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .auth__close:hover { color: var(--paper); }
+
+    .portal { position: relative; z-index: 10; padding: 128px var(--gutter) clamp(70px, 8vw, 110px); background: var(--carbon); }
+    .portal[hidden] { display: none; }
+
+    .portal__eyebrow { color: var(--livery); margin: 0 0 18px; }
+
+    .portal__title {
+      margin: 0;
+      font-size: clamp(64px, 11vw, 168px);
+      font-weight: 780;
+      font-variation-settings: "wdth" 92;
+      letter-spacing: -.07em;
+      line-height: .82;
+      text-transform: uppercase;
+    }
+
+    .portal__deck {
+      margin: 22px 0 0;
+      max-width: 40ch;
+      font-size: clamp(17px, 1.5vw, 22px);
+      line-height: 1.35;
+      letter-spacing: -.02em;
+      color: var(--alloy);
+    }
+
+    .screen { margin: clamp(44px, 6vw, 76px) 0 0; }
+
+    .screen__frame {
+      position: relative;
+      aspect-ratio: 21 / 9;
+      border: 1px solid rgba(201, 163, 92, .38);
+      background:
+        repeating-linear-gradient(45deg, rgba(242,237,225,.014) 0 12px, transparent 12px 24px),
+        var(--carbon-soft);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+
+    .screen__frame iframe,
+    .screen__frame video { width: 100%; height: 100%; border: 0; display: block; background: #000; }
+
+    .screen__empty { text-align: center; padding: 24px; color: var(--alloy); }
+    .screen__empty p:first-child { color: var(--livery); margin: 0 0 12px; }
+
+    .screen__hint { margin: 0; max-width: 40ch; font-size: 14px; line-height: 1.55; }
+    .screen__hint code { font-family: var(--data); font-size: 12px; color: var(--paper); }
+
+    .screen__cap {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding-top: 12px;
+      color: var(--alloy);
+    }
+
+    body.is-portal .sequence,
+    body.is-portal .crest-act { display: none; }
+
+    @media (max-width: 780px) {
+      .site-header { grid-template-columns: 1fr auto; }
+      .site-header__end { display: none; }
+      .portal { padding-top: 104px; }
+      .screen__frame { aspect-ratio: 16 / 10; }
+    }
+
+    /* ---- Timed session + metered viewing --------------------------- */
+    .session__timer {
+      min-width: 5ch;
+      padding: 3px 7px;
+      border: 1px solid rgba(201, 163, 92, .4);
+      color: var(--livery);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .session__timer.is-low {
+      border-color: var(--signal);
+      color: var(--signal);
+    }
+
+    .notice {
+      position: fixed;
+      z-index: 210;
+      top: max(78px, calc(env(safe-area-inset-top) + 78px));
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: min(92vw, 520px);
+      padding: 13px 18px;
+      border: 1px solid rgba(201, 163, 92, .45);
+      background: var(--carbon-soft);
+      color: var(--paper);
+      font-family: var(--data);
+      font-size: 11px;
+      letter-spacing: .05em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .notice[hidden] { display: none; }
+
+    .screen__state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      max-width: 46ch;
+      padding: 24px;
+      text-align: center;
+      color: var(--alloy);
+    }
+
+    .screen__state[hidden] { display: none; }
+
+    .screen__label { margin: 0; color: var(--livery); }
+    .screen__label--warn { color: var(--signal); }
+
+    .screen__ref {
+      margin: 0;
+      color: var(--alloy);
+    }
+
+    .screen__ref span { color: var(--paper); }
+
+    .screen__btn {
+      min-height: 48px;
+      padding: 0 26px;
+      border: 1px solid var(--livery);
+      background: var(--livery);
+      color: var(--carbon);
+      font-family: var(--data);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 200ms ease, color 200ms ease;
+    }
+
+    .screen__btn:hover { background: transparent; color: var(--livery); }
+
+    .screen__codeform {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .screen__code {
+      width: 9ch;
+      min-height: 48px;
+      padding: 0 12px;
+      border: 1px solid rgba(242, 237, 225, .3);
+      background: rgba(10, 13, 10, .8);
+      color: var(--paper);
+      font-family: var(--data);
+      font-size: 16px;
+      letter-spacing: .22em;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .screen__code:focus-visible { outline: 2px solid var(--livery); outline-offset: 2px; }
+
+    .screen__error { margin: 0; color: var(--signal); }
+    .screen__error[hidden] { display: none; }
+
+    @media (max-width: 780px) {
+      .session__timer { min-width: 0; padding: 2px 5px; }
+      .notice { top: 66px; font-size: 10px; }
+      .screen__state { gap: 11px; padding: 16px; }
+    }
+    /* ---- Activity log (portal masthead, top right) ----------------- */
+    .activity {
+      position: absolute;
+      z-index: 20;
+      top: 128px;
+      right: var(--gutter);
+      width: 300px;
+      padding: 15px 16px 16px;
+      border: 1px solid rgba(201, 163, 92, .34);
+      background: rgba(19, 23, 18, .95);
+    }
+
+    .activity__title { margin: 0; color: var(--livery); }
+
+    .activity__sub {
+      margin: 5px 0 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(242, 237, 225, .14);
+      color: var(--alloy);
+    }
+
+    .activity__list {
+      display: grid;
+      gap: 9px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .activity__list li {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .activity__name {
+      font-family: var(--data);
+      font-size: 11px;
+      color: var(--paper);
+    }
+
+    .activity__time {
+      flex: none;
+      font-family: var(--data);
+      font-size: 10px;
+      letter-spacing: .04em;
+      color: var(--alloy);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 780px) {
+      .activity {
+        position: static;
+        width: auto;
+        margin-top: 30px;
+      }
+    }
+  </style>
+</head>
+<body class="is-loading">
+  <div class="loader" id="loader" aria-label="Loading the film sequence">
+    <div class="loader__mark">
+      <p class="loader__number" aria-hidden="true">72</p>
+      <div class="loader__meta">Torque Underwriting<br>Underwriting file no. 72<br>Two reels · 20.25 seconds</div>
+    </div>
+    <div class="loader__foot">
+      <span class="micro" id="loader-label">Opening the file</span>
+      <div class="loader__track" aria-hidden="true"><span class="loader__fill" id="loader-fill"></span></div>
+      <span class="micro" id="loader-count">000%</span>
+    </div>
+  </div>
+
+  <header class="site-header" aria-label="Site information">
+    <div class="site-header__brand">Torque Underwriting</div>
+    <div class="site-header__center micro">Specialist motor underwriting</div>
+    <div class="site-header__end micro">MGA · Coverholder at Lloyd's<br>200 frames · 20.25 sec</div>
+    <div class="site-header__auth">
+      <button class="login-btn" id="login-open" type="button">Login</button>
+      <div class="session" id="session" hidden>
+        <span class="session__user micro" id="session-user"></span>
+        <span class="session__timer micro" id="session-timer">15:00</span>
+        <button class="login-btn login-btn--ghost" id="logout" type="button">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="sequence" id="sequence" aria-label="Scroll-controlled film of an insured automobile">
+      <div class="stage" id="stage">
+        <canvas id="film-canvas" role="img" aria-label="A racing-green Porsche 911 is surveyed and then driven along an alpine lake as the page scrolls"></canvas>
+        <div class="stage__scrim" aria-hidden="true"></div>
+        <div class="stage__grid" aria-hidden="true"></div>
+        <div class="mobile-aperture" aria-hidden="true"></div>
+
+        <div class="chapters" aria-live="off">
+          <article class="chapter chapter--hero" data-center="0.045" data-window="0.075" data-label="Torque">
+            <div class="chapter__copy">
+              <p class="chapter__eyebrow micro">Torque Underwriting · File no. 72</p>
+              <h1 class="chapter__title reveal"><span>Torque</span></h1>
+              <p class="chapter__deck reveal"><span>Specialist insurance for exceptional automobiles.</span></p>
+            </div>
+          </article>
+
+          <article class="chapter chapter--split" data-center="0.14" data-window="0.05" data-label="Underwriting">
+            <div class="chapter__copy">
+              <div>
+                <p class="chapter__eyebrow micro">Reel 01 / The survey</p>
+                <h2 class="chapter__title reveal"><span>Under</span></h2>
+              </div>
+              <div class="split-end">
+                <h2 class="chapter__title reveal"><span>written</span></h2>
+                <p class="chapter__deck reveal"><span>Every policy priced in-house, by underwriters who know these cars.</span></p>
+              </div>
+            </div>
+          </article>
+
+          <article class="chapter chapter--right" data-center="0.24" data-window="0.05" data-label="Capacity">
+            <div class="chapter__copy">
+              <p class="chapter__eyebrow micro">Capacity / London</p>
+              <h2 class="chapter__title reveal"><span>Lloyd's authority</span></h2>
+              <p class="chapter__deck reveal"><span>A Managing General Agent underwriting with delegated authority from Lloyd's of London.</span></p>
+              <div class="chapter__fact micro"><span>01</span><span>Coverholder at Lloyd's</span></div>
+            </div>
+          </article>
+
+          <article class="chapter chapter--index" data-center="0.43" data-window="0.06" data-label="The schedule">
+            <div class="chapter__giant-index" aria-hidden="true">72</div>
+            <div class="chapter__copy">
+              <p class="chapter__eyebrow micro">The schedule</p>
+              <h2 class="chapter__title reveal"><span>Every car, scheduled</span></h2>
+              <p class="chapter__deck reveal"><span>Each automobile is assessed on its own history, provenance and value.</span></p>
+            </div>
+          </article>
+
+          <article class="chapter chapter--sky" data-center="0.62" data-window="0.06" data-label="Claims">
+            <div class="chapter__copy">
+              <p class="chapter__eyebrow micro">Reel 02 / On risk</p>
+              <h2 class="chapter__title reveal"><span>When it moves, we move</span></h2>
+              <p class="chapter__deck reveal"><span>Claims handled by our own team — first call to settlement.</span></p>
+              <div class="chapter__fact micro"><span>02</span><span>In-house claims handling</span></div>
+            </div>
+          </article>
+
+          <article class="chapter chapter--right" data-center="0.78" data-window="0.06" data-label="Full service">
+            <div class="chapter__copy">
+              <p class="chapter__eyebrow micro">The whole file</p>
+              <h2 class="chapter__title reveal"><span>Start to finish</span></h2>
+              <p class="chapter__deck reveal"><span>Quoting, binding, policy administration and renewal — the standard services, done to a specialist standard.</span></p>
+            </div>
+          </article>
+
+          <article class="chapter chapter--final" data-center="0.93" data-window="0.065" data-label="Enquire">
+            <div class="chapter__copy">
+              <div>
+                <p class="chapter__eyebrow micro">The file stays open</p>
+                <h2 class="chapter__title reveal"><span>Get on risk</span></h2>
+              </div>
+              <a class="cta" href="#contact-title">Speak to an underwriter</a>
+            </div>
+          </article>
+        </div>
+
+        <div class="telemetry" aria-hidden="true">
+          <span class="telemetry__reel micro" id="telemetry-reel">R01 · Survey</span>
+          <span class="telemetry__chapter micro" id="telemetry-chapter">Torque</span>
+          <div class="telemetry__track"><span class="telemetry__fill"></span></div>
+          <span class="telemetry__frame micro" id="telemetry-frame">F 0001 / 0200</span>
+          <span class="scroll-cue micro">Scroll to drive</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="crest-act" id="crest-act" aria-labelledby="contact-title">
+      <div class="crest-stage">
+        <h2 class="crest-title" id="contact-title"><span class="crest-eyebrow micro">The mark on the file</span>The underwriter's eye.</h2>
+        <div class="crest-halves" aria-hidden="true">
+          <div class="crest-half crest-half--l"><img src="assets/crest.svg" alt="" loading="lazy"></div>
+          <div class="crest-half crest-half--r"><img src="assets/crest.svg" alt="" loading="lazy"></div>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="portal" id="portal" aria-labelledby="portal-title" hidden>
+      <p class="portal__eyebrow micro">Client portal &middot; File no. 72</p>
+      <h1 class="portal__title" id="portal-title">Portal</h1>
+      <p class="portal__deck">Underwriting film and policy media, released to insured clients.</p>
+
+      <figure class="screen">
+        <div class="screen__frame" id="screen-frame">
+          <div class="screen__state" id="state-nosource">
+            <p class="micro screen__label">Signal &middot; awaiting source</p>
+            <p class="screen__hint">Video window. Paste your link into <code>PORTAL_VIDEO_URL</code> near the end of this file.</p>
+          </div>
+          <div class="screen__state" id="state-ready" hidden>
+            <p class="micro screen__label">Feature film &middot; ready</p>
+            <p class="screen__hint" id="ready-note">One viewing is included. Starting the film uses it.</p>
+            <button class="screen__btn" id="watch-btn" type="button">Watch film</button>
+          </div>
+          <div class="screen__state" id="state-approval" hidden>
+            <p class="micro screen__label screen__label--warn">Viewing already used</p>
+            <p class="screen__hint">Your included viewing has been used. Contact Torque Underwriting to be issued an approval code for another viewing.</p>
+            <p class="micro screen__ref">Account reference: <span id="approval-ref">&mdash;</span></p>
+            <form class="screen__codeform" id="approval-form" novalidate>
+              <label class="sr-only" for="approval-input">Approval code</label>
+              <input class="screen__code" id="approval-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="6" placeholder="000000">
+              <button class="screen__btn" type="submit">Unlock</button>
+            </form>
+            <p class="micro screen__error" id="approval-error" role="alert" hidden>That code is not valid for this account today.</p>
+          </div>
+        </div>
+        <figcaption class="micro screen__cap"><span>Feature film</span><span id="screen-state">No source</span></figcaption>
+      </figure>
+
+      <aside class="activity" id="activity" aria-labelledby="activity-title">
+        <p class="micro activity__title" id="activity-title">Activity log</p>
+        <p class="micro activity__sub">Last 24 hours</p>
+        <ul class="activity__list" id="activity-list"></ul>
+      </aside>
+    </section>
+    <section class="editorial" aria-label="Survey stills and services">
+      <div class="editorial__head">
+        <p class="editorial__aside">A proper survey walks the whole car before a price is put to it. Two reels, two hundred frames — the way we look before we quote.</p>
+      </div>
+
+      <div class="contact-sheet">
+        <figure class="shot shot--lead">
+          <img src="frames/desktop/frame-0012.webp" alt="Rear three-quarter view of the racing-green 911 beside an alpine lake" loading="lazy">
+          <figcaption class="micro"><span>Survey / rear quarter</span><span>F 0012</span></figcaption>
+        </figure>
+        <figure class="shot shot--top">
+          <img src="frames/desktop/frame-0063.webp" alt="Side profile of the car with the gold number 72 livery" loading="lazy">
+          <figcaption class="micro"><span>Survey / nearside</span><span>F 0063</span></figcaption>
+        </figure>
+        <figure class="shot shot--low">
+          <img src="frames/desktop/frame-0097.webp" alt="Front three-quarter view of the car on the orange dock" loading="lazy">
+          <figcaption class="micro"><span>Survey / front quarter</span><span>F 0097</span></figcaption>
+        </figure>
+        <figure class="shot shot--end">
+          <img src="frames/desktop/frame-0152.webp" alt="The car driving along the lakeside road, mountains behind" loading="lazy">
+          <figcaption class="micro"><span>On risk / lakeside</span><span>F 0152</span></figcaption>
+        </figure>
+      </div>
+
+      <div class="services" aria-label="Services">
+        <div class="service">
+          <span class="micro">01</span>
+          <h3>Underwriting</h3>
+          <p>Risk assessed and priced in-house, under delegated authority from Lloyd's of London.</p>
+        </div>
+        <div class="service">
+          <span class="micro">02</span>
+          <h3>Claims</h3>
+          <p>Handled by our own claims team from first notification through to settlement.</p>
+        </div>
+        <div class="service">
+          <span class="micro">03</span>
+          <h3>Policy administration</h3>
+          <p>Quoting, binding, documentation, mid-term changes and renewals.</p>
+        </div>
+        <div class="service">
+          <span class="micro">04</span>
+          <h3>Broker partnership</h3>
+          <p>Built to work with the brokers who look after collectors and their cars.</p>
+        </div>
+      </div>
+
+      <div class="editorial__note">
+        <strong>Insured by people who'd own one.</strong>
+        <p>If your automobile deserves more than a rating table, open a file with us. An underwriter — not a call centre — will come back to you.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer micro">
+    <p>&copy; 2026 Torque Underwriting. This website is for information only and is not an offer to insure or a solicitation in any jurisdiction where Torque Underwriting is not authorised to do business. All cover is subject to underwriting, eligibility and the full terms and conditions of the issued policy.</p>
+    <a href="#contact-title">Enquiries ↗</a>
+  </footer>
+
+
+  <div class="notice" id="notice" role="status" hidden><span id="notice-text"></span></div>
+  <div class="auth" id="auth" hidden>
+    <div class="auth__scrim" data-auth-close></div>
+    <div class="auth__card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+      <p class="auth__eyebrow micro">Torque Underwriting</p>
+      <h2 class="auth__title" id="auth-title">Client portal</h2>
+      <p class="auth__note">Sign in with the credentials issued with your policy.</p>
+      <form id="auth-form" novalidate>
+        <label class="auth__label micro" for="auth-user">Username</label>
+        <input class="auth__input" id="auth-user" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+        <label class="auth__label micro" for="auth-pass">Password</label>
+        <input class="auth__input" id="auth-pass" type="password" autocomplete="current-password" required>
+        <p class="auth__error micro" id="auth-error" role="alert" hidden>Those credentials were not recognised.</p>
+        <button class="auth__submit" type="submit">Sign in</button>
+      </form>
+      <button class="auth__close" id="auth-close" type="button" aria-label="Close sign in">&times;</button>
+    </div>
+  </div>
+  <script>
+    (() => {
+      "use strict";
+
+      const FRAME_COUNT = 200;
+      const REEL_SPLIT = 100;
+      const FRAME_PAD = 4;
+      const LERP_FACTOR = 0.115;
+      const DWELL_WIDTH = 0.038;
+      const DWELL_PEAK = 2.75;
+      const LUT_SIZE = 2400;
+      const MOBILE_QUERY = "(max-width: 780px)";
+      const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
+      const DWELL_CENTERS = [0.045, 0.14, 0.24, 0.43, 0.62, 0.78, 0.93];
+
+      const sequence = document.getElementById("sequence");
+      const crestAct = document.getElementById("crest-act");
+      const stage = document.getElementById("stage");
+      const canvas = document.getElementById("film-canvas");
+      const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+      const loader = document.getElementById("loader");
+      const loaderFill = document.getElementById("loader-fill");
+      const loaderCount = document.getElementById("loader-count");
+      const loaderLabel = document.getElementById("loader-label");
+      const telemetryChapter = document.getElementById("telemetry-chapter");
+      const telemetryFrame = document.getElementById("telemetry-frame");
+      const telemetryReel = document.getElementById("telemetry-reel");
+      const chapters = Array.from(document.querySelectorAll(".chapter"));
+      const reducedMotion = window.matchMedia(REDUCED_QUERY).matches;
+      const mobileMedia = window.matchMedia(MOBILE_QUERY);
+      const frameStores = {
+        desktop: createFrameStore("frames/desktop"),
+        mobile: createFrameStore("frames/mobile")
+      };
+      const chapterVisibility = new WeakMap();
+      let useMobileFrames = mobileMedia.matches;
+      let activeStore = useMobileFrames ? frameStores.mobile : frameStores.desktop;
+      let currentFrame = 0;
+      let targetFrame = 0;
+      let lastDrawn = -1;
+      let pageVisible = true;
+      let rafId = 0;
+      let portalActive = false;
+      let sequenceTop = 0;
+      let sequenceDistance = 1;
+      let crestTop = 0;
+      let crestDistance = 1;
+      let lastCrestSplit = -1;
+
+      function createFrameStore(directory) {
+        return {
+          directory,
+          images: new Array(FRAME_COUNT),
+          loaded: new Uint8Array(FRAME_COUNT),
+          promises: new Array(FRAME_COUNT)
+        };
+      }
+
+      function frameUrl(index, store = activeStore) {
+        return `${store.directory}/frame-${String(index + 1).padStart(FRAME_PAD, "0")}.webp`;
+      }
+
+      function setLoaderProgress(ratio) {
+        const safeRatio = Math.max(0, Math.min(1, ratio));
+        loaderFill.style.transform = `scaleX(${safeRatio})`;
+        loaderCount.textContent = `${String(Math.round(safeRatio * 100)).padStart(3, "0")}%`;
+      }
+
+      function loadFrame(index, store = activeStore, retries = 1) {
+        if (store.loaded[index]) return Promise.resolve(store.images[index]);
+        if (store.promises[index]) return store.promises[index];
+
+        store.promises[index] = new Promise((resolve) => {
+          const attempt = (remaining) => {
+            const image = new Image();
+            store.images[index] = image;
+            image.decoding = "async";
+            image.onload = () => {
+              store.loaded[index] = 1;
+              resolve(image);
+            };
+            image.onerror = () => {
+              if (remaining > 0) {
+                window.setTimeout(() => attempt(remaining - 1), 140);
+              } else {
+                store.images[index] = null;
+                store.promises[index] = null;
+                resolve(null);
+              }
+            };
+            image.src = frameUrl(index, store);
+          };
+          attempt(retries);
+        });
+        return store.promises[index];
+      }
+
+      async function loadInBatches(indices, size = 8, store = activeStore) {
+        for (let start = 0; start < indices.length; start += size) {
+          const batch = indices.slice(start, start + size);
+          await Promise.all(batch.map((index) => loadFrame(index, store)));
+        }
+      }
+
+      function nearestLoaded(index, store = activeStore) {
+        if (store.loaded[index]) return index;
+        for (let distance = 1; distance < FRAME_COUNT; distance += 1) {
+          const before = index - distance;
+          const after = index + distance;
+          if (before >= 0 && store.loaded[before]) return before;
+          if (after < FRAME_COUNT && store.loaded[after]) return after;
+        }
+        return -1;
+      }
+
+      function resizeCanvas() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const width = Math.round(stage.clientWidth * dpr);
+        const height = Math.round(stage.clientHeight * dpr);
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+          lastDrawn = -1;
+        }
+      }
+
+      function updateSequenceMetrics() {
+        const rect = sequence.getBoundingClientRect();
+        sequenceTop = window.scrollY + rect.top;
+        sequenceDistance = Math.max(1, rect.height - window.innerHeight);
+        const crestRect = crestAct.getBoundingClientRect();
+        crestTop = window.scrollY + crestRect.top;
+        crestDistance = Math.max(1, crestRect.height - window.innerHeight);
+      }
+
+      function updateCrest() {
+        const p = Math.max(0, Math.min(1, (window.scrollY - crestTop) / crestDistance));
+        const eased = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+        const value = Math.round(eased * 1000) / 1000;
+        if (value !== lastCrestSplit) {
+          lastCrestSplit = value;
+          crestAct.style.setProperty("--crest-split", String(value));
+        }
+      }
+
+      function drawFrame(index) {
+        const resolved = nearestLoaded(Math.max(0, Math.min(FRAME_COUNT - 1, index)));
+        if (resolved < 0 || resolved === lastDrawn) return;
+        const image = activeStore.images[resolved];
+        if (!image || !image.naturalWidth) return;
+
+        const width = canvas.width;
+        const height = canvas.height;
+        ctx.fillStyle = "#0a0d0a";
+        ctx.fillRect(0, 0, width, height);
+
+        let scale;
+        let drawWidth;
+        let drawHeight;
+        let x;
+        let y;
+
+        if (useMobileFrames) {
+          scale = width / image.naturalWidth;
+          drawWidth = width;
+          drawHeight = image.naturalHeight * scale;
+          x = 0;
+          y = height * 0.44 - drawHeight / 2;
+        } else {
+          scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+          drawWidth = image.naturalWidth * scale;
+          drawHeight = image.naturalHeight * scale;
+          x = (width - drawWidth) / 2;
+          y = (height - drawHeight) / 2;
+        }
+
+        ctx.drawImage(image, x, y, drawWidth, drawHeight);
+        lastDrawn = resolved;
+      }
+
+      const rawAtEffective = new Float64Array(LUT_SIZE + 1);
+
+      function buildDwellLut() {
+        let total = 0;
+        const density = new Float64Array(LUT_SIZE + 1);
+        for (let i = 0; i <= LUT_SIZE; i += 1) {
+          const effective = i / LUT_SIZE;
+          let value = 1;
+          for (const center of DWELL_CENTERS) {
+            const delta = (effective - center) / DWELL_WIDTH;
+            value += DWELL_PEAK * Math.exp(-0.5 * delta * delta);
+          }
+          density[i] = value;
+          if (i > 0) total += (density[i - 1] + value) * 0.5;
+          rawAtEffective[i] = total;
+        }
+        for (let i = 0; i <= LUT_SIZE; i += 1) rawAtEffective[i] /= total;
+      }
+
+      function remapProgress(raw) {
+        let low = 0;
+        let high = LUT_SIZE;
+        while (low < high) {
+          const mid = (low + high) >> 1;
+          if (rawAtEffective[mid] < raw) low = mid + 1;
+          else high = mid;
+        }
+        const index = Math.max(1, low);
+        const leftRaw = rawAtEffective[index - 1];
+        const rightRaw = rawAtEffective[index];
+        const span = rightRaw - leftRaw || 1;
+        const mix = (raw - leftRaw) / span;
+        return Math.max(0, Math.min(1, (index - 1 + mix) / LUT_SIZE));
+      }
+
+      function rawScrollProgress() {
+        return Math.max(0, Math.min(1, (window.scrollY - sequenceTop) / sequenceDistance));
+      }
+
+      function updateChapters(effective) {
+        let active = chapters[0];
+        let nearest = Infinity;
+        for (const chapter of chapters) {
+          const center = Number(chapter.dataset.center);
+          const windowSize = Number(chapter.dataset.window);
+          const distance = Math.abs(effective - center);
+          const visible = distance <= windowSize;
+          if (chapterVisibility.get(chapter) !== visible) {
+            chapterVisibility.set(chapter, visible);
+            chapter.classList.toggle("is-visible", visible);
+            chapter.setAttribute("aria-hidden", String(!visible));
+          }
+          if (distance < nearest) {
+            nearest = distance;
+            active = chapter;
+          }
+        }
+        if (telemetryChapter.textContent !== active.dataset.label) {
+          telemetryChapter.textContent = active.dataset.label;
+        }
+      }
+
+      function updateInterface(raw, effective, frame) {
+        document.documentElement.style.setProperty("--frame-progress", raw.toFixed(4));
+        document.documentElement.style.setProperty("--title-wdth", String(Math.round(78 + effective * 24)));
+        telemetryFrame.textContent = `F ${String(frame + 1).padStart(4, "0")} / ${String(FRAME_COUNT).padStart(4, "0")}`;
+        const reelLabel = frame < REEL_SPLIT ? "R01 · Survey" : "R02 · On risk";
+        if (telemetryReel.textContent !== reelLabel) telemetryReel.textContent = reelLabel;
+        const edge = Math.min(effective, 1 - effective) / 0.08;
+        stage.style.setProperty("--scrim-opacity", String(Math.min(0.82, 0.5 + edge * 0.23)));
+      }
+
+      function dismissLoader() {
+        setLoaderProgress(1);
+        loader.classList.add("is-done");
+        document.body.classList.remove("is-loading");
+        window.setTimeout(() => loader.remove(), 1000);
+      }
+
+      function showLoadError() {
+        loaderLabel.textContent = "Frames unavailable — reload the page";
+        loaderCount.textContent = "ERROR";
+        loaderCount.style.color = "var(--signal)";
+        loader.setAttribute("aria-label", "The film frames could not be loaded. Reload the page to try again.");
+      }
+
+      function renderReducedPoster(frame) {
+        currentFrame = frame;
+        targetFrame = frame;
+        drawFrame(frame);
+        chapters.forEach((chapter, index) => {
+          const visible = index === 0;
+          chapterVisibility.set(chapter, visible);
+          chapter.classList.toggle("is-visible", visible);
+          chapter.setAttribute("aria-hidden", String(!visible));
+        });
+      }
+
+      function tick() {
+        if (!pageVisible || reducedMotion || portalActive) return;
+        const raw = rawScrollProgress();
+        const effective = remapProgress(raw);
+        targetFrame = Math.round(effective * (FRAME_COUNT - 1));
+        currentFrame += (targetFrame - currentFrame) * LERP_FACTOR;
+        const frame = Math.round(currentFrame);
+        drawFrame(frame);
+        updateChapters(effective);
+        updateInterface(raw, effective, frame);
+        updateCrest();
+        rafId = requestAnimationFrame(tick);
+      }
+
+      async function init() {
+        buildDwellLut();
+        resizeCanvas();
+        updateSequenceMetrics();
+        setLoaderProgress(0.06);
+
+        if (reducedMotion) {
+          const posterFrame = Math.round(0.48 * (FRAME_COUNT - 1));
+          const poster = await loadFrame(posterFrame);
+          if (!poster) {
+            showLoadError();
+            return;
+          }
+          renderReducedPoster(posterFrame);
+          dismissLoader();
+          return;
+        }
+
+        const critical = Array.from(new Set([
+          0,
+          ...DWELL_CENTERS.map((center) => Math.round(center * (FRAME_COUNT - 1))),
+          REEL_SPLIT - 1,
+          REEL_SPLIT,
+          FRAME_COUNT - 1
+        ])).sort((a, b) => a - b);
+
+        const firstFrame = await loadFrame(0);
+        if (firstFrame) {
+          drawFrame(0);
+          setLoaderProgress(0.28);
+        }
+
+        const criticalTail = critical.filter((index) => index !== 0);
+        let prepared = 0;
+        await Promise.all(criticalTail.map(async (index) => {
+          const image = await loadFrame(index);
+          prepared += 1;
+          setLoaderProgress(0.28 + 0.68 * (prepared / criticalTail.length));
+          return image;
+        }));
+
+        const readyFrame = nearestLoaded(0);
+        if (readyFrame < 0) {
+          showLoadError();
+          return;
+        }
+        drawFrame(readyFrame);
+        dismissLoader();
+        tick();
+
+        const remaining = Array.from({ length: FRAME_COUNT }, (_, index) => index)
+          .filter((index) => !critical.includes(index));
+        loadInBatches(remaining);
+      }
+
+      async function swapFrameSet(event) {
+        useMobileFrames = event.matches;
+        activeStore = useMobileFrames ? frameStores.mobile : frameStores.desktop;
+        lastDrawn = -1;
+        resizeCanvas();
+        updateSequenceMetrics();
+
+        const frame = Math.max(0, Math.min(FRAME_COUNT - 1, Math.round(currentFrame)));
+        const image = await loadFrame(frame, activeStore);
+        if (!image) return;
+        drawFrame(frame);
+
+        const byDistance = Array.from({ length: FRAME_COUNT }, (_, index) => index)
+          .sort((a, b) => Math.abs(a - frame) - Math.abs(b - frame));
+        loadInBatches(byDistance, 8, activeStore);
+      }
+
+      window.addEventListener("resize", () => {
+        resizeCanvas();
+        updateSequenceMetrics();
+      }, { passive: true });
+      mobileMedia.addEventListener("change", swapFrameSet);
+      document.addEventListener("visibilitychange", () => {
+        pageVisible = !document.hidden;
+        if (pageVisible && !reducedMotion) {
+          cancelAnimationFrame(rafId);
+          tick();
+        }
+      });
+
+
+      /* ---- Client login, timed session, metered viewing ------------
+
+         PORTAL_VIDEO_URL  paste the video link between the quotes.
+                           YouTube, Vimeo, or a direct .mp4/.webm/.mov
+         SESSION_MINUTES   how long a login lasts before auto sign-out
+         INCLUDED_VIEWS    viewings allowed before approval is required
+         APPROVAL_SECRET   shared secret used to derive approval codes.
+                           Change it and approval-console.html must be
+                           changed to match.
+
+         NOTE: these rules are enforced in the browser. They hold for
+         ordinary use, but clearing site data or using a private window
+         resets the view counter. Confidential material needs a server. */
+
+      const PORTAL_VIDEO_URL = "";
+      const SESSION_MINUTES = 15;
+      const INCLUDED_VIEWS = 1;
+      const APPROVAL_SECRET = "torque-72-approval";
+
+      const CRED_HASHES = new Set([
+        "939a7e41e9ad5494", "fd418916542f8670", "312744af66b82b10", "7993d0a579ef4ab0",
+        "9d9e35f114e79ab3", "df03b08c914e55d6", "7b797fbef7a9c9af", "8715a812befafa57",
+        "04dcef410c16f094", "106e4c9270418a4b", "6bda207cad6f3c39", "b6ecd1d11a874569",
+        "8e18a0281ac54b5c", "2a8efbdae34feb6a", "45f006ae5b16070f", "fc28ee0d4bd42c0d",
+        "02e36755ea693689", "1337a332b8e38312", "696826a8230c27d8", "5f5b927411dac58b"
+      ]);
+
+      function tqHash(str) {
+        let h1 = 0x811c9dc5;
+        let h2 = 0x01000193;
+        for (let i = 0; i < str.length; i += 1) {
+          const c = str.charCodeAt(i);
+          h1 = Math.imul(h1 ^ c, 0x01000193);
+          h2 = Math.imul(h2 + c, 0x85ebca6b) ^ (h2 >>> 13);
+        }
+        return (h1 >>> 0).toString(16).padStart(8, "0") + (h2 >>> 0).toString(16).padStart(8, "0");
+      }
+
+      function utcDay(offsetDays) {
+        const d = new Date(Date.now() - (offsetDays || 0) * 86400000);
+        return d.toISOString().slice(0, 10);
+      }
+
+      function approvalCode(user, offsetDays) {
+        const seed = "approval:" + APPROVAL_SECRET + ":" + String(user).toLowerCase() + ":" + utcDay(offsetDays);
+        const h = tqHash(seed);
+        let n = 0;
+        for (let i = 0; i < h.length; i += 1) n = (n * 31 + parseInt(h.charAt(i), 16)) % 1000000;
+        return String(n).padStart(6, "0");
+      }
+
+      function codeValid(user, entered) {
+        const c = String(entered).replace(/[^0-9]/g, "");
+        if (c.length !== 6) return false;
+        return c === approvalCode(user, 0) || c === approvalCode(user, 1);
+      }
+
+      function loadJSON(store, key, fallback) {
+        try {
+          const raw = window[store].getItem(key);
+          return raw ? JSON.parse(raw) : fallback;
+        } catch (e) { return fallback; }
+      }
+
+      function saveJSON(store, key, value) {
+        try { window[store].setItem(key, JSON.stringify(value)); } catch (e) { /* storage blocked */ }
+      }
+
+      function getSession() {
+        const s = loadJSON("sessionStorage", "tq_session", null);
+        if (!s || !s.user || !s.exp) return null;
+        if (Date.now() >= s.exp) return null;
+        return s;
+      }
+
+      function setSession(s) { saveJSON("sessionStorage", "tq_session", s); }
+
+      function endSession() {
+        try { window.sessionStorage.removeItem("tq_session"); } catch (e) { /* storage blocked */ }
+      }
+
+      function viewsFor(user) {
+        const all = loadJSON("localStorage", "tq_views", {});
+        return all[String(user).toLowerCase()] || 0;
+      }
+
+      function bumpViews(user) {
+        const all = loadJSON("localStorage", "tq_views", {});
+        const k = String(user).toLowerCase();
+        all[k] = (all[k] || 0) + 1;
+        saveJSON("localStorage", "tq_views", all);
+      }
+
+      const authModal = document.getElementById("auth");
+      const authForm = document.getElementById("auth-form");
+      const authUser = document.getElementById("auth-user");
+      const authPass = document.getElementById("auth-pass");
+      const authError = document.getElementById("auth-error");
+      const loginOpen = document.getElementById("login-open");
+      const logoutBtn = document.getElementById("logout");
+      const sessionBox = document.getElementById("session");
+      const sessionUser = document.getElementById("session-user");
+      const sessionTimer = document.getElementById("session-timer");
+      const portalView = document.getElementById("portal");
+      const screenFrame = document.getElementById("screen-frame");
+      const screenState = document.getElementById("screen-state");
+      const stateNoSource = document.getElementById("state-nosource");
+      const stateReady = document.getElementById("state-ready");
+      const stateApproval = document.getElementById("state-approval");
+      const readyNote = document.getElementById("ready-note");
+      const watchBtn = document.getElementById("watch-btn");
+      const approvalForm = document.getElementById("approval-form");
+      const approvalInput = document.getElementById("approval-input");
+      const approvalError = document.getElementById("approval-error");
+      const approvalRef = document.getElementById("approval-ref");
+      const notice = document.getElementById("notice");
+      const noticeText = document.getElementById("notice-text");
+      let lastFocus = null;
+      let noticeTimer = 0;
+
+      function showNotice(message) {
+        noticeText.textContent = message;
+        notice.hidden = false;
+        window.clearTimeout(noticeTimer);
+        noticeTimer = window.setTimeout(() => { notice.hidden = true; }, 7000);
+      }
+
+      function syncHeader() {
+        const s = getSession();
+        const signedIn = Boolean(s);
+        loginOpen.hidden = signedIn;
+        sessionBox.hidden = !signedIn;
+        if (signedIn) sessionUser.textContent = s.user;
+      }
+
+      function openAuth() {
+        lastFocus = document.activeElement;
+        authError.hidden = true;
+        authForm.reset();
+        authModal.hidden = false;
+        window.setTimeout(() => authUser.focus(), 20);
+      }
+
+      function closeAuth() {
+        authModal.hidden = true;
+        if (lastFocus && lastFocus.focus) lastFocus.focus();
+      }
+
+      function embedFor(url) {
+        const u = String(url || "").trim();
+        if (!u) return null;
+        let m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+        if (m) return { kind: "iframe", src: "https://www.youtube.com/embed/" + m[1] };
+        m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+        if (m) return { kind: "iframe", src: "https://player.vimeo.com/video/" + m[1] };
+        if (/\.(mp4|webm|ogv|mov)(\?|#|$)/i.test(u)) return { kind: "video", src: u };
+        return { kind: "iframe", src: u };
+      }
+
+      function clearPlayer() {
+        const existing = screenFrame.querySelector("video, iframe");
+        if (existing) existing.remove();
+      }
+
+      function renderPlayer() {
+        const spec = embedFor(PORTAL_VIDEO_URL);
+        if (!spec) return;
+        stateNoSource.hidden = true;
+        stateReady.hidden = true;
+        stateApproval.hidden = true;
+        if (screenFrame.querySelector("video, iframe")) return;
+        let node;
+        if (spec.kind === "video") {
+          node = document.createElement("video");
+          node.src = spec.src;
+          node.controls = true;
+          node.playsInline = true;
+          node.autoplay = true;
+          node.preload = "metadata";
+        } else {
+          node = document.createElement("iframe");
+          node.src = spec.src;
+          node.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture; fullscreen";
+          node.allowFullscreen = true;
+          node.title = "Torque Underwriting feature film";
+        }
+        screenFrame.appendChild(node);
+        screenState.textContent = "Viewing in progress";
+      }
+
+      function updateScreen() {
+        const s = getSession();
+        if (!s) return;
+        const hasSource = Boolean(embedFor(PORTAL_VIDEO_URL));
+        if (!hasSource) {
+          clearPlayer();
+          stateNoSource.hidden = false;
+          stateReady.hidden = true;
+          stateApproval.hidden = true;
+          screenState.textContent = "No source";
+          return;
+        }
+        if (s.unlocked) { renderPlayer(); return; }
+        clearPlayer();
+        const used = viewsFor(s.user);
+        stateNoSource.hidden = true;
+        if (used < INCLUDED_VIEWS) {
+          stateReady.hidden = false;
+          stateApproval.hidden = true;
+          readyNote.textContent = "One viewing is included. Starting the film uses it.";
+          screenState.textContent = (INCLUDED_VIEWS - used) + " viewing available";
+        } else {
+          stateReady.hidden = true;
+          stateApproval.hidden = false;
+          approvalRef.textContent = s.user;
+          approvalError.hidden = true;
+          screenState.textContent = "Approval required";
+        }
+      }
+
+      /* ---- Activity log --------------------------------------------
+         Add or remove names here. When the list holds ACTIVITY_ROWS or
+         more names, each row gets a different one; with fewer names
+         than rows, names may repeat. Timestamps are random within the
+         last 24 hours and are regenerated each time the portal opens. */
+      const ACTIVITY_NAMES = [
+        "McKinsey",
+        "PwC Consulting",
+        "Slalom Consulting",
+        "Anthemis Group"
+      ];
+      const ACTIVITY_ROWS = 6;
+
+      const activityList = document.getElementById("activity-list");
+      let activityEntries = [];
+
+      function buildActivity() {
+        const entries = [];
+        const distinct = ACTIVITY_NAMES.length >= ACTIVITY_ROWS;
+        const pool = ACTIVITY_NAMES.slice();
+        for (let i = 0; i < ACTIVITY_ROWS; i += 1) {
+          let name;
+          if (distinct) {
+            name = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+          } else {
+            name = ACTIVITY_NAMES[Math.floor(Math.random() * ACTIVITY_NAMES.length)];
+          }
+          entries.push({ name: name, at: Date.now() - Math.floor(Math.random() * 86400000) });
+        }
+        entries.sort((a, b) => b.at - a.at);
+        return entries;
+      }
+
+      function agoLabel(ts) {
+        const mins = Math.max(0, Math.floor((Date.now() - ts) / 60000));
+        if (mins < 1) return "just now";
+        if (mins < 60) return mins + "m ago";
+        return Math.floor(mins / 60) + "h " + pad2(mins % 60) + "m ago";
+      }
+
+      function renderActivity() {
+        if (!activityList) return;
+        activityList.textContent = "";
+        activityEntries.forEach((entry) => {
+          const li = document.createElement("li");
+          const name = document.createElement("span");
+          name.className = "activity__name";
+          name.textContent = entry.name;
+          const time = document.createElement("time");
+          time.className = "activity__time";
+          time.dateTime = new Date(entry.at).toISOString();
+          time.textContent = agoLabel(entry.at);
+          li.append(name, time);
+          activityList.appendChild(li);
+        });
+      }
+
+      function refreshActivity() {
+        activityEntries = buildActivity();
+        renderActivity();
+      }
+
+      function showPortal() {
+        portalActive = true;
+        portalView.hidden = false;
+        document.body.classList.add("is-portal");
+        if (location.hash !== "#portal") location.hash = "#portal";
+        window.scrollTo(0, 0);
+        updateSequenceMetrics();
+        refreshActivity();
+        updateScreen();
+      }
+
+      function showHome() {
+        portalActive = false;
+        portalView.hidden = true;
+        document.body.classList.remove("is-portal");
+        if (location.hash === "#portal") {
+          history.replaceState(null, "", location.pathname + location.search);
+        }
+        updateSequenceMetrics();
+        lastDrawn = -1;
+        if (!reducedMotion) {
+          cancelAnimationFrame(rafId);
+          tick();
+        }
+      }
+
+      function route() {
+        if (location.hash === "#portal" && getSession()) showPortal();
+        else showHome();
+      }
+
+      function forceLogout(message) {
+        endSession();
+        clearPlayer();
+        syncHeader();
+        showHome();
+        if (message) showNotice(message);
+      }
+
+      function pad2(n) { return String(n).padStart(2, "0"); }
+
+      function tickSession() {
+        const s = getSession();
+        if (!s) {
+          if (!sessionBox.hidden) forceLogout("Signed out — " + SESSION_MINUTES + " minute session limit reached.");
+          return;
+        }
+        const left = Math.max(0, s.exp - Date.now());
+        sessionTimer.textContent = pad2(Math.floor(left / 60000)) + ":" + pad2(Math.floor(left / 1000) % 60);
+        sessionTimer.classList.toggle("is-low", left <= 120000);
+        if (left <= 0) forceLogout("Signed out — " + SESSION_MINUTES + " minute session limit reached.");
+      }
+
+      loginOpen.addEventListener("click", openAuth);
+      document.getElementById("auth-close").addEventListener("click", closeAuth);
+      authModal.querySelector("[data-auth-close]").addEventListener("click", closeAuth);
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !authModal.hidden) closeAuth();
+      });
+
+      logoutBtn.addEventListener("click", () => forceLogout(""));
+
+      authForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const user = authUser.value.trim().toLowerCase();
+        const pass = authPass.value;
+        if (CRED_HASHES.has(tqHash(user + ":" + pass))) {
+          setSession({ user: user, exp: Date.now() + SESSION_MINUTES * 60000, unlocked: false });
+          syncHeader();
+          tickSession();
+          closeAuth();
+          showPortal();
+        } else {
+          authError.hidden = false;
+          authPass.value = "";
+          authPass.focus();
+        }
+      });
+
+      watchBtn.addEventListener("click", () => {
+        const s = getSession();
+        if (!s) { forceLogout("Your session has ended. Please sign in again."); return; }
+        if (viewsFor(s.user) >= INCLUDED_VIEWS) { updateScreen(); return; }
+        bumpViews(s.user);
+        s.unlocked = true;
+        setSession(s);
+        renderPlayer();
+      });
+
+      approvalForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const s = getSession();
+        if (!s) { forceLogout("Your session has ended. Please sign in again."); return; }
+        if (codeValid(s.user, approvalInput.value)) {
+          bumpViews(s.user);
+          s.unlocked = true;
+          setSession(s);
+          approvalError.hidden = true;
+          approvalInput.value = "";
+          renderPlayer();
+        } else {
+          approvalError.hidden = false;
+          approvalInput.value = "";
+          approvalInput.focus();
+        }
+      });
+
+      window.addEventListener("hashchange", route);
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) tickSession(); });
+      window.setInterval(tickSession, 1000);
+      window.setInterval(() => { if (portalActive) renderActivity(); }, 30000);
+
+      syncHeader();
+      tickSession();
+      route();
+      init();
+    })();
+  </script>
+</body>
+</html>
