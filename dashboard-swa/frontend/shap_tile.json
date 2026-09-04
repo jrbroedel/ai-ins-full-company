@@ -76,15 +76,599 @@
   "computed": "2026-09-03"
  },
  "series": {
-  "note": "Cumulative book revealed through each playback month. drivers order matches attribution.drivers; legislation order matches legislation.items.",
+  "granularity": "daily (change-days only; row 0 is the zero state)",
+  "note": "Cumulative book revealed through each date. Pick the last row with date <= playback cursor date; cursor before first date, or reset, selects row 0. drivers=null renders zero-width bars. Order matches attribution.drivers / legislation.items.",
   "ultimate": {
    "trig_1m": 4,
    "note": "one >$1M claim emerges 2026-11 (post-window); ultimate count 4"
   },
-  "months": [
+  "days": [
    {
-    "month_index": 0,
-    "label": "Aug 2025",
+    "date": "0000-00-00",
+    "submissions_cum": 0,
+    "bound_cum": 0,
+    "drivers": null,
+    "trig_3claims": 0,
+    "trig_1m": 0,
+    "legislation": [
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "date": "2025-08-01",
+    "submissions_cum": 23,
+    "bound_cum": 16,
+    "drivers": [
+     90.0,
+     3.8,
+     6.1,
+     0.0
+    ],
+    "trig_3claims": 6,
+    "trig_1m": 0,
+    "legislation": [
+     0,
+     1,
+     0,
+     1
+    ]
+   },
+   {
+    "date": "2025-08-02",
+    "submissions_cum": 40,
+    "bound_cum": 28,
+    "drivers": [
+     77.0,
+     17.5,
+     5.5,
+     0.0
+    ],
+    "trig_3claims": 10,
+    "trig_1m": 0,
+    "legislation": [
+     4,
+     2,
+     0,
+     4
+    ]
+   },
+   {
+    "date": "2025-08-03",
+    "submissions_cum": 61,
+    "bound_cum": 44,
+    "drivers": [
+     81.0,
+     14.9,
+     4.1,
+     0.0
+    ],
+    "trig_3claims": 15,
+    "trig_1m": 0,
+    "legislation": [
+     5,
+     4,
+     0,
+     4
+    ]
+   },
+   {
+    "date": "2025-08-04",
+    "submissions_cum": 77,
+    "bound_cum": 58,
+    "drivers": [
+     78.5,
+     16.8,
+     4.7,
+     0.0
+    ],
+    "trig_3claims": 17,
+    "trig_1m": 0,
+    "legislation": [
+     7,
+     4,
+     0,
+     6
+    ]
+   },
+   {
+    "date": "2025-08-05",
+    "submissions_cum": 95,
+    "bound_cum": 70,
+    "drivers": [
+     79.3,
+     16.1,
+     4.6,
+     0.0
+    ],
+    "trig_3claims": 21,
+    "trig_1m": 0,
+    "legislation": [
+     9,
+     4,
+     0,
+     6
+    ]
+   },
+   {
+    "date": "2025-08-06",
+    "submissions_cum": 114,
+    "bound_cum": 80,
+    "drivers": [
+     79.8,
+     15.8,
+     4.3,
+     0.0
+    ],
+    "trig_3claims": 28,
+    "trig_1m": 0,
+    "legislation": [
+     10,
+     5,
+     0,
+     7
+    ]
+   },
+   {
+    "date": "2025-08-07",
+    "submissions_cum": 141,
+    "bound_cum": 96,
+    "drivers": [
+     78.7,
+     17.2,
+     4.1,
+     0.0
+    ],
+    "trig_3claims": 36,
+    "trig_1m": 0,
+    "legislation": [
+     11,
+     7,
+     0,
+     8
+    ]
+   },
+   {
+    "date": "2025-08-08",
+    "submissions_cum": 157,
+    "bound_cum": 111,
+    "drivers": [
+     79.9,
+     16.2,
+     3.8,
+     0.0
+    ],
+    "trig_3claims": 37,
+    "trig_1m": 0,
+    "legislation": [
+     11,
+     7,
+     0,
+     8
+    ]
+   },
+   {
+    "date": "2025-08-09",
+    "submissions_cum": 183,
+    "bound_cum": 133,
+    "drivers": [
+     80.5,
+     15.9,
+     3.6,
+     0.0
+    ],
+    "trig_3claims": 40,
+    "trig_1m": 0,
+    "legislation": [
+     12,
+     9,
+     1,
+     9
+    ]
+   },
+   {
+    "date": "2025-08-10",
+    "submissions_cum": 206,
+    "bound_cum": 143,
+    "drivers": [
+     79.8,
+     16.7,
+     3.5,
+     0.0
+    ],
+    "trig_3claims": 48,
+    "trig_1m": 0,
+    "legislation": [
+     12,
+     9,
+     2,
+     10
+    ]
+   },
+   {
+    "date": "2025-08-11",
+    "submissions_cum": 226,
+    "bound_cum": 160,
+    "drivers": [
+     79.5,
+     16.9,
+     3.6,
+     0.0
+    ],
+    "trig_3claims": 49,
+    "trig_1m": 0,
+    "legislation": [
+     12,
+     11,
+     2,
+     12
+    ]
+   },
+   {
+    "date": "2025-08-12",
+    "submissions_cum": 249,
+    "bound_cum": 174,
+    "drivers": [
+     80.0,
+     16.4,
+     3.6,
+     0.0
+    ],
+    "trig_3claims": 58,
+    "trig_1m": 0,
+    "legislation": [
+     14,
+     12,
+     2,
+     12
+    ]
+   },
+   {
+    "date": "2025-08-13",
+    "submissions_cum": 281,
+    "bound_cum": 199,
+    "drivers": [
+     80.2,
+     16.2,
+     3.6,
+     0.0
+    ],
+    "trig_3claims": 63,
+    "trig_1m": 0,
+    "legislation": [
+     15,
+     14,
+     3,
+     14
+    ]
+   },
+   {
+    "date": "2025-08-14",
+    "submissions_cum": 308,
+    "bound_cum": 221,
+    "drivers": [
+     80.4,
+     16.1,
+     3.5,
+     0.0
+    ],
+    "trig_3claims": 66,
+    "trig_1m": 0,
+    "legislation": [
+     18,
+     14,
+     3,
+     15
+    ]
+   },
+   {
+    "date": "2025-08-15",
+    "submissions_cum": 332,
+    "bound_cum": 240,
+    "drivers": [
+     79.8,
+     16.5,
+     3.6,
+     0.0
+    ],
+    "trig_3claims": 69,
+    "trig_1m": 0,
+    "legislation": [
+     19,
+     15,
+     3,
+     16
+    ]
+   },
+   {
+    "date": "2025-08-16",
+    "submissions_cum": 367,
+    "bound_cum": 262,
+    "drivers": [
+     80.0,
+     16.5,
+     3.6,
+     0.0
+    ],
+    "trig_3claims": 79,
+    "trig_1m": 0,
+    "legislation": [
+     21,
+     15,
+     4,
+     17
+    ]
+   },
+   {
+    "date": "2025-08-17",
+    "submissions_cum": 391,
+    "bound_cum": 278,
+    "drivers": [
+     79.5,
+     16.8,
+     3.6,
+     0.0
+    ],
+    "trig_3claims": 84,
+    "trig_1m": 0,
+    "legislation": [
+     22,
+     17,
+     5,
+     18
+    ]
+   },
+   {
+    "date": "2025-08-18",
+    "submissions_cum": 408,
+    "bound_cum": 288,
+    "drivers": [
+     79.6,
+     16.8,
+     3.6,
+     0.0
+    ],
+    "trig_3claims": 88,
+    "trig_1m": 0,
+    "legislation": [
+     22,
+     17,
+     5,
+     18
+    ]
+   },
+   {
+    "date": "2025-08-19",
+    "submissions_cum": 429,
+    "bound_cum": 305,
+    "drivers": [
+     79.2,
+     17.0,
+     3.8,
+     0.0
+    ],
+    "trig_3claims": 92,
+    "trig_1m": 0,
+    "legislation": [
+     23,
+     18,
+     5,
+     19
+    ]
+   },
+   {
+    "date": "2025-08-20",
+    "submissions_cum": 462,
+    "bound_cum": 330,
+    "drivers": [
+     79.0,
+     17.3,
+     3.7,
+     0.0
+    ],
+    "trig_3claims": 98,
+    "trig_1m": 0,
+    "legislation": [
+     24,
+     21,
+     5,
+     22
+    ]
+   },
+   {
+    "date": "2025-08-21",
+    "submissions_cum": 482,
+    "bound_cum": 338,
+    "drivers": [
+     78.9,
+     17.4,
+     3.8,
+     0.0
+    ],
+    "trig_3claims": 107,
+    "trig_1m": 0,
+    "legislation": [
+     24,
+     21,
+     5,
+     23
+    ]
+   },
+   {
+    "date": "2025-08-22",
+    "submissions_cum": 506,
+    "bound_cum": 359,
+    "drivers": [
+     78.8,
+     17.4,
+     3.9,
+     0.0
+    ],
+    "trig_3claims": 110,
+    "trig_1m": 0,
+    "legislation": [
+     26,
+     23,
+     5,
+     24
+    ]
+   },
+   {
+    "date": "2025-08-23",
+    "submissions_cum": 538,
+    "bound_cum": 382,
+    "drivers": [
+     79.1,
+     17.1,
+     3.8,
+     0.0
+    ],
+    "trig_3claims": 118,
+    "trig_1m": 0,
+    "legislation": [
+     28,
+     24,
+     5,
+     24
+    ]
+   },
+   {
+    "date": "2025-08-24",
+    "submissions_cum": 558,
+    "bound_cum": 396,
+    "drivers": [
+     79.1,
+     17.1,
+     3.8,
+     0.0
+    ],
+    "trig_3claims": 123,
+    "trig_1m": 0,
+    "legislation": [
+     29,
+     24,
+     5,
+     24
+    ]
+   },
+   {
+    "date": "2025-08-25",
+    "submissions_cum": 574,
+    "bound_cum": 408,
+    "drivers": [
+     79.1,
+     17.1,
+     3.8,
+     0.0
+    ],
+    "trig_3claims": 127,
+    "trig_1m": 0,
+    "legislation": [
+     29,
+     25,
+     6,
+     24
+    ]
+   },
+   {
+    "date": "2025-08-26",
+    "submissions_cum": 596,
+    "bound_cum": 424,
+    "drivers": [
+     79.1,
+     17.1,
+     3.8,
+     0.0
+    ],
+    "trig_3claims": 132,
+    "trig_1m": 0,
+    "legislation": [
+     29,
+     25,
+     6,
+     26
+    ]
+   },
+   {
+    "date": "2025-08-27",
+    "submissions_cum": 624,
+    "bound_cum": 445,
+    "drivers": [
+     79.3,
+     17.0,
+     3.7,
+     0.0
+    ],
+    "trig_3claims": 137,
+    "trig_1m": 0,
+    "legislation": [
+     30,
+     28,
+     7,
+     27
+    ]
+   },
+   {
+    "date": "2025-08-28",
+    "submissions_cum": 638,
+    "bound_cum": 456,
+    "drivers": [
+     79.5,
+     16.9,
+     3.6,
+     0.0
+    ],
+    "trig_3claims": 140,
+    "trig_1m": 0,
+    "legislation": [
+     31,
+     29,
+     7,
+     28
+    ]
+   },
+   {
+    "date": "2025-08-29",
+    "submissions_cum": 658,
+    "bound_cum": 472,
+    "drivers": [
+     79.6,
+     16.7,
+     3.7,
+     0.0
+    ],
+    "trig_3claims": 143,
+    "trig_1m": 0,
+    "legislation": [
+     31,
+     30,
+     7,
+     28
+    ]
+   },
+   {
+    "date": "2025-08-30",
+    "submissions_cum": 682,
+    "bound_cum": 492,
+    "drivers": [
+     79.4,
+     17.0,
+     3.7,
+     0.0
+    ],
+    "trig_3claims": 146,
+    "trig_1m": 0,
+    "legislation": [
+     34,
+     31,
+     7,
+     29
+    ]
+   },
+   {
+    "date": "2025-08-31",
     "submissions_cum": 703,
     "bound_cum": 506,
     "drivers": [
@@ -103,8 +687,558 @@
     ]
    },
    {
-    "month_index": 1,
-    "label": "Sep 2025",
+    "date": "2025-09-01",
+    "submissions_cum": 722,
+    "bound_cum": 518,
+    "drivers": [
+     79.5,
+     16.8,
+     3.7,
+     0.0
+    ],
+    "trig_3claims": 153,
+    "trig_1m": 0,
+    "legislation": [
+     34,
+     34,
+     8,
+     30
+    ]
+   },
+   {
+    "date": "2025-09-02",
+    "submissions_cum": 740,
+    "bound_cum": 533,
+    "drivers": [
+     79.6,
+     16.7,
+     3.6,
+     0.0
+    ],
+    "trig_3claims": 155,
+    "trig_1m": 0,
+    "legislation": [
+     35,
+     35,
+     9,
+     32
+    ]
+   },
+   {
+    "date": "2025-09-03",
+    "submissions_cum": 764,
+    "bound_cum": 552,
+    "drivers": [
+     79.4,
+     16.9,
+     3.7,
+     0.0
+    ],
+    "trig_3claims": 157,
+    "trig_1m": 0,
+    "legislation": [
+     35,
+     35,
+     9,
+     32
+    ]
+   },
+   {
+    "date": "2025-09-04",
+    "submissions_cum": 790,
+    "bound_cum": 571,
+    "drivers": [
+     79.4,
+     17.0,
+     3.7,
+     0.0
+    ],
+    "trig_3claims": 162,
+    "trig_1m": 0,
+    "legislation": [
+     36,
+     35,
+     9,
+     33
+    ]
+   },
+   {
+    "date": "2025-09-05",
+    "submissions_cum": 812,
+    "bound_cum": 587,
+    "drivers": [
+     79.3,
+     17.0,
+     3.6,
+     0.0
+    ],
+    "trig_3claims": 166,
+    "trig_1m": 0,
+    "legislation": [
+     36,
+     35,
+     11,
+     33
+    ]
+   },
+   {
+    "date": "2025-09-06",
+    "submissions_cum": 832,
+    "bound_cum": 596,
+    "drivers": [
+     79.2,
+     17.1,
+     3.6,
+     0.0
+    ],
+    "trig_3claims": 173,
+    "trig_1m": 0,
+    "legislation": [
+     38,
+     36,
+     11,
+     36
+    ]
+   },
+   {
+    "date": "2025-09-07",
+    "submissions_cum": 850,
+    "bound_cum": 611,
+    "drivers": [
+     79.5,
+     16.8,
+     3.6,
+     0.1
+    ],
+    "trig_3claims": 175,
+    "trig_1m": 0,
+    "legislation": [
+     40,
+     38,
+     11,
+     37
+    ]
+   },
+   {
+    "date": "2025-09-08",
+    "submissions_cum": 866,
+    "bound_cum": 625,
+    "drivers": [
+     79.3,
+     16.9,
+     3.7,
+     0.1
+    ],
+    "trig_3claims": 177,
+    "trig_1m": 0,
+    "legislation": [
+     40,
+     39,
+     11,
+     39
+    ]
+   },
+   {
+    "date": "2025-09-09",
+    "submissions_cum": 891,
+    "bound_cum": 646,
+    "drivers": [
+     79.3,
+     17.1,
+     3.6,
+     0.1
+    ],
+    "trig_3claims": 179,
+    "trig_1m": 0,
+    "legislation": [
+     40,
+     41,
+     13,
+     42
+    ]
+   },
+   {
+    "date": "2025-09-10",
+    "submissions_cum": 918,
+    "bound_cum": 668,
+    "drivers": [
+     79.0,
+     17.3,
+     3.7,
+     0.1
+    ],
+    "trig_3claims": 181,
+    "trig_1m": 0,
+    "legislation": [
+     42,
+     42,
+     14,
+     44
+    ]
+   },
+   {
+    "date": "2025-09-11",
+    "submissions_cum": 946,
+    "bound_cum": 690,
+    "drivers": [
+     78.7,
+     17.5,
+     3.7,
+     0.1
+    ],
+    "trig_3claims": 185,
+    "trig_1m": 0,
+    "legislation": [
+     44,
+     43,
+     14,
+     45
+    ]
+   },
+   {
+    "date": "2025-09-12",
+    "submissions_cum": 969,
+    "bound_cum": 708,
+    "drivers": [
+     78.4,
+     17.8,
+     3.7,
+     0.1
+    ],
+    "trig_3claims": 188,
+    "trig_1m": 0,
+    "legislation": [
+     45,
+     44,
+     15,
+     45
+    ]
+   },
+   {
+    "date": "2025-09-13",
+    "submissions_cum": 982,
+    "bound_cum": 716,
+    "drivers": [
+     78.4,
+     17.8,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 193,
+    "trig_1m": 0,
+    "legislation": [
+     45,
+     44,
+     16,
+     46
+    ]
+   },
+   {
+    "date": "2025-09-14",
+    "submissions_cum": 1003,
+    "bound_cum": 727,
+    "drivers": [
+     78.3,
+     17.8,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 200,
+    "trig_1m": 0,
+    "legislation": [
+     45,
+     47,
+     16,
+     47
+    ]
+   },
+   {
+    "date": "2025-09-15",
+    "submissions_cum": 1017,
+    "bound_cum": 738,
+    "drivers": [
+     78.4,
+     17.8,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 203,
+    "trig_1m": 0,
+    "legislation": [
+     46,
+     47,
+     16,
+     47
+    ]
+   },
+   {
+    "date": "2025-09-16",
+    "submissions_cum": 1043,
+    "bound_cum": 756,
+    "drivers": [
+     78.3,
+     17.8,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 208,
+    "trig_1m": 0,
+    "legislation": [
+     47,
+     48,
+     17,
+     48
+    ]
+   },
+   {
+    "date": "2025-09-17",
+    "submissions_cum": 1066,
+    "bound_cum": 776,
+    "drivers": [
+     78.2,
+     17.9,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 210,
+    "trig_1m": 0,
+    "legislation": [
+     48,
+     49,
+     17,
+     51
+    ]
+   },
+   {
+    "date": "2025-09-18",
+    "submissions_cum": 1091,
+    "bound_cum": 797,
+    "drivers": [
+     78.0,
+     18.0,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 212,
+    "trig_1m": 0,
+    "legislation": [
+     48,
+     50,
+     18,
+     52
+    ]
+   },
+   {
+    "date": "2025-09-19",
+    "submissions_cum": 1110,
+    "bound_cum": 812,
+    "drivers": [
+     78.0,
+     18.0,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 215,
+    "trig_1m": 0,
+    "legislation": [
+     50,
+     50,
+     18,
+     53
+    ]
+   },
+   {
+    "date": "2025-09-20",
+    "submissions_cum": 1137,
+    "bound_cum": 826,
+    "drivers": [
+     78.0,
+     18.0,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 228,
+    "trig_1m": 0,
+    "legislation": [
+     52,
+     52,
+     18,
+     53
+    ]
+   },
+   {
+    "date": "2025-09-21",
+    "submissions_cum": 1155,
+    "bound_cum": 836,
+    "drivers": [
+     77.9,
+     18.2,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 235,
+    "trig_1m": 0,
+    "legislation": [
+     52,
+     53,
+     18,
+     55
+    ]
+   },
+   {
+    "date": "2025-09-22",
+    "submissions_cum": 1173,
+    "bound_cum": 851,
+    "drivers": [
+     77.7,
+     18.3,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 237,
+    "trig_1m": 0,
+    "legislation": [
+     52,
+     53,
+     18,
+     56
+    ]
+   },
+   {
+    "date": "2025-09-23",
+    "submissions_cum": 1201,
+    "bound_cum": 874,
+    "drivers": [
+     77.9,
+     18.2,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 239,
+    "trig_1m": 0,
+    "legislation": [
+     53,
+     53,
+     18,
+     58
+    ]
+   },
+   {
+    "date": "2025-09-24",
+    "submissions_cum": 1229,
+    "bound_cum": 892,
+    "drivers": [
+     78.0,
+     18.1,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 246,
+    "trig_1m": 0,
+    "legislation": [
+     55,
+     56,
+     19,
+     58
+    ]
+   },
+   {
+    "date": "2025-09-25",
+    "submissions_cum": 1251,
+    "bound_cum": 908,
+    "drivers": [
+     77.9,
+     18.2,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 250,
+    "trig_1m": 0,
+    "legislation": [
+     57,
+     56,
+     19,
+     58
+    ]
+   },
+   {
+    "date": "2025-09-26",
+    "submissions_cum": 1272,
+    "bound_cum": 919,
+    "drivers": [
+     77.8,
+     18.2,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 258,
+    "trig_1m": 0,
+    "legislation": [
+     57,
+     56,
+     19,
+     59
+    ]
+   },
+   {
+    "date": "2025-09-27",
+    "submissions_cum": 1301,
+    "bound_cum": 941,
+    "drivers": [
+     78.1,
+     18.0,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 263,
+    "trig_1m": 0,
+    "legislation": [
+     58,
+     56,
+     22,
+     59
+    ]
+   },
+   {
+    "date": "2025-09-28",
+    "submissions_cum": 1320,
+    "bound_cum": 950,
+    "drivers": [
+     78.1,
+     17.9,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 269,
+    "trig_1m": 0,
+    "legislation": [
+     58,
+     56,
+     24,
+     60
+    ]
+   },
+   {
+    "date": "2025-09-29",
+    "submissions_cum": 1343,
+    "bound_cum": 969,
+    "drivers": [
+     78.3,
+     17.8,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 272,
+    "trig_1m": 0,
+    "legislation": [
+     58,
+     57,
+     24,
+     61
+    ]
+   },
+   {
+    "date": "2025-09-30",
     "submissions_cum": 1362,
     "bound_cum": 983,
     "drivers": [
@@ -123,8 +1257,577 @@
     ]
    },
    {
-    "month_index": 2,
-    "label": "Oct 2025",
+    "date": "2025-10-01",
+    "submissions_cum": 1387,
+    "bound_cum": 1003,
+    "drivers": [
+     78.4,
+     17.7,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 281,
+    "trig_1m": 0,
+    "legislation": [
+     62,
+     58,
+     24,
+     65
+    ]
+   },
+   {
+    "date": "2025-10-02",
+    "submissions_cum": 1413,
+    "bound_cum": 1023,
+    "drivers": [
+     78.4,
+     17.7,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 285,
+    "trig_1m": 0,
+    "legislation": [
+     63,
+     59,
+     24,
+     67
+    ]
+   },
+   {
+    "date": "2025-10-03",
+    "submissions_cum": 1446,
+    "bound_cum": 1049,
+    "drivers": [
+     78.4,
+     17.7,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 291,
+    "trig_1m": 0,
+    "legislation": [
+     65,
+     60,
+     24,
+     68
+    ]
+   },
+   {
+    "date": "2025-10-04",
+    "submissions_cum": 1476,
+    "bound_cum": 1071,
+    "drivers": [
+     78.6,
+     17.5,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 299,
+    "trig_1m": 0,
+    "legislation": [
+     66,
+     61,
+     24,
+     69
+    ]
+   },
+   {
+    "date": "2025-10-05",
+    "submissions_cum": 1491,
+    "bound_cum": 1084,
+    "drivers": [
+     78.5,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 300,
+    "trig_1m": 0,
+    "legislation": [
+     66,
+     64,
+     24,
+     71
+    ]
+   },
+   {
+    "date": "2025-10-06",
+    "submissions_cum": 1508,
+    "bound_cum": 1096,
+    "drivers": [
+     78.5,
+     17.6,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 304,
+    "trig_1m": 0,
+    "legislation": [
+     68,
+     64,
+     24,
+     71
+    ]
+   },
+   {
+    "date": "2025-10-07",
+    "submissions_cum": 1539,
+    "bound_cum": 1113,
+    "drivers": [
+     78.7,
+     17.4,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 312,
+    "trig_1m": 0,
+    "legislation": [
+     68,
+     65,
+     26,
+     73
+    ]
+   },
+   {
+    "date": "2025-10-08",
+    "submissions_cum": 1557,
+    "bound_cum": 1127,
+    "drivers": [
+     78.7,
+     17.4,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 315,
+    "trig_1m": 0,
+    "legislation": [
+     68,
+     67,
+     26,
+     74
+    ]
+   },
+   {
+    "date": "2025-10-09",
+    "submissions_cum": 1590,
+    "bound_cum": 1153,
+    "drivers": [
+     78.6,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 318,
+    "trig_1m": 0,
+    "legislation": [
+     68,
+     69,
+     26,
+     74
+    ]
+   },
+   {
+    "date": "2025-10-10",
+    "submissions_cum": 1623,
+    "bound_cum": 1179,
+    "drivers": [
+     78.5,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 322,
+    "trig_1m": 0,
+    "legislation": [
+     72,
+     70,
+     26,
+     75
+    ]
+   },
+   {
+    "date": "2025-10-11",
+    "submissions_cum": 1657,
+    "bound_cum": 1207,
+    "drivers": [
+     78.6,
+     17.4,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 327,
+    "trig_1m": 0,
+    "legislation": [
+     72,
+     71,
+     26,
+     75
+    ]
+   },
+   {
+    "date": "2025-10-12",
+    "submissions_cum": 1687,
+    "bound_cum": 1234,
+    "drivers": [
+     78.5,
+     17.6,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 329,
+    "trig_1m": 0,
+    "legislation": [
+     73,
+     73,
+     27,
+     78
+    ]
+   },
+   {
+    "date": "2025-10-13",
+    "submissions_cum": 1709,
+    "bound_cum": 1251,
+    "drivers": [
+     78.6,
+     17.4,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 331,
+    "trig_1m": 0,
+    "legislation": [
+     74,
+     74,
+     27,
+     80
+    ]
+   },
+   {
+    "date": "2025-10-14",
+    "submissions_cum": 1734,
+    "bound_cum": 1269,
+    "drivers": [
+     78.5,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 336,
+    "trig_1m": 0,
+    "legislation": [
+     75,
+     74,
+     28,
+     82
+    ]
+   },
+   {
+    "date": "2025-10-15",
+    "submissions_cum": 1760,
+    "bound_cum": 1290,
+    "drivers": [
+     78.5,
+     17.6,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 339,
+    "trig_1m": 0,
+    "legislation": [
+     76,
+     74,
+     28,
+     83
+    ]
+   },
+   {
+    "date": "2025-10-16",
+    "submissions_cum": 1774,
+    "bound_cum": 1300,
+    "drivers": [
+     78.5,
+     17.6,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 341,
+    "trig_1m": 0,
+    "legislation": [
+     77,
+     75,
+     29,
+     83
+    ]
+   },
+   {
+    "date": "2025-10-17",
+    "submissions_cum": 1798,
+    "bound_cum": 1315,
+    "drivers": [
+     78.5,
+     17.6,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 348,
+    "trig_1m": 0,
+    "legislation": [
+     78,
+     76,
+     31,
+     83
+    ]
+   },
+   {
+    "date": "2025-10-18",
+    "submissions_cum": 1823,
+    "bound_cum": 1334,
+    "drivers": [
+     78.4,
+     17.6,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 352,
+    "trig_1m": 0,
+    "legislation": [
+     78,
+     80,
+     31,
+     83
+    ]
+   },
+   {
+    "date": "2025-10-19",
+    "submissions_cum": 1846,
+    "bound_cum": 1349,
+    "drivers": [
+     78.4,
+     17.6,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 357,
+    "trig_1m": 0,
+    "legislation": [
+     79,
+     82,
+     33,
+     84
+    ]
+   },
+   {
+    "date": "2025-10-20",
+    "submissions_cum": 1872,
+    "bound_cum": 1372,
+    "drivers": [
+     78.5,
+     17.6,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 359,
+    "trig_1m": 0,
+    "legislation": [
+     81,
+     82,
+     33,
+     86
+    ]
+   },
+   {
+    "date": "2025-10-21",
+    "submissions_cum": 1895,
+    "bound_cum": 1386,
+    "drivers": [
+     78.4,
+     17.6,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 366,
+    "trig_1m": 0,
+    "legislation": [
+     83,
+     83,
+     33,
+     88
+    ]
+   },
+   {
+    "date": "2025-10-22",
+    "submissions_cum": 1930,
+    "bound_cum": 1411,
+    "drivers": [
+     78.5,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 375,
+    "trig_1m": 0,
+    "legislation": [
+     84,
+     84,
+     33,
+     88
+    ]
+   },
+   {
+    "date": "2025-10-23",
+    "submissions_cum": 1962,
+    "bound_cum": 1437,
+    "drivers": [
+     78.5,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 379,
+    "trig_1m": 0,
+    "legislation": [
+     86,
+     87,
+     34,
+     92
+    ]
+   },
+   {
+    "date": "2025-10-24",
+    "submissions_cum": 1987,
+    "bound_cum": 1455,
+    "drivers": [
+     78.5,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 385,
+    "trig_1m": 0,
+    "legislation": [
+     88,
+     90,
+     34,
+     94
+    ]
+   },
+   {
+    "date": "2025-10-25",
+    "submissions_cum": 2016,
+    "bound_cum": 1476,
+    "drivers": [
+     78.5,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 391,
+    "trig_1m": 0,
+    "legislation": [
+     89,
+     91,
+     35,
+     97
+    ]
+   },
+   {
+    "date": "2025-10-26",
+    "submissions_cum": 2036,
+    "bound_cum": 1490,
+    "drivers": [
+     78.5,
+     17.5,
+     4.0,
+     0.1
+    ],
+    "trig_3claims": 396,
+    "trig_1m": 0,
+    "legislation": [
+     89,
+     91,
+     35,
+     98
+    ]
+   },
+   {
+    "date": "2025-10-27",
+    "submissions_cum": 2056,
+    "bound_cum": 1505,
+    "drivers": [
+     78.4,
+     17.6,
+     4.0,
+     0.1
+    ],
+    "trig_3claims": 400,
+    "trig_1m": 0,
+    "legislation": [
+     90,
+     91,
+     35,
+     98
+    ]
+   },
+   {
+    "date": "2025-10-28",
+    "submissions_cum": 2080,
+    "bound_cum": 1522,
+    "drivers": [
+     78.4,
+     17.5,
+     4.0,
+     0.1
+    ],
+    "trig_3claims": 407,
+    "trig_1m": 0,
+    "legislation": [
+     92,
+     92,
+     35,
+     99
+    ]
+   },
+   {
+    "date": "2025-10-29",
+    "submissions_cum": 2111,
+    "bound_cum": 1548,
+    "drivers": [
+     78.4,
+     17.6,
+     4.0,
+     0.1
+    ],
+    "trig_3claims": 412,
+    "trig_1m": 0,
+    "legislation": [
+     92,
+     93,
+     35,
+     99
+    ]
+   },
+   {
+    "date": "2025-10-30",
+    "submissions_cum": 2136,
+    "bound_cum": 1565,
+    "drivers": [
+     78.3,
+     17.6,
+     4.0,
+     0.1
+    ],
+    "trig_3claims": 417,
+    "trig_1m": 0,
+    "legislation": [
+     93,
+     93,
+     36,
+     100
+    ]
+   },
+   {
+    "date": "2025-10-31",
     "submissions_cum": 2164,
     "bound_cum": 1588,
     "drivers": [
@@ -143,8 +1846,558 @@
     ]
    },
    {
-    "month_index": 3,
-    "label": "Nov 2025",
+    "date": "2025-11-01",
+    "submissions_cum": 2188,
+    "bound_cum": 1605,
+    "drivers": [
+     78.5,
+     17.5,
+     4.0,
+     0.1
+    ],
+    "trig_3claims": 424,
+    "trig_1m": 0,
+    "legislation": [
+     94,
+     95,
+     38,
+     101
+    ]
+   },
+   {
+    "date": "2025-11-02",
+    "submissions_cum": 2216,
+    "bound_cum": 1629,
+    "drivers": [
+     78.3,
+     17.7,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 426,
+    "trig_1m": 0,
+    "legislation": [
+     94,
+     100,
+     39,
+     103
+    ]
+   },
+   {
+    "date": "2025-11-03",
+    "submissions_cum": 2245,
+    "bound_cum": 1652,
+    "drivers": [
+     78.2,
+     17.8,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 429,
+    "trig_1m": 0,
+    "legislation": [
+     94,
+     101,
+     40,
+     104
+    ]
+   },
+   {
+    "date": "2025-11-04",
+    "submissions_cum": 2272,
+    "bound_cum": 1669,
+    "drivers": [
+     78.2,
+     17.8,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 438,
+    "trig_1m": 0,
+    "legislation": [
+     96,
+     103,
+     40,
+     105
+    ]
+   },
+   {
+    "date": "2025-11-05",
+    "submissions_cum": 2302,
+    "bound_cum": 1692,
+    "drivers": [
+     78.4,
+     17.6,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 444,
+    "trig_1m": 0,
+    "legislation": [
+     96,
+     104,
+     41,
+     105
+    ]
+   },
+   {
+    "date": "2025-11-06",
+    "submissions_cum": 2320,
+    "bound_cum": 1704,
+    "drivers": [
+     78.4,
+     17.6,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 448,
+    "trig_1m": 0,
+    "legislation": [
+     96,
+     105,
+     41,
+     106
+    ]
+   },
+   {
+    "date": "2025-11-07",
+    "submissions_cum": 2346,
+    "bound_cum": 1726,
+    "drivers": [
+     78.5,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 451,
+    "trig_1m": 0,
+    "legislation": [
+     97,
+     107,
+     42,
+     108
+    ]
+   },
+   {
+    "date": "2025-11-08",
+    "submissions_cum": 2373,
+    "bound_cum": 1745,
+    "drivers": [
+     78.5,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 459,
+    "trig_1m": 0,
+    "legislation": [
+     98,
+     107,
+     43,
+     112
+    ]
+   },
+   {
+    "date": "2025-11-09",
+    "submissions_cum": 2396,
+    "bound_cum": 1762,
+    "drivers": [
+     78.5,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 462,
+    "trig_1m": 0,
+    "legislation": [
+     99,
+     107,
+     44,
+     113
+    ]
+   },
+   {
+    "date": "2025-11-10",
+    "submissions_cum": 2414,
+    "bound_cum": 1774,
+    "drivers": [
+     78.5,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 468,
+    "trig_1m": 0,
+    "legislation": [
+     100,
+     110,
+     44,
+     113
+    ]
+   },
+   {
+    "date": "2025-11-11",
+    "submissions_cum": 2443,
+    "bound_cum": 1795,
+    "drivers": [
+     78.4,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 473,
+    "trig_1m": 0,
+    "legislation": [
+     100,
+     112,
+     44,
+     114
+    ]
+   },
+   {
+    "date": "2025-11-12",
+    "submissions_cum": 2474,
+    "bound_cum": 1813,
+    "drivers": [
+     78.3,
+     17.6,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 484,
+    "trig_1m": 0,
+    "legislation": [
+     100,
+     112,
+     45,
+     116
+    ]
+   },
+   {
+    "date": "2025-11-13",
+    "submissions_cum": 2502,
+    "bound_cum": 1835,
+    "drivers": [
+     78.4,
+     17.5,
+     3.9,
+     0.1
+    ],
+    "trig_3claims": 488,
+    "trig_1m": 0,
+    "legislation": [
+     100,
+     114,
+     47,
+     117
+    ]
+   },
+   {
+    "date": "2025-11-14",
+    "submissions_cum": 2530,
+    "bound_cum": 1855,
+    "drivers": [
+     78.5,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 494,
+    "trig_1m": 0,
+    "legislation": [
+     101,
+     114,
+     48,
+     120
+    ]
+   },
+   {
+    "date": "2025-11-15",
+    "submissions_cum": 2554,
+    "bound_cum": 1874,
+    "drivers": [
+     78.5,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 498,
+    "trig_1m": 0,
+    "legislation": [
+     102,
+     115,
+     49,
+     123
+    ]
+   },
+   {
+    "date": "2025-11-16",
+    "submissions_cum": 2576,
+    "bound_cum": 1893,
+    "drivers": [
+     78.4,
+     17.5,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 501,
+    "trig_1m": 0,
+    "legislation": [
+     103,
+     117,
+     49,
+     123
+    ]
+   },
+   {
+    "date": "2025-11-17",
+    "submissions_cum": 2610,
+    "bound_cum": 1917,
+    "drivers": [
+     78.5,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 507,
+    "trig_1m": 0,
+    "legislation": [
+     105,
+     119,
+     51,
+     127
+    ]
+   },
+   {
+    "date": "2025-11-18",
+    "submissions_cum": 2632,
+    "bound_cum": 1929,
+    "drivers": [
+     78.5,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 517,
+    "trig_1m": 0,
+    "legislation": [
+     106,
+     120,
+     52,
+     127
+    ]
+   },
+   {
+    "date": "2025-11-19",
+    "submissions_cum": 2654,
+    "bound_cum": 1945,
+    "drivers": [
+     78.5,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 522,
+    "trig_1m": 0,
+    "legislation": [
+     106,
+     120,
+     53,
+     128
+    ]
+   },
+   {
+    "date": "2025-11-20",
+    "submissions_cum": 2680,
+    "bound_cum": 1964,
+    "drivers": [
+     78.6,
+     17.3,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 527,
+    "trig_1m": 0,
+    "legislation": [
+     107,
+     121,
+     53,
+     129
+    ]
+   },
+   {
+    "date": "2025-11-21",
+    "submissions_cum": 2705,
+    "bound_cum": 1983,
+    "drivers": [
+     78.6,
+     17.3,
+     4.0,
+     0.2
+    ],
+    "trig_3claims": 532,
+    "trig_1m": 0,
+    "legislation": [
+     109,
+     121,
+     53,
+     130
+    ]
+   },
+   {
+    "date": "2025-11-22",
+    "submissions_cum": 2734,
+    "bound_cum": 2006,
+    "drivers": [
+     78.6,
+     17.3,
+     4.0,
+     0.2
+    ],
+    "trig_3claims": 535,
+    "trig_1m": 0,
+    "legislation": [
+     110,
+     122,
+     53,
+     132
+    ]
+   },
+   {
+    "date": "2025-11-23",
+    "submissions_cum": 2768,
+    "bound_cum": 2031,
+    "drivers": [
+     78.7,
+     17.2,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 540,
+    "trig_1m": 0,
+    "legislation": [
+     111,
+     124,
+     54,
+     133
+    ]
+   },
+   {
+    "date": "2025-11-24",
+    "submissions_cum": 2794,
+    "bound_cum": 2048,
+    "drivers": [
+     78.7,
+     17.2,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 547,
+    "trig_1m": 0,
+    "legislation": [
+     111,
+     125,
+     54,
+     134
+    ]
+   },
+   {
+    "date": "2025-11-25",
+    "submissions_cum": 2820,
+    "bound_cum": 2067,
+    "drivers": [
+     78.7,
+     17.2,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 552,
+    "trig_1m": 0,
+    "legislation": [
+     111,
+     125,
+     54,
+     134
+    ]
+   },
+   {
+    "date": "2025-11-26",
+    "submissions_cum": 2857,
+    "bound_cum": 2096,
+    "drivers": [
+     78.5,
+     17.3,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 557,
+    "trig_1m": 0,
+    "legislation": [
+     111,
+     127,
+     54,
+     139
+    ]
+   },
+   {
+    "date": "2025-11-27",
+    "submissions_cum": 2885,
+    "bound_cum": 2115,
+    "drivers": [
+     78.5,
+     17.3,
+     4.0,
+     0.2
+    ],
+    "trig_3claims": 559,
+    "trig_1m": 0,
+    "legislation": [
+     113,
+     127,
+     54,
+     140
+    ]
+   },
+   {
+    "date": "2025-11-28",
+    "submissions_cum": 2906,
+    "bound_cum": 2129,
+    "drivers": [
+     78.5,
+     17.3,
+     4.0,
+     0.2
+    ],
+    "trig_3claims": 565,
+    "trig_1m": 0,
+    "legislation": [
+     114,
+     128,
+     54,
+     140
+    ]
+   },
+   {
+    "date": "2025-11-29",
+    "submissions_cum": 2925,
+    "bound_cum": 2141,
+    "drivers": [
+     78.5,
+     17.3,
+     4.0,
+     0.2
+    ],
+    "trig_3claims": 572,
+    "trig_1m": 0,
+    "legislation": [
+     114,
+     128,
+     54,
+     140
+    ]
+   },
+   {
+    "date": "2025-11-30",
     "submissions_cum": 2953,
     "bound_cum": 2163,
     "drivers": [
@@ -163,8 +2416,577 @@
     ]
    },
    {
-    "month_index": 4,
-    "label": "Dec 2025",
+    "date": "2025-12-01",
+    "submissions_cum": 2982,
+    "bound_cum": 2183,
+    "drivers": [
+     78.5,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 582,
+    "trig_1m": 0,
+    "legislation": [
+     119,
+     130,
+     56,
+     142
+    ]
+   },
+   {
+    "date": "2025-12-02",
+    "submissions_cum": 3006,
+    "bound_cum": 2201,
+    "drivers": [
+     78.4,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 585,
+    "trig_1m": 0,
+    "legislation": [
+     119,
+     132,
+     56,
+     143
+    ]
+   },
+   {
+    "date": "2025-12-03",
+    "submissions_cum": 3046,
+    "bound_cum": 2222,
+    "drivers": [
+     78.4,
+     17.5,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 600,
+    "trig_1m": 0,
+    "legislation": [
+     119,
+     132,
+     58,
+     144
+    ]
+   },
+   {
+    "date": "2025-12-04",
+    "submissions_cum": 3071,
+    "bound_cum": 2238,
+    "drivers": [
+     78.4,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 608,
+    "trig_1m": 0,
+    "legislation": [
+     120,
+     133,
+     59,
+     144
+    ]
+   },
+   {
+    "date": "2025-12-05",
+    "submissions_cum": 3102,
+    "bound_cum": 2260,
+    "drivers": [
+     78.4,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 614,
+    "trig_1m": 0,
+    "legislation": [
+     121,
+     133,
+     59,
+     145
+    ]
+   },
+   {
+    "date": "2025-12-06",
+    "submissions_cum": 3127,
+    "bound_cum": 2280,
+    "drivers": [
+     78.4,
+     17.5,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 618,
+    "trig_1m": 0,
+    "legislation": [
+     122,
+     133,
+     60,
+     145
+    ]
+   },
+   {
+    "date": "2025-12-07",
+    "submissions_cum": 3150,
+    "bound_cum": 2299,
+    "drivers": [
+     78.4,
+     17.5,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 622,
+    "trig_1m": 0,
+    "legislation": [
+     125,
+     134,
+     60,
+     147
+    ]
+   },
+   {
+    "date": "2025-12-08",
+    "submissions_cum": 3178,
+    "bound_cum": 2319,
+    "drivers": [
+     78.4,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 628,
+    "trig_1m": 0,
+    "legislation": [
+     126,
+     135,
+     60,
+     147
+    ]
+   },
+   {
+    "date": "2025-12-09",
+    "submissions_cum": 3209,
+    "bound_cum": 2340,
+    "drivers": [
+     78.4,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 637,
+    "trig_1m": 0,
+    "legislation": [
+     127,
+     138,
+     60,
+     148
+    ]
+   },
+   {
+    "date": "2025-12-10",
+    "submissions_cum": 3230,
+    "bound_cum": 2360,
+    "drivers": [
+     78.4,
+     17.5,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 638,
+    "trig_1m": 0,
+    "legislation": [
+     128,
+     139,
+     62,
+     148
+    ]
+   },
+   {
+    "date": "2025-12-11",
+    "submissions_cum": 3266,
+    "bound_cum": 2391,
+    "drivers": [
+     78.3,
+     17.5,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 642,
+    "trig_1m": 0,
+    "legislation": [
+     130,
+     142,
+     63,
+     152
+    ]
+   },
+   {
+    "date": "2025-12-12",
+    "submissions_cum": 3296,
+    "bound_cum": 2414,
+    "drivers": [
+     78.3,
+     17.5,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 648,
+    "trig_1m": 0,
+    "legislation": [
+     132,
+     142,
+     63,
+     153
+    ]
+   },
+   {
+    "date": "2025-12-13",
+    "submissions_cum": 3324,
+    "bound_cum": 2435,
+    "drivers": [
+     78.4,
+     17.5,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 654,
+    "trig_1m": 0,
+    "legislation": [
+     132,
+     142,
+     64,
+     155
+    ]
+   },
+   {
+    "date": "2025-12-14",
+    "submissions_cum": 3355,
+    "bound_cum": 2451,
+    "drivers": [
+     78.4,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 665,
+    "trig_1m": 0,
+    "legislation": [
+     133,
+     143,
+     66,
+     155
+    ]
+   },
+   {
+    "date": "2025-12-15",
+    "submissions_cum": 3387,
+    "bound_cum": 2477,
+    "drivers": [
+     78.5,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 670,
+    "trig_1m": 0,
+    "legislation": [
+     134,
+     145,
+     66,
+     156
+    ]
+   },
+   {
+    "date": "2025-12-16",
+    "submissions_cum": 3417,
+    "bound_cum": 2499,
+    "drivers": [
+     78.5,
+     17.3,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 676,
+    "trig_1m": 0,
+    "legislation": [
+     135,
+     146,
+     68,
+     157
+    ]
+   },
+   {
+    "date": "2025-12-17",
+    "submissions_cum": 3445,
+    "bound_cum": 2517,
+    "drivers": [
+     78.5,
+     17.3,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 683,
+    "trig_1m": 0,
+    "legislation": [
+     138,
+     146,
+     70,
+     159
+    ]
+   },
+   {
+    "date": "2025-12-18",
+    "submissions_cum": 3467,
+    "bound_cum": 2531,
+    "drivers": [
+     78.5,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 686,
+    "trig_1m": 0,
+    "legislation": [
+     138,
+     146,
+     71,
+     161
+    ]
+   },
+   {
+    "date": "2025-12-19",
+    "submissions_cum": 3498,
+    "bound_cum": 2555,
+    "drivers": [
+     78.5,
+     17.3,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 691,
+    "trig_1m": 0,
+    "legislation": [
+     142,
+     147,
+     71,
+     163
+    ]
+   },
+   {
+    "date": "2025-12-20",
+    "submissions_cum": 3524,
+    "bound_cum": 2573,
+    "drivers": [
+     78.6,
+     17.3,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 697,
+    "trig_1m": 0,
+    "legislation": [
+     142,
+     148,
+     75,
+     163
+    ]
+   },
+   {
+    "date": "2025-12-21",
+    "submissions_cum": 3549,
+    "bound_cum": 2590,
+    "drivers": [
+     78.6,
+     17.3,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 704,
+    "trig_1m": 0,
+    "legislation": [
+     143,
+     148,
+     76,
+     166
+    ]
+   },
+   {
+    "date": "2025-12-22",
+    "submissions_cum": 3583,
+    "bound_cum": 2617,
+    "drivers": [
+     78.6,
+     17.2,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 709,
+    "trig_1m": 0,
+    "legislation": [
+     144,
+     149,
+     77,
+     166
+    ]
+   },
+   {
+    "date": "2025-12-23",
+    "submissions_cum": 3609,
+    "bound_cum": 2639,
+    "drivers": [
+     78.7,
+     17.2,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 713,
+    "trig_1m": 0,
+    "legislation": [
+     145,
+     151,
+     78,
+     167
+    ]
+   },
+   {
+    "date": "2025-12-24",
+    "submissions_cum": 3630,
+    "bound_cum": 2656,
+    "drivers": [
+     78.6,
+     17.2,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 717,
+    "trig_1m": 0,
+    "legislation": [
+     145,
+     152,
+     78,
+     167
+    ]
+   },
+   {
+    "date": "2025-12-25",
+    "submissions_cum": 3660,
+    "bound_cum": 2679,
+    "drivers": [
+     78.6,
+     17.3,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 720,
+    "trig_1m": 0,
+    "legislation": [
+     145,
+     152,
+     78,
+     168
+    ]
+   },
+   {
+    "date": "2025-12-26",
+    "submissions_cum": 3693,
+    "bound_cum": 2705,
+    "drivers": [
+     78.6,
+     17.2,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 725,
+    "trig_1m": 0,
+    "legislation": [
+     149,
+     153,
+     78,
+     168
+    ]
+   },
+   {
+    "date": "2025-12-27",
+    "submissions_cum": 3715,
+    "bound_cum": 2720,
+    "drivers": [
+     78.7,
+     17.2,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 731,
+    "trig_1m": 0,
+    "legislation": [
+     150,
+     153,
+     78,
+     171
+    ]
+   },
+   {
+    "date": "2025-12-28",
+    "submissions_cum": 3738,
+    "bound_cum": 2737,
+    "drivers": [
+     78.7,
+     17.2,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 734,
+    "trig_1m": 0,
+    "legislation": [
+     151,
+     154,
+     78,
+     173
+    ]
+   },
+   {
+    "date": "2025-12-29",
+    "submissions_cum": 3759,
+    "bound_cum": 2753,
+    "drivers": [
+     78.6,
+     17.2,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 736,
+    "trig_1m": 0,
+    "legislation": [
+     151,
+     155,
+     78,
+     176
+    ]
+   },
+   {
+    "date": "2025-12-30",
+    "submissions_cum": 3780,
+    "bound_cum": 2770,
+    "drivers": [
+     78.6,
+     17.2,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 740,
+    "trig_1m": 0,
+    "legislation": [
+     152,
+     158,
+     78,
+     177
+    ]
+   },
+   {
+    "date": "2025-12-31",
     "submissions_cum": 3804,
     "bound_cum": 2789,
     "drivers": [
@@ -183,8 +3005,577 @@
     ]
    },
    {
-    "month_index": 5,
-    "label": "Jan 2026",
+    "date": "2026-01-01",
+    "submissions_cum": 3840,
+    "bound_cum": 2812,
+    "drivers": [
+     78.5,
+     17.3,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 756,
+    "trig_1m": 0,
+    "legislation": [
+     153,
+     161,
+     80,
+     181
+    ]
+   },
+   {
+    "date": "2026-01-02",
+    "submissions_cum": 3869,
+    "bound_cum": 2833,
+    "drivers": [
+     78.4,
+     17.4,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 762,
+    "trig_1m": 0,
+    "legislation": [
+     155,
+     162,
+     80,
+     183
+    ]
+   },
+   {
+    "date": "2026-01-03",
+    "submissions_cum": 3899,
+    "bound_cum": 2858,
+    "drivers": [
+     78.3,
+     17.5,
+     3.9,
+     0.3
+    ],
+    "trig_3claims": 765,
+    "trig_1m": 0,
+    "legislation": [
+     156,
+     165,
+     81,
+     186
+    ]
+   },
+   {
+    "date": "2026-01-04",
+    "submissions_cum": 3928,
+    "bound_cum": 2882,
+    "drivers": [
+     78.4,
+     17.4,
+     3.9,
+     0.3
+    ],
+    "trig_3claims": 769,
+    "trig_1m": 0,
+    "legislation": [
+     158,
+     165,
+     81,
+     188
+    ]
+   },
+   {
+    "date": "2026-01-05",
+    "submissions_cum": 3953,
+    "bound_cum": 2896,
+    "drivers": [
+     78.4,
+     17.4,
+     3.9,
+     0.3
+    ],
+    "trig_3claims": 778,
+    "trig_1m": 0,
+    "legislation": [
+     161,
+     167,
+     81,
+     189
+    ]
+   },
+   {
+    "date": "2026-01-06",
+    "submissions_cum": 3974,
+    "bound_cum": 2911,
+    "drivers": [
+     78.4,
+     17.4,
+     3.9,
+     0.3
+    ],
+    "trig_3claims": 784,
+    "trig_1m": 0,
+    "legislation": [
+     161,
+     168,
+     81,
+     190
+    ]
+   },
+   {
+    "date": "2026-01-07",
+    "submissions_cum": 3999,
+    "bound_cum": 2930,
+    "drivers": [
+     78.4,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 788,
+    "trig_1m": 0,
+    "legislation": [
+     161,
+     168,
+     81,
+     193
+    ]
+   },
+   {
+    "date": "2026-01-08",
+    "submissions_cum": 4025,
+    "bound_cum": 2947,
+    "drivers": [
+     78.4,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 796,
+    "trig_1m": 0,
+    "legislation": [
+     161,
+     170,
+     82,
+     195
+    ]
+   },
+   {
+    "date": "2026-01-09",
+    "submissions_cum": 4043,
+    "bound_cum": 2955,
+    "drivers": [
+     78.4,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 802,
+    "trig_1m": 0,
+    "legislation": [
+     161,
+     170,
+     83,
+     195
+    ]
+   },
+   {
+    "date": "2026-01-10",
+    "submissions_cum": 4075,
+    "bound_cum": 2978,
+    "drivers": [
+     78.3,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 808,
+    "trig_1m": 0,
+    "legislation": [
+     164,
+     172,
+     83,
+     197
+    ]
+   },
+   {
+    "date": "2026-01-11",
+    "submissions_cum": 4098,
+    "bound_cum": 2992,
+    "drivers": [
+     78.3,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 814,
+    "trig_1m": 0,
+    "legislation": [
+     166,
+     175,
+     84,
+     197
+    ]
+   },
+   {
+    "date": "2026-01-12",
+    "submissions_cum": 4132,
+    "bound_cum": 3016,
+    "drivers": [
+     78.3,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 823,
+    "trig_1m": 0,
+    "legislation": [
+     166,
+     176,
+     84,
+     197
+    ]
+   },
+   {
+    "date": "2026-01-13",
+    "submissions_cum": 4153,
+    "bound_cum": 3032,
+    "drivers": [
+     78.3,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 826,
+    "trig_1m": 0,
+    "legislation": [
+     168,
+     176,
+     84,
+     199
+    ]
+   },
+   {
+    "date": "2026-01-14",
+    "submissions_cum": 4186,
+    "bound_cum": 3059,
+    "drivers": [
+     78.3,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 831,
+    "trig_1m": 0,
+    "legislation": [
+     168,
+     176,
+     84,
+     202
+    ]
+   },
+   {
+    "date": "2026-01-15",
+    "submissions_cum": 4214,
+    "bound_cum": 3073,
+    "drivers": [
+     78.3,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 838,
+    "trig_1m": 0,
+    "legislation": [
+     169,
+     176,
+     84,
+     204
+    ]
+   },
+   {
+    "date": "2026-01-16",
+    "submissions_cum": 4240,
+    "bound_cum": 3093,
+    "drivers": [
+     78.2,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 843,
+    "trig_1m": 0,
+    "legislation": [
+     169,
+     179,
+     86,
+     204
+    ]
+   },
+   {
+    "date": "2026-01-17",
+    "submissions_cum": 4275,
+    "bound_cum": 3117,
+    "drivers": [
+     78.2,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 851,
+    "trig_1m": 1,
+    "legislation": [
+     169,
+     179,
+     87,
+     205
+    ]
+   },
+   {
+    "date": "2026-01-18",
+    "submissions_cum": 4307,
+    "bound_cum": 3139,
+    "drivers": [
+     78.2,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 860,
+    "trig_1m": 1,
+    "legislation": [
+     169,
+     180,
+     87,
+     207
+    ]
+   },
+   {
+    "date": "2026-01-19",
+    "submissions_cum": 4329,
+    "bound_cum": 3156,
+    "drivers": [
+     78.3,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 864,
+    "trig_1m": 1,
+    "legislation": [
+     171,
+     181,
+     89,
+     208
+    ]
+   },
+   {
+    "date": "2026-01-20",
+    "submissions_cum": 4370,
+    "bound_cum": 3187,
+    "drivers": [
+     78.3,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 871,
+    "trig_1m": 1,
+    "legislation": [
+     177,
+     182,
+     89,
+     209
+    ]
+   },
+   {
+    "date": "2026-01-21",
+    "submissions_cum": 4397,
+    "bound_cum": 3209,
+    "drivers": [
+     78.3,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 875,
+    "trig_1m": 1,
+    "legislation": [
+     178,
+     182,
+     89,
+     214
+    ]
+   },
+   {
+    "date": "2026-01-22",
+    "submissions_cum": 4434,
+    "bound_cum": 3238,
+    "drivers": [
+     78.2,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 881,
+    "trig_1m": 1,
+    "legislation": [
+     180,
+     183,
+     90,
+     217
+    ]
+   },
+   {
+    "date": "2026-01-23",
+    "submissions_cum": 4459,
+    "bound_cum": 3256,
+    "drivers": [
+     78.2,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 886,
+    "trig_1m": 1,
+    "legislation": [
+     180,
+     184,
+     90,
+     217
+    ]
+   },
+   {
+    "date": "2026-01-24",
+    "submissions_cum": 4490,
+    "bound_cum": 3276,
+    "drivers": [
+     78.2,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 893,
+    "trig_1m": 1,
+    "legislation": [
+     183,
+     184,
+     93,
+     217
+    ]
+   },
+   {
+    "date": "2026-01-25",
+    "submissions_cum": 4513,
+    "bound_cum": 3293,
+    "drivers": [
+     78.2,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 899,
+    "trig_1m": 1,
+    "legislation": [
+     184,
+     184,
+     93,
+     218
+    ]
+   },
+   {
+    "date": "2026-01-26",
+    "submissions_cum": 4534,
+    "bound_cum": 3308,
+    "drivers": [
+     78.2,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 904,
+    "trig_1m": 1,
+    "legislation": [
+     184,
+     184,
+     93,
+     219
+    ]
+   },
+   {
+    "date": "2026-01-27",
+    "submissions_cum": 4556,
+    "bound_cum": 3329,
+    "drivers": [
+     78.2,
+     17.4,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 905,
+    "trig_1m": 1,
+    "legislation": [
+     185,
+     185,
+     94,
+     221
+    ]
+   },
+   {
+    "date": "2026-01-28",
+    "submissions_cum": 4585,
+    "bound_cum": 3353,
+    "drivers": [
+     78.2,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 910,
+    "trig_1m": 1,
+    "legislation": [
+     187,
+     186,
+     94,
+     223
+    ]
+   },
+   {
+    "date": "2026-01-29",
+    "submissions_cum": 4612,
+    "bound_cum": 3372,
+    "drivers": [
+     78.2,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 914,
+    "trig_1m": 1,
+    "legislation": [
+     189,
+     187,
+     94,
+     224
+    ]
+   },
+   {
+    "date": "2026-01-30",
+    "submissions_cum": 4630,
+    "bound_cum": 3385,
+    "drivers": [
+     78.2,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 918,
+    "trig_1m": 1,
+    "legislation": [
+     189,
+     188,
+     95,
+     224
+    ]
+   },
+   {
+    "date": "2026-01-31",
     "submissions_cum": 4659,
     "bound_cum": 3404,
     "drivers": [
@@ -203,8 +3594,520 @@
     ]
    },
    {
-    "month_index": 6,
-    "label": "Feb 2026",
+    "date": "2026-02-01",
+    "submissions_cum": 4689,
+    "bound_cum": 3426,
+    "drivers": [
+     78.2,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 931,
+    "trig_1m": 1,
+    "legislation": [
+     193,
+     188,
+     95,
+     226
+    ]
+   },
+   {
+    "date": "2026-02-02",
+    "submissions_cum": 4725,
+    "bound_cum": 3455,
+    "drivers": [
+     78.1,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 936,
+    "trig_1m": 1,
+    "legislation": [
+     195,
+     190,
+     95,
+     227
+    ]
+   },
+   {
+    "date": "2026-02-03",
+    "submissions_cum": 4753,
+    "bound_cum": 3475,
+    "drivers": [
+     78.2,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 942,
+    "trig_1m": 1,
+    "legislation": [
+     198,
+     191,
+     95,
+     228
+    ]
+   },
+   {
+    "date": "2026-02-04",
+    "submissions_cum": 4783,
+    "bound_cum": 3495,
+    "drivers": [
+     78.1,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 949,
+    "trig_1m": 1,
+    "legislation": [
+     198,
+     191,
+     97,
+     229
+    ]
+   },
+   {
+    "date": "2026-02-05",
+    "submissions_cum": 4817,
+    "bound_cum": 3516,
+    "drivers": [
+     78.1,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 958,
+    "trig_1m": 1,
+    "legislation": [
+     198,
+     192,
+     98,
+     234
+    ]
+   },
+   {
+    "date": "2026-02-06",
+    "submissions_cum": 4842,
+    "bound_cum": 3534,
+    "drivers": [
+     78.1,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 961,
+    "trig_1m": 1,
+    "legislation": [
+     200,
+     192,
+     98,
+     235
+    ]
+   },
+   {
+    "date": "2026-02-07",
+    "submissions_cum": 4872,
+    "bound_cum": 3557,
+    "drivers": [
+     78.2,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 966,
+    "trig_1m": 1,
+    "legislation": [
+     202,
+     193,
+     98,
+     237
+    ]
+   },
+   {
+    "date": "2026-02-08",
+    "submissions_cum": 4900,
+    "bound_cum": 3578,
+    "drivers": [
+     78.2,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 969,
+    "trig_1m": 1,
+    "legislation": [
+     204,
+     194,
+     98,
+     239
+    ]
+   },
+   {
+    "date": "2026-02-09",
+    "submissions_cum": 4932,
+    "bound_cum": 3603,
+    "drivers": [
+     78.1,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 974,
+    "trig_1m": 1,
+    "legislation": [
+     207,
+     194,
+     99,
+     240
+    ]
+   },
+   {
+    "date": "2026-02-10",
+    "submissions_cum": 4965,
+    "bound_cum": 3629,
+    "drivers": [
+     78.1,
+     17.5,
+     4.0,
+     0.4
+    ],
+    "trig_3claims": 976,
+    "trig_1m": 1,
+    "legislation": [
+     210,
+     196,
+     99,
+     244
+    ]
+   },
+   {
+    "date": "2026-02-11",
+    "submissions_cum": 4996,
+    "bound_cum": 3652,
+    "drivers": [
+     78.1,
+     17.5,
+     4.0,
+     0.4
+    ],
+    "trig_3claims": 981,
+    "trig_1m": 1,
+    "legislation": [
+     212,
+     196,
+     100,
+     245
+    ]
+   },
+   {
+    "date": "2026-02-12",
+    "submissions_cum": 5031,
+    "bound_cum": 3675,
+    "drivers": [
+     78.1,
+     17.5,
+     4.0,
+     0.4
+    ],
+    "trig_3claims": 991,
+    "trig_1m": 1,
+    "legislation": [
+     213,
+     196,
+     101,
+     246
+    ]
+   },
+   {
+    "date": "2026-02-13",
+    "submissions_cum": 5058,
+    "bound_cum": 3692,
+    "drivers": [
+     78.1,
+     17.5,
+     4.0,
+     0.4
+    ],
+    "trig_3claims": 997,
+    "trig_1m": 1,
+    "legislation": [
+     213,
+     196,
+     103,
+     246
+    ]
+   },
+   {
+    "date": "2026-02-14",
+    "submissions_cum": 5094,
+    "bound_cum": 3718,
+    "drivers": [
+     78.1,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1007,
+    "trig_1m": 1,
+    "legislation": [
+     213,
+     199,
+     103,
+     247
+    ]
+   },
+   {
+    "date": "2026-02-15",
+    "submissions_cum": 5125,
+    "bound_cum": 3741,
+    "drivers": [
+     78.0,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1012,
+    "trig_1m": 1,
+    "legislation": [
+     213,
+     200,
+     104,
+     248
+    ]
+   },
+   {
+    "date": "2026-02-16",
+    "submissions_cum": 5167,
+    "bound_cum": 3772,
+    "drivers": [
+     78.1,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1021,
+    "trig_1m": 1,
+    "legislation": [
+     215,
+     201,
+     105,
+     251
+    ]
+   },
+   {
+    "date": "2026-02-17",
+    "submissions_cum": 5200,
+    "bound_cum": 3796,
+    "drivers": [
+     78.1,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1029,
+    "trig_1m": 1,
+    "legislation": [
+     215,
+     201,
+     106,
+     251
+    ]
+   },
+   {
+    "date": "2026-02-18",
+    "submissions_cum": 5243,
+    "bound_cum": 3826,
+    "drivers": [
+     78.0,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1038,
+    "trig_1m": 1,
+    "legislation": [
+     217,
+     203,
+     107,
+     255
+    ]
+   },
+   {
+    "date": "2026-02-19",
+    "submissions_cum": 5274,
+    "bound_cum": 3850,
+    "drivers": [
+     78.1,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1042,
+    "trig_1m": 1,
+    "legislation": [
+     217,
+     206,
+     107,
+     259
+    ]
+   },
+   {
+    "date": "2026-02-20",
+    "submissions_cum": 5306,
+    "bound_cum": 3876,
+    "drivers": [
+     78.1,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1047,
+    "trig_1m": 1,
+    "legislation": [
+     218,
+     207,
+     107,
+     261
+    ]
+   },
+   {
+    "date": "2026-02-21",
+    "submissions_cum": 5338,
+    "bound_cum": 3901,
+    "drivers": [
+     78.0,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1053,
+    "trig_1m": 1,
+    "legislation": [
+     218,
+     209,
+     109,
+     262
+    ]
+   },
+   {
+    "date": "2026-02-22",
+    "submissions_cum": 5368,
+    "bound_cum": 3922,
+    "drivers": [
+     78.0,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1060,
+    "trig_1m": 1,
+    "legislation": [
+     220,
+     210,
+     109,
+     265
+    ]
+   },
+   {
+    "date": "2026-02-23",
+    "submissions_cum": 5395,
+    "bound_cum": 3945,
+    "drivers": [
+     78.0,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1062,
+    "trig_1m": 1,
+    "legislation": [
+     221,
+     212,
+     110,
+     267
+    ]
+   },
+   {
+    "date": "2026-02-24",
+    "submissions_cum": 5428,
+    "bound_cum": 3967,
+    "drivers": [
+     78.0,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1068,
+    "trig_1m": 1,
+    "legislation": [
+     224,
+     212,
+     111,
+     270
+    ]
+   },
+   {
+    "date": "2026-02-25",
+    "submissions_cum": 5457,
+    "bound_cum": 3988,
+    "drivers": [
+     78.0,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1073,
+    "trig_1m": 1,
+    "legislation": [
+     227,
+     213,
+     111,
+     271
+    ]
+   },
+   {
+    "date": "2026-02-26",
+    "submissions_cum": 5491,
+    "bound_cum": 4010,
+    "drivers": [
+     78.0,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1082,
+    "trig_1m": 1,
+    "legislation": [
+     229,
+     214,
+     113,
+     272
+    ]
+   },
+   {
+    "date": "2026-02-27",
+    "submissions_cum": 5526,
+    "bound_cum": 4037,
+    "drivers": [
+     77.9,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1089,
+    "trig_1m": 1,
+    "legislation": [
+     230,
+     215,
+     114,
+     275
+    ]
+   },
+   {
+    "date": "2026-02-28",
     "submissions_cum": 5558,
     "bound_cum": 4062,
     "drivers": [
@@ -223,8 +4126,577 @@
     ]
    },
    {
-    "month_index": 7,
-    "label": "Mar 2026",
+    "date": "2026-03-01",
+    "submissions_cum": 5583,
+    "bound_cum": 4079,
+    "drivers": [
+     77.9,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1097,
+    "trig_1m": 1,
+    "legislation": [
+     236,
+     215,
+     114,
+     280
+    ]
+   },
+   {
+    "date": "2026-03-02",
+    "submissions_cum": 5614,
+    "bound_cum": 4103,
+    "drivers": [
+     77.9,
+     17.6,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1102,
+    "trig_1m": 1,
+    "legislation": [
+     237,
+     215,
+     114,
+     281
+    ]
+   },
+   {
+    "date": "2026-03-03",
+    "submissions_cum": 5644,
+    "bound_cum": 4123,
+    "drivers": [
+     77.9,
+     17.6,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1111,
+    "trig_1m": 1,
+    "legislation": [
+     240,
+     216,
+     114,
+     282
+    ]
+   },
+   {
+    "date": "2026-03-04",
+    "submissions_cum": 5689,
+    "bound_cum": 4153,
+    "drivers": [
+     77.9,
+     17.6,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1119,
+    "trig_1m": 1,
+    "legislation": [
+     241,
+     216,
+     114,
+     284
+    ]
+   },
+   {
+    "date": "2026-03-05",
+    "submissions_cum": 5724,
+    "bound_cum": 4181,
+    "drivers": [
+     77.9,
+     17.6,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1124,
+    "trig_1m": 1,
+    "legislation": [
+     244,
+     217,
+     116,
+     284
+    ]
+   },
+   {
+    "date": "2026-03-06",
+    "submissions_cum": 5755,
+    "bound_cum": 4207,
+    "drivers": [
+     77.8,
+     17.6,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1127,
+    "trig_1m": 1,
+    "legislation": [
+     244,
+     217,
+     117,
+     288
+    ]
+   },
+   {
+    "date": "2026-03-07",
+    "submissions_cum": 5795,
+    "bound_cum": 4237,
+    "drivers": [
+     77.9,
+     17.6,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1135,
+    "trig_1m": 1,
+    "legislation": [
+     245,
+     217,
+     117,
+     291
+    ]
+   },
+   {
+    "date": "2026-03-08",
+    "submissions_cum": 5833,
+    "bound_cum": 4266,
+    "drivers": [
+     77.9,
+     17.5,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1143,
+    "trig_1m": 1,
+    "legislation": [
+     245,
+     218,
+     120,
+     294
+    ]
+   },
+   {
+    "date": "2026-03-09",
+    "submissions_cum": 5862,
+    "bound_cum": 4286,
+    "drivers": [
+     77.9,
+     17.5,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1150,
+    "trig_1m": 1,
+    "legislation": [
+     247,
+     219,
+     121,
+     296
+    ]
+   },
+   {
+    "date": "2026-03-10",
+    "submissions_cum": 5898,
+    "bound_cum": 4312,
+    "drivers": [
+     77.9,
+     17.5,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1156,
+    "trig_1m": 1,
+    "legislation": [
+     247,
+     220,
+     122,
+     297
+    ]
+   },
+   {
+    "date": "2026-03-11",
+    "submissions_cum": 5929,
+    "bound_cum": 4331,
+    "drivers": [
+     77.9,
+     17.5,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1166,
+    "trig_1m": 1,
+    "legislation": [
+     247,
+     220,
+     123,
+     300
+    ]
+   },
+   {
+    "date": "2026-03-12",
+    "submissions_cum": 5955,
+    "bound_cum": 4351,
+    "drivers": [
+     77.9,
+     17.5,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1171,
+    "trig_1m": 1,
+    "legislation": [
+     249,
+     221,
+     124,
+     301
+    ]
+   },
+   {
+    "date": "2026-03-13",
+    "submissions_cum": 5983,
+    "bound_cum": 4370,
+    "drivers": [
+     77.9,
+     17.5,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1177,
+    "trig_1m": 1,
+    "legislation": [
+     249,
+     222,
+     124,
+     302
+    ]
+   },
+   {
+    "date": "2026-03-14",
+    "submissions_cum": 6021,
+    "bound_cum": 4394,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1188,
+    "trig_1m": 1,
+    "legislation": [
+     253,
+     223,
+     125,
+     303
+    ]
+   },
+   {
+    "date": "2026-03-15",
+    "submissions_cum": 6045,
+    "bound_cum": 4412,
+    "drivers": [
+     77.8,
+     17.6,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1190,
+    "trig_1m": 1,
+    "legislation": [
+     253,
+     224,
+     126,
+     305
+    ]
+   },
+   {
+    "date": "2026-03-16",
+    "submissions_cum": 6070,
+    "bound_cum": 4430,
+    "drivers": [
+     77.8,
+     17.6,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1196,
+    "trig_1m": 1,
+    "legislation": [
+     254,
+     225,
+     130,
+     308
+    ]
+   },
+   {
+    "date": "2026-03-17",
+    "submissions_cum": 6107,
+    "bound_cum": 4452,
+    "drivers": [
+     77.8,
+     17.6,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1206,
+    "trig_1m": 1,
+    "legislation": [
+     256,
+     227,
+     130,
+     309
+    ]
+   },
+   {
+    "date": "2026-03-18",
+    "submissions_cum": 6140,
+    "bound_cum": 4479,
+    "drivers": [
+     77.8,
+     17.6,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1212,
+    "trig_1m": 1,
+    "legislation": [
+     256,
+     228,
+     130,
+     312
+    ]
+   },
+   {
+    "date": "2026-03-19",
+    "submissions_cum": 6170,
+    "bound_cum": 4499,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1218,
+    "trig_1m": 1,
+    "legislation": [
+     257,
+     231,
+     130,
+     313
+    ]
+   },
+   {
+    "date": "2026-03-20",
+    "submissions_cum": 6197,
+    "bound_cum": 4518,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.5
+    ],
+    "trig_3claims": 1226,
+    "trig_1m": 1,
+    "legislation": [
+     259,
+     231,
+     130,
+     315
+    ]
+   },
+   {
+    "date": "2026-03-21",
+    "submissions_cum": 6235,
+    "bound_cum": 4548,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1233,
+    "trig_1m": 1,
+    "legislation": [
+     262,
+     231,
+     131,
+     318
+    ]
+   },
+   {
+    "date": "2026-03-22",
+    "submissions_cum": 6262,
+    "bound_cum": 4570,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1235,
+    "trig_1m": 1,
+    "legislation": [
+     262,
+     234,
+     131,
+     319
+    ]
+   },
+   {
+    "date": "2026-03-23",
+    "submissions_cum": 6296,
+    "bound_cum": 4593,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1244,
+    "trig_1m": 1,
+    "legislation": [
+     264,
+     236,
+     134,
+     319
+    ]
+   },
+   {
+    "date": "2026-03-24",
+    "submissions_cum": 6329,
+    "bound_cum": 4618,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1251,
+    "trig_1m": 1,
+    "legislation": [
+     265,
+     238,
+     135,
+     320
+    ]
+   },
+   {
+    "date": "2026-03-25",
+    "submissions_cum": 6353,
+    "bound_cum": 4640,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1252,
+    "trig_1m": 1,
+    "legislation": [
+     268,
+     240,
+     135,
+     322
+    ]
+   },
+   {
+    "date": "2026-03-26",
+    "submissions_cum": 6386,
+    "bound_cum": 4665,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1259,
+    "trig_1m": 1,
+    "legislation": [
+     270,
+     241,
+     135,
+     322
+    ]
+   },
+   {
+    "date": "2026-03-27",
+    "submissions_cum": 6414,
+    "bound_cum": 4685,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1263,
+    "trig_1m": 1,
+    "legislation": [
+     270,
+     242,
+     135,
+     324
+    ]
+   },
+   {
+    "date": "2026-03-28",
+    "submissions_cum": 6449,
+    "bound_cum": 4715,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1267,
+    "trig_1m": 1,
+    "legislation": [
+     272,
+     245,
+     135,
+     329
+    ]
+   },
+   {
+    "date": "2026-03-29",
+    "submissions_cum": 6483,
+    "bound_cum": 4745,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1270,
+    "trig_1m": 1,
+    "legislation": [
+     272,
+     247,
+     135,
+     330
+    ]
+   },
+   {
+    "date": "2026-03-30",
+    "submissions_cum": 6521,
+    "bound_cum": 4773,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1278,
+    "trig_1m": 1,
+    "legislation": [
+     274,
+     247,
+     137,
+     332
+    ]
+   },
+   {
+    "date": "2026-03-31",
     "submissions_cum": 6559,
     "bound_cum": 4804,
     "drivers": [
@@ -243,8 +4715,558 @@
     ]
    },
    {
-    "month_index": 8,
-    "label": "Apr 2026",
+    "date": "2026-04-01",
+    "submissions_cum": 6578,
+    "bound_cum": 4818,
+    "drivers": [
+     77.7,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1285,
+    "trig_1m": 1,
+    "legislation": [
+     275,
+     248,
+     138,
+     334
+    ]
+   },
+   {
+    "date": "2026-04-02",
+    "submissions_cum": 6612,
+    "bound_cum": 4843,
+    "drivers": [
+     77.7,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1290,
+    "trig_1m": 2,
+    "legislation": [
+     275,
+     248,
+     138,
+     335
+    ]
+   },
+   {
+    "date": "2026-04-03",
+    "submissions_cum": 6651,
+    "bound_cum": 4872,
+    "drivers": [
+     77.7,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1297,
+    "trig_1m": 2,
+    "legislation": [
+     277,
+     250,
+     138,
+     339
+    ]
+   },
+   {
+    "date": "2026-04-04",
+    "submissions_cum": 6684,
+    "bound_cum": 4897,
+    "drivers": [
+     77.7,
+     17.6,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1302,
+    "trig_1m": 2,
+    "legislation": [
+     280,
+     250,
+     138,
+     341
+    ]
+   },
+   {
+    "date": "2026-04-05",
+    "submissions_cum": 6716,
+    "bound_cum": 4922,
+    "drivers": [
+     77.7,
+     17.6,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1307,
+    "trig_1m": 2,
+    "legislation": [
+     281,
+     251,
+     138,
+     342
+    ]
+   },
+   {
+    "date": "2026-04-06",
+    "submissions_cum": 6739,
+    "bound_cum": 4937,
+    "drivers": [
+     77.7,
+     17.6,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1313,
+    "trig_1m": 2,
+    "legislation": [
+     283,
+     251,
+     138,
+     342
+    ]
+   },
+   {
+    "date": "2026-04-07",
+    "submissions_cum": 6766,
+    "bound_cum": 4959,
+    "drivers": [
+     77.7,
+     17.6,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1317,
+    "trig_1m": 2,
+    "legislation": [
+     284,
+     252,
+     139,
+     344
+    ]
+   },
+   {
+    "date": "2026-04-08",
+    "submissions_cum": 6790,
+    "bound_cum": 4975,
+    "drivers": [
+     77.7,
+     17.5,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1320,
+    "trig_1m": 2,
+    "legislation": [
+     284,
+     253,
+     139,
+     345
+    ]
+   },
+   {
+    "date": "2026-04-09",
+    "submissions_cum": 6825,
+    "bound_cum": 5000,
+    "drivers": [
+     77.7,
+     17.5,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1326,
+    "trig_1m": 2,
+    "legislation": [
+     287,
+     255,
+     139,
+     346
+    ]
+   },
+   {
+    "date": "2026-04-10",
+    "submissions_cum": 6849,
+    "bound_cum": 5019,
+    "drivers": [
+     77.7,
+     17.5,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1331,
+    "trig_1m": 2,
+    "legislation": [
+     287,
+     255,
+     139,
+     348
+    ]
+   },
+   {
+    "date": "2026-04-11",
+    "submissions_cum": 6878,
+    "bound_cum": 5039,
+    "drivers": [
+     77.7,
+     17.5,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1337,
+    "trig_1m": 2,
+    "legislation": [
+     289,
+     256,
+     140,
+     349
+    ]
+   },
+   {
+    "date": "2026-04-12",
+    "submissions_cum": 6911,
+    "bound_cum": 5062,
+    "drivers": [
+     77.7,
+     17.5,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1345,
+    "trig_1m": 2,
+    "legislation": [
+     291,
+     257,
+     141,
+     351
+    ]
+   },
+   {
+    "date": "2026-04-13",
+    "submissions_cum": 6932,
+    "bound_cum": 5076,
+    "drivers": [
+     77.7,
+     17.5,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1350,
+    "trig_1m": 2,
+    "legislation": [
+     295,
+     257,
+     143,
+     351
+    ]
+   },
+   {
+    "date": "2026-04-14",
+    "submissions_cum": 6961,
+    "bound_cum": 5094,
+    "drivers": [
+     77.8,
+     17.4,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1358,
+    "trig_1m": 2,
+    "legislation": [
+     295,
+     258,
+     144,
+     351
+    ]
+   },
+   {
+    "date": "2026-04-15",
+    "submissions_cum": 6997,
+    "bound_cum": 5121,
+    "drivers": [
+     77.8,
+     17.4,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1366,
+    "trig_1m": 2,
+    "legislation": [
+     298,
+     259,
+     145,
+     353
+    ]
+   },
+   {
+    "date": "2026-04-16",
+    "submissions_cum": 7033,
+    "bound_cum": 5150,
+    "drivers": [
+     77.8,
+     17.4,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1373,
+    "trig_1m": 2,
+    "legislation": [
+     298,
+     260,
+     145,
+     355
+    ]
+   },
+   {
+    "date": "2026-04-17",
+    "submissions_cum": 7068,
+    "bound_cum": 5177,
+    "drivers": [
+     77.8,
+     17.4,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1379,
+    "trig_1m": 2,
+    "legislation": [
+     300,
+     261,
+     146,
+     357
+    ]
+   },
+   {
+    "date": "2026-04-18",
+    "submissions_cum": 7101,
+    "bound_cum": 5196,
+    "drivers": [
+     77.8,
+     17.4,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1388,
+    "trig_1m": 2,
+    "legislation": [
+     301,
+     262,
+     146,
+     357
+    ]
+   },
+   {
+    "date": "2026-04-19",
+    "submissions_cum": 7132,
+    "bound_cum": 5215,
+    "drivers": [
+     77.8,
+     17.4,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1398,
+    "trig_1m": 2,
+    "legislation": [
+     304,
+     262,
+     146,
+     357
+    ]
+   },
+   {
+    "date": "2026-04-20",
+    "submissions_cum": 7162,
+    "bound_cum": 5237,
+    "drivers": [
+     77.7,
+     17.4,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1405,
+    "trig_1m": 2,
+    "legislation": [
+     304,
+     262,
+     147,
+     358
+    ]
+   },
+   {
+    "date": "2026-04-21",
+    "submissions_cum": 7193,
+    "bound_cum": 5260,
+    "drivers": [
+     77.7,
+     17.4,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1412,
+    "trig_1m": 2,
+    "legislation": [
+     306,
+     262,
+     147,
+     363
+    ]
+   },
+   {
+    "date": "2026-04-22",
+    "submissions_cum": 7227,
+    "bound_cum": 5284,
+    "drivers": [
+     77.7,
+     17.4,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1422,
+    "trig_1m": 2,
+    "legislation": [
+     307,
+     263,
+     148,
+     364
+    ]
+   },
+   {
+    "date": "2026-04-23",
+    "submissions_cum": 7260,
+    "bound_cum": 5309,
+    "drivers": [
+     77.7,
+     17.4,
+     4.1,
+     0.7
+    ],
+    "trig_3claims": 1426,
+    "trig_1m": 2,
+    "legislation": [
+     309,
+     265,
+     149,
+     364
+    ]
+   },
+   {
+    "date": "2026-04-24",
+    "submissions_cum": 7289,
+    "bound_cum": 5329,
+    "drivers": [
+     77.7,
+     17.4,
+     4.1,
+     0.8
+    ],
+    "trig_3claims": 1432,
+    "trig_1m": 2,
+    "legislation": [
+     309,
+     266,
+     149,
+     366
+    ]
+   },
+   {
+    "date": "2026-04-25",
+    "submissions_cum": 7316,
+    "bound_cum": 5352,
+    "drivers": [
+     77.7,
+     17.4,
+     4.1,
+     0.8
+    ],
+    "trig_3claims": 1435,
+    "trig_1m": 2,
+    "legislation": [
+     310,
+     266,
+     149,
+     367
+    ]
+   },
+   {
+    "date": "2026-04-26",
+    "submissions_cum": 7339,
+    "bound_cum": 5367,
+    "drivers": [
+     77.7,
+     17.4,
+     4.1,
+     0.8
+    ],
+    "trig_3claims": 1442,
+    "trig_1m": 2,
+    "legislation": [
+     310,
+     267,
+     149,
+     368
+    ]
+   },
+   {
+    "date": "2026-04-27",
+    "submissions_cum": 7378,
+    "bound_cum": 5394,
+    "drivers": [
+     77.7,
+     17.4,
+     4.1,
+     0.8
+    ],
+    "trig_3claims": 1450,
+    "trig_1m": 2,
+    "legislation": [
+     313,
+     267,
+     149,
+     370
+    ]
+   },
+   {
+    "date": "2026-04-28",
+    "submissions_cum": 7408,
+    "bound_cum": 5415,
+    "drivers": [
+     77.7,
+     17.4,
+     4.1,
+     0.8
+    ],
+    "trig_3claims": 1455,
+    "trig_1m": 2,
+    "legislation": [
+     316,
+     267,
+     150,
+     372
+    ]
+   },
+   {
+    "date": "2026-04-29",
+    "submissions_cum": 7442,
+    "bound_cum": 5437,
+    "drivers": [
+     77.6,
+     17.5,
+     4.1,
+     0.8
+    ],
+    "trig_3claims": 1465,
+    "trig_1m": 2,
+    "legislation": [
+     317,
+     267,
+     150,
+     376
+    ]
+   },
+   {
+    "date": "2026-04-30",
     "submissions_cum": 7465,
     "bound_cum": 5453,
     "drivers": [
@@ -263,8 +5285,577 @@
     ]
    },
    {
-    "month_index": 9,
-    "label": "May 2026",
+    "date": "2026-05-01",
+    "submissions_cum": 7501,
+    "bound_cum": 5479,
+    "drivers": [
+     77.6,
+     17.5,
+     4.1,
+     0.8
+    ],
+    "trig_3claims": 1478,
+    "trig_1m": 2,
+    "legislation": [
+     317,
+     268,
+     153,
+     378
+    ]
+   },
+   {
+    "date": "2026-05-02",
+    "submissions_cum": 7529,
+    "bound_cum": 5500,
+    "drivers": [
+     77.6,
+     17.5,
+     4.1,
+     0.8
+    ],
+    "trig_3claims": 1484,
+    "trig_1m": 2,
+    "legislation": [
+     319,
+     271,
+     153,
+     381
+    ]
+   },
+   {
+    "date": "2026-05-03",
+    "submissions_cum": 7566,
+    "bound_cum": 5527,
+    "drivers": [
+     77.6,
+     17.4,
+     4.1,
+     0.8
+    ],
+    "trig_3claims": 1492,
+    "trig_1m": 2,
+    "legislation": [
+     319,
+     273,
+     154,
+     383
+    ]
+   },
+   {
+    "date": "2026-05-04",
+    "submissions_cum": 7585,
+    "bound_cum": 5543,
+    "drivers": [
+     77.6,
+     17.4,
+     4.1,
+     0.8
+    ],
+    "trig_3claims": 1495,
+    "trig_1m": 2,
+    "legislation": [
+     320,
+     273,
+     155,
+     384
+    ]
+   },
+   {
+    "date": "2026-05-05",
+    "submissions_cum": 7622,
+    "bound_cum": 5564,
+    "drivers": [
+     77.6,
+     17.4,
+     4.1,
+     0.9
+    ],
+    "trig_3claims": 1502,
+    "trig_1m": 2,
+    "legislation": [
+     320,
+     274,
+     156,
+     386
+    ]
+   },
+   {
+    "date": "2026-05-06",
+    "submissions_cum": 7654,
+    "bound_cum": 5586,
+    "drivers": [
+     77.6,
+     17.4,
+     4.1,
+     0.9
+    ],
+    "trig_3claims": 1507,
+    "trig_1m": 2,
+    "legislation": [
+     322,
+     276,
+     158,
+     386
+    ]
+   },
+   {
+    "date": "2026-05-07",
+    "submissions_cum": 7688,
+    "bound_cum": 5611,
+    "drivers": [
+     77.5,
+     17.4,
+     4.1,
+     0.9
+    ],
+    "trig_3claims": 1513,
+    "trig_1m": 2,
+    "legislation": [
+     324,
+     278,
+     158,
+     387
+    ]
+   },
+   {
+    "date": "2026-05-08",
+    "submissions_cum": 7710,
+    "bound_cum": 5625,
+    "drivers": [
+     77.6,
+     17.4,
+     4.1,
+     0.9
+    ],
+    "trig_3claims": 1515,
+    "trig_1m": 2,
+    "legislation": [
+     324,
+     280,
+     158,
+     389
+    ]
+   },
+   {
+    "date": "2026-05-09",
+    "submissions_cum": 7735,
+    "bound_cum": 5644,
+    "drivers": [
+     77.6,
+     17.4,
+     4.1,
+     0.9
+    ],
+    "trig_3claims": 1518,
+    "trig_1m": 2,
+    "legislation": [
+     327,
+     280,
+     158,
+     390
+    ]
+   },
+   {
+    "date": "2026-05-10",
+    "submissions_cum": 7769,
+    "bound_cum": 5665,
+    "drivers": [
+     77.5,
+     17.4,
+     4.1,
+     0.9
+    ],
+    "trig_3claims": 1529,
+    "trig_1m": 2,
+    "legislation": [
+     328,
+     280,
+     158,
+     390
+    ]
+   },
+   {
+    "date": "2026-05-11",
+    "submissions_cum": 7808,
+    "bound_cum": 5692,
+    "drivers": [
+     77.5,
+     17.5,
+     4.1,
+     1.0
+    ],
+    "trig_3claims": 1539,
+    "trig_1m": 2,
+    "legislation": [
+     328,
+     281,
+     159,
+     392
+    ]
+   },
+   {
+    "date": "2026-05-12",
+    "submissions_cum": 7833,
+    "bound_cum": 5713,
+    "drivers": [
+     77.5,
+     17.5,
+     4.1,
+     1.0
+    ],
+    "trig_3claims": 1543,
+    "trig_1m": 2,
+    "legislation": [
+     330,
+     281,
+     159,
+     392
+    ]
+   },
+   {
+    "date": "2026-05-13",
+    "submissions_cum": 7864,
+    "bound_cum": 5736,
+    "drivers": [
+     77.5,
+     17.4,
+     4.1,
+     1.0
+    ],
+    "trig_3claims": 1549,
+    "trig_1m": 2,
+    "legislation": [
+     331,
+     281,
+     159,
+     394
+    ]
+   },
+   {
+    "date": "2026-05-14",
+    "submissions_cum": 7905,
+    "bound_cum": 5763,
+    "drivers": [
+     77.5,
+     17.4,
+     4.1,
+     1.0
+    ],
+    "trig_3claims": 1561,
+    "trig_1m": 2,
+    "legislation": [
+     333,
+     282,
+     159,
+     396
+    ]
+   },
+   {
+    "date": "2026-05-15",
+    "submissions_cum": 7931,
+    "bound_cum": 5783,
+    "drivers": [
+     77.5,
+     17.4,
+     4.1,
+     1.0
+    ],
+    "trig_3claims": 1564,
+    "trig_1m": 2,
+    "legislation": [
+     334,
+     283,
+     160,
+     396
+    ]
+   },
+   {
+    "date": "2026-05-16",
+    "submissions_cum": 7959,
+    "bound_cum": 5801,
+    "drivers": [
+     77.5,
+     17.4,
+     4.1,
+     1.0
+    ],
+    "trig_3claims": 1571,
+    "trig_1m": 2,
+    "legislation": [
+     334,
+     284,
+     162,
+     397
+    ]
+   },
+   {
+    "date": "2026-05-17",
+    "submissions_cum": 7980,
+    "bound_cum": 5816,
+    "drivers": [
+     77.5,
+     17.4,
+     4.1,
+     1.0
+    ],
+    "trig_3claims": 1576,
+    "trig_1m": 3,
+    "legislation": [
+     335,
+     284,
+     162,
+     398
+    ]
+   },
+   {
+    "date": "2026-05-18",
+    "submissions_cum": 8003,
+    "bound_cum": 5833,
+    "drivers": [
+     77.4,
+     17.4,
+     4.1,
+     1.0
+    ],
+    "trig_3claims": 1579,
+    "trig_1m": 3,
+    "legislation": [
+     336,
+     286,
+     163,
+     398
+    ]
+   },
+   {
+    "date": "2026-05-19",
+    "submissions_cum": 8044,
+    "bound_cum": 5864,
+    "drivers": [
+     77.5,
+     17.4,
+     4.1,
+     1.1
+    ],
+    "trig_3claims": 1586,
+    "trig_1m": 3,
+    "legislation": [
+     340,
+     287,
+     163,
+     399
+    ]
+   },
+   {
+    "date": "2026-05-20",
+    "submissions_cum": 8069,
+    "bound_cum": 5883,
+    "drivers": [
+     77.4,
+     17.4,
+     4.1,
+     1.1
+    ],
+    "trig_3claims": 1589,
+    "trig_1m": 3,
+    "legislation": [
+     340,
+     289,
+     164,
+     400
+    ]
+   },
+   {
+    "date": "2026-05-21",
+    "submissions_cum": 8098,
+    "bound_cum": 5904,
+    "drivers": [
+     77.5,
+     17.4,
+     4.1,
+     1.1
+    ],
+    "trig_3claims": 1595,
+    "trig_1m": 3,
+    "legislation": [
+     341,
+     289,
+     164,
+     402
+    ]
+   },
+   {
+    "date": "2026-05-22",
+    "submissions_cum": 8139,
+    "bound_cum": 5935,
+    "drivers": [
+     77.5,
+     17.3,
+     4.1,
+     1.1
+    ],
+    "trig_3claims": 1602,
+    "trig_1m": 3,
+    "legislation": [
+     345,
+     290,
+     165,
+     405
+    ]
+   },
+   {
+    "date": "2026-05-23",
+    "submissions_cum": 8169,
+    "bound_cum": 5957,
+    "drivers": [
+     77.4,
+     17.4,
+     4.1,
+     1.1
+    ],
+    "trig_3claims": 1610,
+    "trig_1m": 3,
+    "legislation": [
+     349,
+     292,
+     166,
+     408
+    ]
+   },
+   {
+    "date": "2026-05-24",
+    "submissions_cum": 8209,
+    "bound_cum": 5982,
+    "drivers": [
+     77.5,
+     17.3,
+     4.1,
+     1.1
+    ],
+    "trig_3claims": 1620,
+    "trig_1m": 3,
+    "legislation": [
+     351,
+     293,
+     167,
+     410
+    ]
+   },
+   {
+    "date": "2026-05-25",
+    "submissions_cum": 8238,
+    "bound_cum": 6002,
+    "drivers": [
+     77.5,
+     17.3,
+     4.1,
+     1.1
+    ],
+    "trig_3claims": 1627,
+    "trig_1m": 3,
+    "legislation": [
+     352,
+     293,
+     168,
+     411
+    ]
+   },
+   {
+    "date": "2026-05-26",
+    "submissions_cum": 8258,
+    "bound_cum": 6018,
+    "drivers": [
+     77.4,
+     17.3,
+     4.1,
+     1.2
+    ],
+    "trig_3claims": 1630,
+    "trig_1m": 3,
+    "legislation": [
+     353,
+     294,
+     168,
+     414
+    ]
+   },
+   {
+    "date": "2026-05-27",
+    "submissions_cum": 8290,
+    "bound_cum": 6046,
+    "drivers": [
+     77.4,
+     17.3,
+     4.1,
+     1.2
+    ],
+    "trig_3claims": 1632,
+    "trig_1m": 3,
+    "legislation": [
+     354,
+     295,
+     169,
+     415
+    ]
+   },
+   {
+    "date": "2026-05-28",
+    "submissions_cum": 8321,
+    "bound_cum": 6067,
+    "drivers": [
+     77.5,
+     17.3,
+     4.1,
+     1.2
+    ],
+    "trig_3claims": 1642,
+    "trig_1m": 3,
+    "legislation": [
+     357,
+     296,
+     169,
+     416
+    ]
+   },
+   {
+    "date": "2026-05-29",
+    "submissions_cum": 8354,
+    "bound_cum": 6093,
+    "drivers": [
+     77.5,
+     17.2,
+     4.1,
+     1.2
+    ],
+    "trig_3claims": 1647,
+    "trig_1m": 3,
+    "legislation": [
+     359,
+     297,
+     170,
+     418
+    ]
+   },
+   {
+    "date": "2026-05-30",
+    "submissions_cum": 8385,
+    "bound_cum": 6110,
+    "drivers": [
+     77.5,
+     17.2,
+     4.1,
+     1.2
+    ],
+    "trig_3claims": 1656,
+    "trig_1m": 3,
+    "legislation": [
+     360,
+     297,
+     170,
+     419
+    ]
+   },
+   {
+    "date": "2026-05-31",
     "submissions_cum": 8402,
     "bound_cum": 6124,
     "drivers": [
@@ -283,8 +5874,558 @@
     ]
    },
    {
-    "month_index": 10,
-    "label": "Jun 2026",
+    "date": "2026-06-01",
+    "submissions_cum": 8438,
+    "bound_cum": 6146,
+    "drivers": [
+     77.4,
+     17.3,
+     4.1,
+     1.2
+    ],
+    "trig_3claims": 1668,
+    "trig_1m": 3,
+    "legislation": [
+     360,
+     298,
+     171,
+     421
+    ]
+   },
+   {
+    "date": "2026-06-02",
+    "submissions_cum": 8468,
+    "bound_cum": 6165,
+    "drivers": [
+     77.4,
+     17.3,
+     4.1,
+     1.2
+    ],
+    "trig_3claims": 1671,
+    "trig_1m": 3,
+    "legislation": [
+     363,
+     300,
+     171,
+     423
+    ]
+   },
+   {
+    "date": "2026-06-03",
+    "submissions_cum": 8514,
+    "bound_cum": 6191,
+    "drivers": [
+     77.4,
+     17.3,
+     4.1,
+     1.2
+    ],
+    "trig_3claims": 1686,
+    "trig_1m": 3,
+    "legislation": [
+     363,
+     302,
+     172,
+     426
+    ]
+   },
+   {
+    "date": "2026-06-04",
+    "submissions_cum": 8548,
+    "bound_cum": 6213,
+    "drivers": [
+     77.4,
+     17.3,
+     4.1,
+     1.3
+    ],
+    "trig_3claims": 1695,
+    "trig_1m": 3,
+    "legislation": [
+     366,
+     303,
+     172,
+     427
+    ]
+   },
+   {
+    "date": "2026-06-05",
+    "submissions_cum": 8597,
+    "bound_cum": 6246,
+    "drivers": [
+     77.3,
+     17.3,
+     4.1,
+     1.3
+    ],
+    "trig_3claims": 1707,
+    "trig_1m": 3,
+    "legislation": [
+     369,
+     305,
+     173,
+     429
+    ]
+   },
+   {
+    "date": "2026-06-06",
+    "submissions_cum": 8637,
+    "bound_cum": 6276,
+    "drivers": [
+     77.4,
+     17.3,
+     4.1,
+     1.3
+    ],
+    "trig_3claims": 1717,
+    "trig_1m": 3,
+    "legislation": [
+     370,
+     305,
+     174,
+     432
+    ]
+   },
+   {
+    "date": "2026-06-07",
+    "submissions_cum": 8665,
+    "bound_cum": 6296,
+    "drivers": [
+     77.4,
+     17.3,
+     4.1,
+     1.3
+    ],
+    "trig_3claims": 1724,
+    "trig_1m": 3,
+    "legislation": [
+     370,
+     307,
+     174,
+     432
+    ]
+   },
+   {
+    "date": "2026-06-08",
+    "submissions_cum": 8705,
+    "bound_cum": 6327,
+    "drivers": [
+     77.3,
+     17.3,
+     4.1,
+     1.3
+    ],
+    "trig_3claims": 1730,
+    "trig_1m": 3,
+    "legislation": [
+     373,
+     309,
+     174,
+     435
+    ]
+   },
+   {
+    "date": "2026-06-09",
+    "submissions_cum": 8741,
+    "bound_cum": 6352,
+    "drivers": [
+     77.3,
+     17.3,
+     4.1,
+     1.3
+    ],
+    "trig_3claims": 1736,
+    "trig_1m": 3,
+    "legislation": [
+     374,
+     311,
+     174,
+     437
+    ]
+   },
+   {
+    "date": "2026-06-10",
+    "submissions_cum": 8772,
+    "bound_cum": 6376,
+    "drivers": [
+     77.4,
+     17.2,
+     4.1,
+     1.4
+    ],
+    "trig_3claims": 1742,
+    "trig_1m": 3,
+    "legislation": [
+     374,
+     311,
+     176,
+     437
+    ]
+   },
+   {
+    "date": "2026-06-11",
+    "submissions_cum": 8814,
+    "bound_cum": 6409,
+    "drivers": [
+     77.4,
+     17.2,
+     4.1,
+     1.4
+    ],
+    "trig_3claims": 1750,
+    "trig_1m": 3,
+    "legislation": [
+     377,
+     312,
+     179,
+     439
+    ]
+   },
+   {
+    "date": "2026-06-12",
+    "submissions_cum": 8844,
+    "bound_cum": 6428,
+    "drivers": [
+     77.3,
+     17.2,
+     4.1,
+     1.4
+    ],
+    "trig_3claims": 1758,
+    "trig_1m": 3,
+    "legislation": [
+     377,
+     313,
+     183,
+     439
+    ]
+   },
+   {
+    "date": "2026-06-13",
+    "submissions_cum": 8877,
+    "bound_cum": 6454,
+    "drivers": [
+     77.3,
+     17.2,
+     4.1,
+     1.4
+    ],
+    "trig_3claims": 1764,
+    "trig_1m": 3,
+    "legislation": [
+     379,
+     315,
+     183,
+     441
+    ]
+   },
+   {
+    "date": "2026-06-14",
+    "submissions_cum": 8911,
+    "bound_cum": 6483,
+    "drivers": [
+     77.3,
+     17.2,
+     4.1,
+     1.4
+    ],
+    "trig_3claims": 1768,
+    "trig_1m": 3,
+    "legislation": [
+     380,
+     317,
+     184,
+     442
+    ]
+   },
+   {
+    "date": "2026-06-15",
+    "submissions_cum": 8945,
+    "bound_cum": 6508,
+    "drivers": [
+     77.2,
+     17.3,
+     4.1,
+     1.4
+    ],
+    "trig_3claims": 1774,
+    "trig_1m": 3,
+    "legislation": [
+     382,
+     318,
+     186,
+     444
+    ]
+   },
+   {
+    "date": "2026-06-16",
+    "submissions_cum": 8987,
+    "bound_cum": 6540,
+    "drivers": [
+     77.2,
+     17.3,
+     4.1,
+     1.4
+    ],
+    "trig_3claims": 1782,
+    "trig_1m": 3,
+    "legislation": [
+     384,
+     320,
+     186,
+     446
+    ]
+   },
+   {
+    "date": "2026-06-17",
+    "submissions_cum": 9025,
+    "bound_cum": 6567,
+    "drivers": [
+     77.2,
+     17.3,
+     4.1,
+     1.5
+    ],
+    "trig_3claims": 1789,
+    "trig_1m": 3,
+    "legislation": [
+     385,
+     322,
+     187,
+     448
+    ]
+   },
+   {
+    "date": "2026-06-18",
+    "submissions_cum": 9068,
+    "bound_cum": 6600,
+    "drivers": [
+     77.2,
+     17.2,
+     4.1,
+     1.5
+    ],
+    "trig_3claims": 1798,
+    "trig_1m": 3,
+    "legislation": [
+     385,
+     324,
+     188,
+     450
+    ]
+   },
+   {
+    "date": "2026-06-19",
+    "submissions_cum": 9104,
+    "bound_cum": 6622,
+    "drivers": [
+     77.2,
+     17.3,
+     4.1,
+     1.5
+    ],
+    "trig_3claims": 1807,
+    "trig_1m": 3,
+    "legislation": [
+     385,
+     324,
+     188,
+     452
+    ]
+   },
+   {
+    "date": "2026-06-20",
+    "submissions_cum": 9135,
+    "bound_cum": 6647,
+    "drivers": [
+     77.2,
+     17.3,
+     4.1,
+     1.5
+    ],
+    "trig_3claims": 1810,
+    "trig_1m": 3,
+    "legislation": [
+     387,
+     325,
+     188,
+     456
+    ]
+   },
+   {
+    "date": "2026-06-21",
+    "submissions_cum": 9167,
+    "bound_cum": 6670,
+    "drivers": [
+     77.2,
+     17.2,
+     4.1,
+     1.5
+    ],
+    "trig_3claims": 1818,
+    "trig_1m": 3,
+    "legislation": [
+     388,
+     325,
+     188,
+     461
+    ]
+   },
+   {
+    "date": "2026-06-22",
+    "submissions_cum": 9212,
+    "bound_cum": 6701,
+    "drivers": [
+     77.2,
+     17.2,
+     4.1,
+     1.5
+    ],
+    "trig_3claims": 1826,
+    "trig_1m": 3,
+    "legislation": [
+     391,
+     325,
+     189,
+     463
+    ]
+   },
+   {
+    "date": "2026-06-23",
+    "submissions_cum": 9246,
+    "bound_cum": 6730,
+    "drivers": [
+     77.2,
+     17.2,
+     4.1,
+     1.5
+    ],
+    "trig_3claims": 1831,
+    "trig_1m": 3,
+    "legislation": [
+     395,
+     327,
+     189,
+     465
+    ]
+   },
+   {
+    "date": "2026-06-24",
+    "submissions_cum": 9291,
+    "bound_cum": 6768,
+    "drivers": [
+     77.2,
+     17.2,
+     4.1,
+     1.5
+    ],
+    "trig_3claims": 1835,
+    "trig_1m": 3,
+    "legislation": [
+     396,
+     330,
+     190,
+     467
+    ]
+   },
+   {
+    "date": "2026-06-25",
+    "submissions_cum": 9321,
+    "bound_cum": 6793,
+    "drivers": [
+     77.2,
+     17.2,
+     4.1,
+     1.6
+    ],
+    "trig_3claims": 1838,
+    "trig_1m": 3,
+    "legislation": [
+     396,
+     334,
+     191,
+     467
+    ]
+   },
+   {
+    "date": "2026-06-26",
+    "submissions_cum": 9360,
+    "bound_cum": 6821,
+    "drivers": [
+     77.1,
+     17.2,
+     4.1,
+     1.6
+    ],
+    "trig_3claims": 1843,
+    "trig_1m": 3,
+    "legislation": [
+     397,
+     335,
+     194,
+     469
+    ]
+   },
+   {
+    "date": "2026-06-27",
+    "submissions_cum": 9413,
+    "bound_cum": 6860,
+    "drivers": [
+     77.1,
+     17.2,
+     4.1,
+     1.6
+    ],
+    "trig_3claims": 1853,
+    "trig_1m": 3,
+    "legislation": [
+     399,
+     335,
+     195,
+     472
+    ]
+   },
+   {
+    "date": "2026-06-28",
+    "submissions_cum": 9453,
+    "bound_cum": 6891,
+    "drivers": [
+     77.1,
+     17.2,
+     4.1,
+     1.6
+    ],
+    "trig_3claims": 1862,
+    "trig_1m": 3,
+    "legislation": [
+     400,
+     335,
+     196,
+     476
+    ]
+   },
+   {
+    "date": "2026-06-29",
+    "submissions_cum": 9493,
+    "bound_cum": 6917,
+    "drivers": [
+     77.1,
+     17.2,
+     4.1,
+     1.6
+    ],
+    "trig_3claims": 1870,
+    "trig_1m": 3,
+    "legislation": [
+     402,
+     335,
+     198,
+     478
+    ]
+   },
+   {
+    "date": "2026-06-30",
     "submissions_cum": 9533,
     "bound_cum": 6948,
     "drivers": [
@@ -303,8 +6444,577 @@
     ]
    },
    {
-    "month_index": 11,
-    "label": "Jul 2026",
+    "date": "2026-07-01",
+    "submissions_cum": 9568,
+    "bound_cum": 6974,
+    "drivers": [
+     77.1,
+     17.2,
+     4.1,
+     1.6
+    ],
+    "trig_3claims": 1881,
+    "trig_1m": 3,
+    "legislation": [
+     405,
+     339,
+     200,
+     481
+    ]
+   },
+   {
+    "date": "2026-07-02",
+    "submissions_cum": 9606,
+    "bound_cum": 7004,
+    "drivers": [
+     77.1,
+     17.2,
+     4.1,
+     1.6
+    ],
+    "trig_3claims": 1886,
+    "trig_1m": 3,
+    "legislation": [
+     406,
+     340,
+     202,
+     482
+    ]
+   },
+   {
+    "date": "2026-07-03",
+    "submissions_cum": 9638,
+    "bound_cum": 7028,
+    "drivers": [
+     77.0,
+     17.2,
+     4.1,
+     1.6
+    ],
+    "trig_3claims": 1892,
+    "trig_1m": 3,
+    "legislation": [
+     407,
+     340,
+     203,
+     483
+    ]
+   },
+   {
+    "date": "2026-07-04",
+    "submissions_cum": 9669,
+    "bound_cum": 7047,
+    "drivers": [
+     77.0,
+     17.2,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1900,
+    "trig_1m": 3,
+    "legislation": [
+     407,
+     342,
+     204,
+     485
+    ]
+   },
+   {
+    "date": "2026-07-05",
+    "submissions_cum": 9695,
+    "bound_cum": 7066,
+    "drivers": [
+     77.0,
+     17.3,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1907,
+    "trig_1m": 3,
+    "legislation": [
+     408,
+     342,
+     204,
+     486
+    ]
+   },
+   {
+    "date": "2026-07-06",
+    "submissions_cum": 9731,
+    "bound_cum": 7093,
+    "drivers": [
+     77.0,
+     17.2,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1913,
+    "trig_1m": 3,
+    "legislation": [
+     411,
+     342,
+     204,
+     487
+    ]
+   },
+   {
+    "date": "2026-07-07",
+    "submissions_cum": 9754,
+    "bound_cum": 7112,
+    "drivers": [
+     77.0,
+     17.2,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1916,
+    "trig_1m": 3,
+    "legislation": [
+     413,
+     342,
+     205,
+     490
+    ]
+   },
+   {
+    "date": "2026-07-08",
+    "submissions_cum": 9783,
+    "bound_cum": 7131,
+    "drivers": [
+     77.0,
+     17.3,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1921,
+    "trig_1m": 3,
+    "legislation": [
+     413,
+     343,
+     205,
+     492
+    ]
+   },
+   {
+    "date": "2026-07-09",
+    "submissions_cum": 9815,
+    "bound_cum": 7157,
+    "drivers": [
+     77.0,
+     17.3,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1926,
+    "trig_1m": 3,
+    "legislation": [
+     416,
+     344,
+     207,
+     492
+    ]
+   },
+   {
+    "date": "2026-07-10",
+    "submissions_cum": 9843,
+    "bound_cum": 7179,
+    "drivers": [
+     77.0,
+     17.3,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1931,
+    "trig_1m": 3,
+    "legislation": [
+     417,
+     345,
+     207,
+     495
+    ]
+   },
+   {
+    "date": "2026-07-11",
+    "submissions_cum": 9870,
+    "bound_cum": 7201,
+    "drivers": [
+     77.0,
+     17.3,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1936,
+    "trig_1m": 3,
+    "legislation": [
+     417,
+     345,
+     208,
+     497
+    ]
+   },
+   {
+    "date": "2026-07-12",
+    "submissions_cum": 9895,
+    "bound_cum": 7221,
+    "drivers": [
+     76.9,
+     17.3,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1939,
+    "trig_1m": 3,
+    "legislation": [
+     417,
+     345,
+     209,
+     498
+    ]
+   },
+   {
+    "date": "2026-07-13",
+    "submissions_cum": 9921,
+    "bound_cum": 7236,
+    "drivers": [
+     77.0,
+     17.2,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1946,
+    "trig_1m": 3,
+    "legislation": [
+     417,
+     346,
+     209,
+     499
+    ]
+   },
+   {
+    "date": "2026-07-14",
+    "submissions_cum": 9960,
+    "bound_cum": 7263,
+    "drivers": [
+     76.9,
+     17.3,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1956,
+    "trig_1m": 3,
+    "legislation": [
+     419,
+     347,
+     209,
+     501
+    ]
+   },
+   {
+    "date": "2026-07-15",
+    "submissions_cum": 9992,
+    "bound_cum": 7288,
+    "drivers": [
+     76.9,
+     17.3,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1961,
+    "trig_1m": 3,
+    "legislation": [
+     422,
+     347,
+     211,
+     501
+    ]
+   },
+   {
+    "date": "2026-07-16",
+    "submissions_cum": 10018,
+    "bound_cum": 7310,
+    "drivers": [
+     76.9,
+     17.3,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1962,
+    "trig_1m": 3,
+    "legislation": [
+     426,
+     347,
+     212,
+     502
+    ]
+   },
+   {
+    "date": "2026-07-17",
+    "submissions_cum": 10052,
+    "bound_cum": 7331,
+    "drivers": [
+     76.9,
+     17.3,
+     4.1,
+     1.7
+    ],
+    "trig_3claims": 1972,
+    "trig_1m": 3,
+    "legislation": [
+     427,
+     347,
+     213,
+     503
+    ]
+   },
+   {
+    "date": "2026-07-18",
+    "submissions_cum": 10080,
+    "bound_cum": 7353,
+    "drivers": [
+     76.9,
+     17.3,
+     4.1,
+     1.8
+    ],
+    "trig_3claims": 1977,
+    "trig_1m": 3,
+    "legislation": [
+     427,
+     348,
+     213,
+     504
+    ]
+   },
+   {
+    "date": "2026-07-19",
+    "submissions_cum": 10113,
+    "bound_cum": 7379,
+    "drivers": [
+     76.9,
+     17.2,
+     4.1,
+     1.8
+    ],
+    "trig_3claims": 1983,
+    "trig_1m": 3,
+    "legislation": [
+     429,
+     350,
+     213,
+     504
+    ]
+   },
+   {
+    "date": "2026-07-20",
+    "submissions_cum": 10150,
+    "bound_cum": 7403,
+    "drivers": [
+     76.9,
+     17.3,
+     4.1,
+     1.8
+    ],
+    "trig_3claims": 1990,
+    "trig_1m": 3,
+    "legislation": [
+     429,
+     352,
+     216,
+     506
+    ]
+   },
+   {
+    "date": "2026-07-21",
+    "submissions_cum": 10189,
+    "bound_cum": 7433,
+    "drivers": [
+     76.9,
+     17.3,
+     4.1,
+     1.8
+    ],
+    "trig_3claims": 1997,
+    "trig_1m": 3,
+    "legislation": [
+     432,
+     353,
+     219,
+     506
+    ]
+   },
+   {
+    "date": "2026-07-22",
+    "submissions_cum": 10223,
+    "bound_cum": 7460,
+    "drivers": [
+     76.9,
+     17.3,
+     4.1,
+     1.8
+    ],
+    "trig_3claims": 2003,
+    "trig_1m": 3,
+    "legislation": [
+     435,
+     353,
+     219,
+     508
+    ]
+   },
+   {
+    "date": "2026-07-23",
+    "submissions_cum": 10249,
+    "bound_cum": 7476,
+    "drivers": [
+     76.9,
+     17.3,
+     4.1,
+     1.8
+    ],
+    "trig_3claims": 2009,
+    "trig_1m": 3,
+    "legislation": [
+     435,
+     355,
+     219,
+     509
+    ]
+   },
+   {
+    "date": "2026-07-24",
+    "submissions_cum": 10289,
+    "bound_cum": 7507,
+    "drivers": [
+     76.9,
+     17.3,
+     4.1,
+     1.8
+    ],
+    "trig_3claims": 2015,
+    "trig_1m": 3,
+    "legislation": [
+     437,
+     358,
+     219,
+     515
+    ]
+   },
+   {
+    "date": "2026-07-25",
+    "submissions_cum": 10320,
+    "bound_cum": 7532,
+    "drivers": [
+     76.9,
+     17.3,
+     4.1,
+     1.8
+    ],
+    "trig_3claims": 2018,
+    "trig_1m": 3,
+    "legislation": [
+     440,
+     359,
+     219,
+     518
+    ]
+   },
+   {
+    "date": "2026-07-26",
+    "submissions_cum": 10353,
+    "bound_cum": 7553,
+    "drivers": [
+     76.9,
+     17.3,
+     4.1,
+     1.8
+    ],
+    "trig_3claims": 2025,
+    "trig_1m": 3,
+    "legislation": [
+     440,
+     360,
+     219,
+     519
+    ]
+   },
+   {
+    "date": "2026-07-27",
+    "submissions_cum": 10382,
+    "bound_cum": 7575,
+    "drivers": [
+     76.8,
+     17.3,
+     4.1,
+     1.8
+    ],
+    "trig_3claims": 2031,
+    "trig_1m": 3,
+    "legislation": [
+     441,
+     362,
+     220,
+     521
+    ]
+   },
+   {
+    "date": "2026-07-28",
+    "submissions_cum": 10405,
+    "bound_cum": 7591,
+    "drivers": [
+     76.8,
+     17.3,
+     4.0,
+     1.8
+    ],
+    "trig_3claims": 2036,
+    "trig_1m": 3,
+    "legislation": [
+     441,
+     363,
+     220,
+     521
+    ]
+   },
+   {
+    "date": "2026-07-29",
+    "submissions_cum": 10443,
+    "bound_cum": 7619,
+    "drivers": [
+     76.8,
+     17.3,
+     4.1,
+     1.8
+    ],
+    "trig_3claims": 2042,
+    "trig_1m": 3,
+    "legislation": [
+     443,
+     364,
+     222,
+     524
+    ]
+   },
+   {
+    "date": "2026-07-30",
+    "submissions_cum": 10461,
+    "bound_cum": 7629,
+    "drivers": [
+     76.8,
+     17.3,
+     4.0,
+     1.8
+    ],
+    "trig_3claims": 2048,
+    "trig_1m": 3,
+    "legislation": [
+     444,
+     364,
+     222,
+     525
+    ]
+   },
+   {
+    "date": "2026-07-31",
     "submissions_cum": 10500,
     "bound_cum": 7655,
     "drivers": [

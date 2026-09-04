@@ -219,7 +219,7 @@
     font-size:10.5px;color:var(--faint);display:flex;justify-content:space-between}
   .footnote .sim-note{color:var(--sim)}
 
-  /* ---- AI Predictive Analysis (frozen precomputed payload; v2 series rows follow the playback cursor) ---- */
+  /* ---- AI Predictive Analysis (frozen precomputed payload; daily series rows follow the playback cursor) ---- */
   .ai-panel{
     background:
       radial-gradient(900px 320px at 12% -30%, rgba(201,162,75,.10), transparent 65%),
@@ -312,7 +312,8 @@
   </header>
 
   <!-- AI PREDICTIVE ANALYSIS — frozen precomputed payload (shap_tile.json v2); follows the
-       playback cursor by resolving it to one precomputed monthly series row per snapshot tick -->
+       playback cursor by resolving it to one precomputed daily series row per snapshot tick;
+       row 0 is the explicit zero state so rewind/reset reads zero with the rest of the page -->
   <section class="ai-panel" id="ai-panel" hidden>
     <div class="ai-head">
       <span class="ai-badge">AI</span>
@@ -875,12 +876,14 @@ setInterval(spawnNext, SPAWN_MS);            // replay real apps through the pip
 // ============================================================================
 // AI Predictive Analysis panel — PURE RENDERER over shap_tile.json, a FROZEN
 // precomputed payload (same-origin, so it sits inside the same Entra lock as
-// the rest of the site). The payload is fetched ONCE at load; v2 adds a
-// `series` block: 12 precomputed monthly rows of the panel's numbers on the
-// cumulative book revealed through each month. The panel now FOLLOWS the
-// playback cursor by riding the SAME snapshot poll as every other live tile
+// the rest of the site). The payload is fetched ONCE at load; v3 carries a
+// DAILY `series.days` block (~366 rows): row 0 is the explicit ZERO state
+// (all counts 0, drivers=null) and each later row is a change-day with the
+// cumulative values revealed through that date. The panel FOLLOWS the playback
+// cursor by riding the SAME snapshot poll as every other live tile
 // (renderAll -> renderAiPlayback; there is NO second poll): each tick resolves
-// the cursor to one series row and renders that row. No number is recomputed
+// the cursor to one series row and renders that row. At rewind/reset the panel
+// reads zero exactly when the rest of the page does. No number is recomputed
 // or altered here — rows render exactly as precomputed.
 // ============================================================================
 let aiData=null;    // frozen payload (null until fetched; panel hidden until then)
@@ -888,29 +891,43 @@ let aiCurIdx=-1;    // series row currently rendered (-1 = none yet)
 const aiEls={shares:[],fills:[],trigCounts:[],legPols:[],trigUlt:null,footBase:"",trigCap:""};
 
 // Resolve the playback cursor to a series row index.
-// Preferred: snapshot.playback.cursor (the exporter's ISO demo-time position) ->
-// month index via the SAME month key the exporter uses ((y-2025)*12+(m-8);
-// month 0 = Aug 2025), clamped to the series — playback.active=false means the
-// full book is revealed, i.e. the last row. Fallback for a snapshot without a
-// `playback` block: the last row whose bound_cum <= the snapshot's cumulative
-// bound count (series rows carry submissions_cum/bound_cum for exactly this
-// mapping). No snapshot yet (pre-start/reset) -> the month-0 row, never blanks.
+// ZERO FIRST: if the snapshot's cumulative counts read 0 (rewind/reset — the
+// rest of the page shows zeros), the panel renders row 0, the explicit zero
+// row, regardless of where the cursor sits. Otherwise, preferred mapping is
+// snapshot.playback.cursor (the exporter's ISO demo-time position): the last
+// series.days row whose date <= the cursor date (row 0's "0000-00-00" sorts
+// before every real date, so a cursor before the first change-day lands on the
+// zero row). playback.active=false means the full book is revealed -> last
+// row; an active playback with no cursor -> zero row. Fallback for a snapshot
+// without a `playback` block: the last row whose bound_cum <= the snapshot's
+// cumulative bound count — which also lands on row 0 when bound is 0. No
+// snapshot yet (pre-start) -> the zero row, never blanks.
 function aiRowIndex(snap){
-  const months=aiData.series.months, last=months.length-1;
+  const days=aiData.series.days, last=days.length-1;
   if(!snap) return 0;
+  if(snap.tiles && snap.tiles.applications_total===0) return 0;   // page reads zero -> so do we
   const pb=snap.playback;
   if(pb && typeof pb.active==="boolean"){
-    if(!pb.active || !pb.cursor) return last;      // full book revealed
-    const d=new Date(pb.cursor);
-    if(isNaN(d.getTime())) return last;
-    const mi=(d.getUTCFullYear()-2025)*12+(d.getUTCMonth()+1-8);
-    return Math.max(0,Math.min(last,mi));
+    if(!pb.active) return last;                    // full book revealed
+    if(!pb.cursor) return 0;                       // active but no position -> zero state
+    const cd=String(pb.cursor).slice(0,10);        // "YYYY-MM-DD" of the demo-time cursor
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(cd)) return last;
+    let idx=0;
+    for(let i=0;i<days.length;i++){ if(days[i].date<=cd) idx=i; else break; }
+    return idx;
   }
   const bound=snap.tiles&&snap.tiles.bound;
   if(bound==null) return last;
   let idx=0;
-  for(let i=0;i<months.length;i++){ if(months[i].bound_cum<=bound) idx=i; }
+  for(let i=0;i<days.length;i++){ if(days[i].bound_cum<=bound) idx=i; }
   return idx;
+}
+
+// "2025-08-20" -> "Aug 20, 2025" (string-split: no timezone drift).
+const AI_MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function aiDateLabel(iso){
+  const p=String(iso).split("-");
+  return AI_MONTHS[(+p[1])-1]+" "+(+p[2])+", "+p[0];
 }
 
 // Counter tick in the house style: same decelerating feel as the bars' width
@@ -933,16 +950,19 @@ const aiInt=v=>Math.round(v).toLocaleString("en-US");
 // Render one series row. Called from renderAll on every snapshot tick; no-ops
 // until the payload has loaded and whenever the resolved row hasn't changed.
 function renderAiPlayback(snap){
-  if(!aiData||!aiData.series||!aiData.series.months||!aiData.series.months.length) return;
-  const months=aiData.series.months, last=months.length-1;
+  if(!aiData||!aiData.series||!aiData.series.days||!aiData.series.days.length) return;
+  const days=aiData.series.days, last=days.length-1;
   const idx=aiRowIndex(snap);
   if(idx===aiCurIdx) return;
   aiCurIdx=idx;
-  const row=months[idx];
+  const row=days[idx];
 
   // Zone 1 — driver bars re-widen; row.drivers order matches attribution.drivers.
-  const maxShare=Math.max(...row.drivers)||1;
-  row.drivers.forEach((v,i)=>{
+  // drivers=null (zero row / bind-free early days) renders the four bars at zero
+  // width with 0.0% values — empty state like the rest of the page, never hidden.
+  const drivers=row.drivers||[0,0,0,0];
+  const maxShare=Math.max(...drivers)||1;
+  drivers.forEach((v,i)=>{
     aiTween(aiEls.shares[i],v,x=>x.toFixed(1)+"%");
     aiEls.fills[i].style.width=(v/maxShare*100).toFixed(2)+"%";
   });
@@ -964,8 +984,10 @@ function renderAiPlayback(snap){
   // Zone 3 — legislation counts tick; row.legislation order matches legislation.items.
   row.legislation.forEach((v,i)=>aiTween(aiEls.legPols[i],v,x=>aiInt(x)+" policies"));
 
-  // Provenance foot — dynamic reveal marker from the row's own label.
-  document.getElementById("ai-foot").textContent=aiEls.footBase+" · revealed through "+row.label;
+  // Provenance foot — dynamic reveal marker from the row's own date; the zero
+  // row (nothing revealed) shows the house empty-state marker instead.
+  document.getElementById("ai-foot").textContent=aiEls.footBase+
+    (idx===0?" · awaiting playback":" · revealed through "+aiDateLabel(row.date));
 }
 
 (async function(){
@@ -980,7 +1002,7 @@ function renderAiPlayback(snap){
     return;               // panel stays hidden rather than rendering empty zones
   }
   const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n};
-  const hasSeries=!!(d.series&&d.series.months&&d.series.months.length);
+  const hasSeries=!!(d.series&&d.series.days&&d.series.days.length);
 
   document.getElementById("ai-title").textContent=d.title;
   document.getElementById("ai-subtitle").textContent=d.subtitle;
@@ -1056,7 +1078,7 @@ function renderAiPlayback(snap){
   panel.hidden=false;
   requestAnimationFrame(()=>requestAnimationFrame(()=>{   // let layout settle, then animate in
     if(hasSeries){
-      // First render at the current cursor (or the month-0 row before the first
+      // First render at the current cursor (or the zero row before the first
       // snapshot lands) — bars widen and counters tick up from zero.
       renderAiPlayback(typeof snapshot!=="undefined"?snapshot:null);
     }else{
