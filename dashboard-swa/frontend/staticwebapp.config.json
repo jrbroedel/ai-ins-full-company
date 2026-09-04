@@ -30,11 +30,13 @@
     { "route": "/.auth/login/aad", "statusCode": 404 },
     { "route": "/api/snapshot", "methods": ["GET"], "allowedRoles": ["authenticated"] },
     { "route": "/api/*", "allowedRoles": ["authenticated"] },
+    { "route": "/master", "rewrite": "/master.html", "allowedRoles": ["authenticated"] },
+    { "route": "/binder", "rewrite": "/binder.html", "allowedRoles": ["authenticated"] },
     { "route": "/*", "allowedRoles": ["authenticated"] }
   ],
 
   "responseOverrides": {
-    "401": { "statusCode": 302, "redirect": "/.auth/login/entra" },
+    "401": { "statusCode": 302, "redirect": "/.auth/login/entra?post_login_redirect_uri=.referrer" },
     "403": { "rewrite": "/403.html" }
   },
 
