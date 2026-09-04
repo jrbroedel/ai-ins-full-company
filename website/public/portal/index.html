@@ -1,17 +1,15 @@
 <!doctype html>
 <!--
-  TORQUE UNDERWRITING — scroll-driven film site
-  Reel 01 (frames 0001-0100): the survey — camera walks the car, rear to front.
-  Reel 02 (frames 0101-0200): on risk — the car moves, tracking side profile.
-  Built from the precision-editorial starter.
+  TORQUE UNDERWRITING — client portal (served behind Worker session auth;
+  see website/src/worker.js). Style block shared with the landing page.
 -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0a0d0a">
-  <meta name="description" content="Torque Underwriting — specialist insurance for exceptional automobiles. A Managing General Agent with delegated authority from Lloyd's of London.">
-  <title>Torque Underwriting — Specialist Motor Insurance</title>
+  <meta name="robots" content="noindex">
+  <title>Client Portal — Torque Underwriting</title>
   <link rel="icon" href="data:,">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1168,657 +1166,361 @@
     }
   </style>
 </head>
-<body class="is-loading">
-  <div class="loader" id="loader" aria-label="Loading the film sequence">
-    <div class="loader__mark">
-      <p class="loader__number" aria-hidden="true">72</p>
-      <div class="loader__meta">Torque Underwriting<br>Underwriting file no. 72<br>Two reels · 20.25 seconds</div>
-    </div>
-    <div class="loader__foot">
-      <span class="micro" id="loader-label">Opening the file</span>
-      <div class="loader__track" aria-hidden="true"><span class="loader__fill" id="loader-fill"></span></div>
-      <span class="micro" id="loader-count">000%</span>
-    </div>
-  </div>
-
+<body class="is-portal">
   <header class="site-header" aria-label="Site information">
     <div class="site-header__brand">Torque Underwriting</div>
     <div class="site-header__center micro">Specialist motor underwriting</div>
-    <div class="site-header__end micro">MGA · Coverholder at Lloyd's<br>200 frames · 20.25 sec</div>
+    <div class="site-header__end micro">MGA · Coverholder at Lloyd's<br>Client portal</div>
     <div class="site-header__auth">
-      <button class="login-btn" id="login-open" type="button">Login</button>
-      <a class="login-btn" id="portal-link" href="/portal/" hidden>Portal</a>
+      <div class="session" id="session">
+        <span class="session__user micro" id="session-user"></span>
+        <span class="session__timer micro" id="session-timer">--:--:--</span>
+        <button class="login-btn login-btn--ghost" id="logout" type="button">Sign out</button>
+      </div>
     </div>
   </header>
 
   <main>
-    <section class="sequence" id="sequence" aria-label="Scroll-controlled film of an insured automobile">
-      <div class="stage" id="stage">
-        <canvas id="film-canvas" role="img" aria-label="A racing-green Porsche 911 is surveyed and then driven along an alpine lake as the page scrolls"></canvas>
-        <div class="stage__scrim" aria-hidden="true"></div>
-        <div class="stage__grid" aria-hidden="true"></div>
-        <div class="mobile-aperture" aria-hidden="true"></div>
+    <section class="portal" id="portal" aria-labelledby="portal-title">
+      <p class="portal__eyebrow micro">Client portal &middot; File no. 72</p>
+      <h1 class="portal__title" id="portal-title">Portal</h1>
+      <p class="portal__deck">Underwriting film and policy media, released to insured clients.</p>
 
-        <div class="chapters" aria-live="off">
-          <article class="chapter chapter--hero" data-center="0.045" data-window="0.075" data-label="Torque">
-            <div class="chapter__copy">
-              <p class="chapter__eyebrow micro">Torque Underwriting · File no. 72</p>
-              <h1 class="chapter__title reveal"><span>Torque</span></h1>
-              <p class="chapter__deck reveal"><span>Specialist insurance for exceptional automobiles.</span></p>
-            </div>
-          </article>
-
-          <article class="chapter chapter--split" data-center="0.14" data-window="0.05" data-label="Underwriting">
-            <div class="chapter__copy">
-              <div>
-                <p class="chapter__eyebrow micro">Reel 01 / The survey</p>
-                <h2 class="chapter__title reveal"><span>Under</span></h2>
-              </div>
-              <div class="split-end">
-                <h2 class="chapter__title reveal"><span>written</span></h2>
-                <p class="chapter__deck reveal"><span>Every policy priced in-house, by underwriters who know these cars.</span></p>
-              </div>
-            </div>
-          </article>
-
-          <article class="chapter chapter--right" data-center="0.24" data-window="0.05" data-label="Capacity">
-            <div class="chapter__copy">
-              <p class="chapter__eyebrow micro">Capacity / London</p>
-              <h2 class="chapter__title reveal"><span>Lloyd's authority</span></h2>
-              <p class="chapter__deck reveal"><span>A Managing General Agent underwriting with delegated authority from Lloyd's of London.</span></p>
-              <div class="chapter__fact micro"><span>01</span><span>Coverholder at Lloyd's</span></div>
-            </div>
-          </article>
-
-          <article class="chapter chapter--index" data-center="0.43" data-window="0.06" data-label="The schedule">
-            <div class="chapter__giant-index" aria-hidden="true">72</div>
-            <div class="chapter__copy">
-              <p class="chapter__eyebrow micro">The schedule</p>
-              <h2 class="chapter__title reveal"><span>Every car, scheduled</span></h2>
-              <p class="chapter__deck reveal"><span>Each automobile is assessed on its own history, provenance and value.</span></p>
-            </div>
-          </article>
-
-          <article class="chapter chapter--sky" data-center="0.62" data-window="0.06" data-label="Claims">
-            <div class="chapter__copy">
-              <p class="chapter__eyebrow micro">Reel 02 / On risk</p>
-              <h2 class="chapter__title reveal"><span>When it moves, we move</span></h2>
-              <p class="chapter__deck reveal"><span>Claims handled by our own team — first call to settlement.</span></p>
-              <div class="chapter__fact micro"><span>02</span><span>In-house claims handling</span></div>
-            </div>
-          </article>
-
-          <article class="chapter chapter--right" data-center="0.78" data-window="0.06" data-label="Full service">
-            <div class="chapter__copy">
-              <p class="chapter__eyebrow micro">The whole file</p>
-              <h2 class="chapter__title reveal"><span>Start to finish</span></h2>
-              <p class="chapter__deck reveal"><span>Quoting, binding, policy administration and renewal — the standard services, done to a specialist standard.</span></p>
-            </div>
-          </article>
-
-          <article class="chapter chapter--final" data-center="0.93" data-window="0.065" data-label="Enquire">
-            <div class="chapter__copy">
-              <div>
-                <p class="chapter__eyebrow micro">The file stays open</p>
-                <h2 class="chapter__title reveal"><span>Get on risk</span></h2>
-              </div>
-              <a class="cta" href="#contact-title">Speak to an underwriter</a>
-            </div>
-          </article>
+      <figure class="screen">
+        <div class="screen__frame" id="screen-frame">
+          <div class="screen__state" id="state-nosource">
+            <p class="micro screen__label">Signal &middot; awaiting source</p>
+            <p class="screen__hint">Video window. Paste your link into <code>PORTAL_VIDEO_URL</code> near the end of this file.</p>
+          </div>
+          <div class="screen__state" id="state-ready" hidden>
+            <p class="micro screen__label">Feature film &middot; ready</p>
+            <p class="screen__hint" id="ready-note">One viewing is included. Starting the film uses it.</p>
+            <button class="screen__btn" id="watch-btn" type="button">Watch film</button>
+          </div>
+          <div class="screen__state" id="state-approval" hidden>
+            <p class="micro screen__label screen__label--warn">Viewing already used</p>
+            <p class="screen__hint">Your included viewing has been used. Contact Torque Underwriting to be issued an approval code for another viewing.</p>
+            <p class="micro screen__ref">Account reference: <span id="approval-ref">&mdash;</span></p>
+            <form class="screen__codeform" id="approval-form" novalidate>
+              <label class="sr-only" for="approval-input">Approval code</label>
+              <input class="screen__code" id="approval-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="6" placeholder="000000">
+              <button class="screen__btn" type="submit">Unlock</button>
+            </form>
+            <p class="micro screen__error" id="approval-error" role="alert" hidden>That code is not valid for this account today.</p>
+          </div>
         </div>
+        <figcaption class="micro screen__cap"><span>Feature film</span><span id="screen-state">No source</span></figcaption>
+      </figure>
 
-        <div class="telemetry" aria-hidden="true">
-          <span class="telemetry__reel micro" id="telemetry-reel">R01 · Survey</span>
-          <span class="telemetry__chapter micro" id="telemetry-chapter">Torque</span>
-          <div class="telemetry__track"><span class="telemetry__fill"></span></div>
-          <span class="telemetry__frame micro" id="telemetry-frame">F 0001 / 0200</span>
-          <span class="scroll-cue micro">Scroll to drive</span>
-        </div>
-      </div>
-    </section>
-
-    <section class="crest-act" id="crest-act" aria-labelledby="contact-title">
-      <div class="crest-stage">
-        <h2 class="crest-title" id="contact-title"><span class="crest-eyebrow micro">The mark on the file</span>The underwriter's eye.</h2>
-        <div class="crest-halves" aria-hidden="true">
-          <div class="crest-half crest-half--l"><img src="assets/crest.svg" alt="" loading="lazy"></div>
-          <div class="crest-half crest-half--r"><img src="assets/crest.svg" alt="" loading="lazy"></div>
-        </div>
-      </div>
-    </section>
-
-
-    <section class="editorial" aria-label="Survey stills and services">
-      <div class="editorial__head">
-        <p class="editorial__aside">A proper survey walks the whole car before a price is put to it. Two reels, two hundred frames — the way we look before we quote.</p>
-      </div>
-
-      <div class="contact-sheet">
-        <figure class="shot shot--lead">
-          <img src="frames/desktop/frame-0012.webp" alt="Rear three-quarter view of the racing-green 911 beside an alpine lake" loading="lazy">
-          <figcaption class="micro"><span>Survey / rear quarter</span><span>F 0012</span></figcaption>
-        </figure>
-        <figure class="shot shot--top">
-          <img src="frames/desktop/frame-0063.webp" alt="Side profile of the car with the gold number 72 livery" loading="lazy">
-          <figcaption class="micro"><span>Survey / nearside</span><span>F 0063</span></figcaption>
-        </figure>
-        <figure class="shot shot--low">
-          <img src="frames/desktop/frame-0097.webp" alt="Front three-quarter view of the car on the orange dock" loading="lazy">
-          <figcaption class="micro"><span>Survey / front quarter</span><span>F 0097</span></figcaption>
-        </figure>
-        <figure class="shot shot--end">
-          <img src="frames/desktop/frame-0152.webp" alt="The car driving along the lakeside road, mountains behind" loading="lazy">
-          <figcaption class="micro"><span>On risk / lakeside</span><span>F 0152</span></figcaption>
-        </figure>
-      </div>
-
-      <div class="services" aria-label="Services">
-        <div class="service">
-          <span class="micro">01</span>
-          <h3>Underwriting</h3>
-          <p>Risk assessed and priced in-house, under delegated authority from Lloyd's of London.</p>
-        </div>
-        <div class="service">
-          <span class="micro">02</span>
-          <h3>Claims</h3>
-          <p>Handled by our own claims team from first notification through to settlement.</p>
-        </div>
-        <div class="service">
-          <span class="micro">03</span>
-          <h3>Policy administration</h3>
-          <p>Quoting, binding, documentation, mid-term changes and renewals.</p>
-        </div>
-        <div class="service">
-          <span class="micro">04</span>
-          <h3>Broker partnership</h3>
-          <p>Built to work with the brokers who look after collectors and their cars.</p>
-        </div>
-      </div>
-
-      <div class="editorial__note">
-        <strong>Insured by people who'd own one.</strong>
-        <p>If your automobile deserves more than a rating table, open a file with us. An underwriter — not a call centre — will come back to you.</p>
-      </div>
+      <aside class="activity" id="activity" aria-labelledby="activity-title">
+        <p class="micro activity__title" id="activity-title">Activity log</p>
+        <p class="micro activity__sub">Last 24 hours</p>
+        <ul class="activity__list" id="activity-list"></ul>
+      </aside>
     </section>
   </main>
 
   <footer class="site-footer micro">
-    <p>&copy; 2026 Torque Underwriting. This website is for information only and is not an offer to insure or a solicitation in any jurisdiction where Torque Underwriting is not authorised to do business. All cover is subject to underwriting, eligibility and the full terms and conditions of the issued policy.</p>
-    <a href="#contact-title">Enquiries ↗</a>
+    <p>&copy; 2026 Torque Underwriting. Portal content is released to insured clients only and remains the property of Torque Underwriting.</p>
+    <a href="/">Back to site ↗</a>
   </footer>
 
-
   <div class="notice" id="notice" role="status" hidden><span id="notice-text"></span></div>
-  <div class="auth" id="auth" hidden>
-    <div class="auth__scrim" data-auth-close></div>
-    <div class="auth__card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-      <p class="auth__eyebrow micro">Torque Underwriting</p>
-      <h2 class="auth__title" id="auth-title">Client portal</h2>
-      <p class="auth__note">Sign in with the credentials issued with your policy.</p>
-      <form id="auth-form" novalidate>
-        <label class="auth__label micro" for="auth-user">Username</label>
-        <input class="auth__input" id="auth-user" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
-        <label class="auth__label micro" for="auth-pass">Password</label>
-        <input class="auth__input" id="auth-pass" type="password" autocomplete="current-password" required>
-        <p class="auth__error micro" id="auth-error" role="alert" hidden>Those credentials were not recognised.</p>
-        <button class="auth__submit" type="submit">Sign in</button>
-      </form>
-      <button class="auth__close" id="auth-close" type="button" aria-label="Close sign in">&times;</button>
-    </div>
-  </div>
   <script>
     (() => {
       "use strict";
 
-      const FRAME_COUNT = 200;
-      const REEL_SPLIT = 100;
-      const FRAME_PAD = 4;
-      const LERP_FACTOR = 0.115;
-      const DWELL_WIDTH = 0.038;
-      const DWELL_PEAK = 2.75;
-      const LUT_SIZE = 2400;
-      const MOBILE_QUERY = "(max-width: 780px)";
-      const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
-      const DWELL_CENTERS = [0.045, 0.14, 0.24, 0.43, 0.62, 0.78, 0.93];
+      /* ---- Portal (server-side session) ----------------------------
+         Access to this page is enforced by the Worker: no valid session
+         cookie, no page. The code below only reads the session for
+         display and runs the metered-viewing flow.
 
-      const sequence = document.getElementById("sequence");
-      const crestAct = document.getElementById("crest-act");
-      const stage = document.getElementById("stage");
-      const canvas = document.getElementById("film-canvas");
-      const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
-      const loader = document.getElementById("loader");
-      const loaderFill = document.getElementById("loader-fill");
-      const loaderCount = document.getElementById("loader-count");
-      const loaderLabel = document.getElementById("loader-label");
-      const telemetryChapter = document.getElementById("telemetry-chapter");
-      const telemetryFrame = document.getElementById("telemetry-frame");
-      const telemetryReel = document.getElementById("telemetry-reel");
-      const chapters = Array.from(document.querySelectorAll(".chapter"));
-      const reducedMotion = window.matchMedia(REDUCED_QUERY).matches;
-      const mobileMedia = window.matchMedia(MOBILE_QUERY);
-      const frameStores = {
-        desktop: createFrameStore("frames/desktop"),
-        mobile: createFrameStore("frames/mobile")
-      };
-      const chapterVisibility = new WeakMap();
-      let useMobileFrames = mobileMedia.matches;
-      let activeStore = useMobileFrames ? frameStores.mobile : frameStores.desktop;
-      let currentFrame = 0;
-      let targetFrame = 0;
-      let lastDrawn = -1;
-      let pageVisible = true;
-      let rafId = 0;
-      let portalActive = false;
-      let sequenceTop = 0;
-      let sequenceDistance = 1;
-      let crestTop = 0;
-      let crestDistance = 1;
-      let lastCrestSplit = -1;
+         PORTAL_VIDEO_URL  paste the video link between the quotes.
+                           YouTube, Vimeo, or a direct .mp4/.webm/.mov
+         INCLUDED_VIEWS    viewings allowed before approval is required
+         APPROVAL_SECRET   shared secret used to derive approval codes.
+                           Change it and approval-console.html must be
+                           changed to match. (The viewing meter is a
+                           front-end courtesy, not a security boundary —
+                           page access itself is what the server gates.) */
 
-      function createFrameStore(directory) {
-        return {
-          directory,
-          images: new Array(FRAME_COUNT),
-          loaded: new Uint8Array(FRAME_COUNT),
-          promises: new Array(FRAME_COUNT)
-        };
-      }
+      const PORTAL_VIDEO_URL = "";
+      const INCLUDED_VIEWS = 1;
+      const APPROVAL_SECRET = "torque-72-approval";
 
-      function frameUrl(index, store = activeStore) {
-        return `${store.directory}/frame-${String(index + 1).padStart(FRAME_PAD, "0")}.webp`;
-      }
-
-      function setLoaderProgress(ratio) {
-        const safeRatio = Math.max(0, Math.min(1, ratio));
-        loaderFill.style.transform = `scaleX(${safeRatio})`;
-        loaderCount.textContent = `${String(Math.round(safeRatio * 100)).padStart(3, "0")}%`;
-      }
-
-      function loadFrame(index, store = activeStore, retries = 1) {
-        if (store.loaded[index]) return Promise.resolve(store.images[index]);
-        if (store.promises[index]) return store.promises[index];
-
-        store.promises[index] = new Promise((resolve) => {
-          const attempt = (remaining) => {
-            const image = new Image();
-            store.images[index] = image;
-            image.decoding = "async";
-            image.onload = () => {
-              store.loaded[index] = 1;
-              resolve(image);
-            };
-            image.onerror = () => {
-              if (remaining > 0) {
-                window.setTimeout(() => attempt(remaining - 1), 140);
-              } else {
-                store.images[index] = null;
-                store.promises[index] = null;
-                resolve(null);
-              }
-            };
-            image.src = frameUrl(index, store);
-          };
-          attempt(retries);
-        });
-        return store.promises[index];
-      }
-
-      async function loadInBatches(indices, size = 8, store = activeStore) {
-        for (let start = 0; start < indices.length; start += size) {
-          const batch = indices.slice(start, start + size);
-          await Promise.all(batch.map((index) => loadFrame(index, store)));
+      function tqHash(str) {
+        let h1 = 0x811c9dc5;
+        let h2 = 0x01000193;
+        for (let i = 0; i < str.length; i += 1) {
+          const c = str.charCodeAt(i);
+          h1 = Math.imul(h1 ^ c, 0x01000193);
+          h2 = Math.imul(h2 + c, 0x85ebca6b) ^ (h2 >>> 13);
         }
+        return (h1 >>> 0).toString(16).padStart(8, "0") + (h2 >>> 0).toString(16).padStart(8, "0");
       }
 
-      function nearestLoaded(index, store = activeStore) {
-        if (store.loaded[index]) return index;
-        for (let distance = 1; distance < FRAME_COUNT; distance += 1) {
-          const before = index - distance;
-          const after = index + distance;
-          if (before >= 0 && store.loaded[before]) return before;
-          if (after < FRAME_COUNT && store.loaded[after]) return after;
-        }
-        return -1;
+      function utcDay(offsetDays) {
+        const d = new Date(Date.now() - (offsetDays || 0) * 86400000);
+        return d.toISOString().slice(0, 10);
       }
 
-      function resizeCanvas() {
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const width = Math.round(stage.clientWidth * dpr);
-        const height = Math.round(stage.clientHeight * dpr);
-        if (canvas.width !== width || canvas.height !== height) {
-          canvas.width = width;
-          canvas.height = height;
-          lastDrawn = -1;
-        }
+      function approvalCode(user, offsetDays) {
+        const seed = "approval:" + APPROVAL_SECRET + ":" + String(user).toLowerCase() + ":" + utcDay(offsetDays);
+        const h = tqHash(seed);
+        let n = 0;
+        for (let i = 0; i < h.length; i += 1) n = (n * 31 + parseInt(h.charAt(i), 16)) % 1000000;
+        return String(n).padStart(6, "0");
       }
 
-      function updateSequenceMetrics() {
-        const rect = sequence.getBoundingClientRect();
-        sequenceTop = window.scrollY + rect.top;
-        sequenceDistance = Math.max(1, rect.height - window.innerHeight);
-        const crestRect = crestAct.getBoundingClientRect();
-        crestTop = window.scrollY + crestRect.top;
-        crestDistance = Math.max(1, crestRect.height - window.innerHeight);
+      function codeValid(user, entered) {
+        const c = String(entered).replace(/[^0-9]/g, "");
+        if (c.length !== 6) return false;
+        return c === approvalCode(user, 0) || c === approvalCode(user, 1);
       }
 
-      function updateCrest() {
-        const p = Math.max(0, Math.min(1, (window.scrollY - crestTop) / crestDistance));
-        const eased = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
-        const value = Math.round(eased * 1000) / 1000;
-        if (value !== lastCrestSplit) {
-          lastCrestSplit = value;
-          crestAct.style.setProperty("--crest-split", String(value));
-        }
+      function loadJSON(store, key, fallback) {
+        try {
+          const raw = window[store].getItem(key);
+          return raw ? JSON.parse(raw) : fallback;
+        } catch (e) { return fallback; }
       }
 
-      function drawFrame(index) {
-        const resolved = nearestLoaded(Math.max(0, Math.min(FRAME_COUNT - 1, index)));
-        if (resolved < 0 || resolved === lastDrawn) return;
-        const image = activeStore.images[resolved];
-        if (!image || !image.naturalWidth) return;
+      function saveJSON(store, key, value) {
+        try { window[store].setItem(key, JSON.stringify(value)); } catch (e) { /* storage blocked */ }
+      }
 
-        const width = canvas.width;
-        const height = canvas.height;
-        ctx.fillStyle = "#0a0d0a";
-        ctx.fillRect(0, 0, width, height);
+      function viewsFor(user) {
+        const all = loadJSON("localStorage", "tq_views", {});
+        return all[String(user).toLowerCase()] || 0;
+      }
 
-        let scale;
-        let drawWidth;
-        let drawHeight;
-        let x;
-        let y;
+      function bumpViews(user) {
+        const all = loadJSON("localStorage", "tq_views", {});
+        const k = String(user).toLowerCase();
+        all[k] = (all[k] || 0) + 1;
+        saveJSON("localStorage", "tq_views", all);
+      }
 
-        if (useMobileFrames) {
-          scale = width / image.naturalWidth;
-          drawWidth = width;
-          drawHeight = image.naturalHeight * scale;
-          x = 0;
-          y = height * 0.44 - drawHeight / 2;
+      function unlockedKey(user) { return "tq_unlocked:" + String(user).toLowerCase(); }
+      function isUnlocked(user) { return loadJSON("sessionStorage", unlockedKey(user), false) === true; }
+      function setUnlocked(user) { saveJSON("sessionStorage", unlockedKey(user), true); }
+
+      const sessionUser = document.getElementById("session-user");
+      const sessionTimer = document.getElementById("session-timer");
+      const logoutBtn = document.getElementById("logout");
+      const screenFrame = document.getElementById("screen-frame");
+      const screenState = document.getElementById("screen-state");
+      const stateNoSource = document.getElementById("state-nosource");
+      const stateReady = document.getElementById("state-ready");
+      const stateApproval = document.getElementById("state-approval");
+      const readyNote = document.getElementById("ready-note");
+      const watchBtn = document.getElementById("watch-btn");
+      const approvalForm = document.getElementById("approval-form");
+      const approvalInput = document.getElementById("approval-input");
+      const approvalError = document.getElementById("approval-error");
+      const approvalRef = document.getElementById("approval-ref");
+      const notice = document.getElementById("notice");
+      const noticeText = document.getElementById("notice-text");
+      let noticeTimer = 0;
+      let session = null; // { user, exp } from /api/session
+
+      function showNotice(message) {
+        noticeText.textContent = message;
+        notice.hidden = false;
+        window.clearTimeout(noticeTimer);
+        noticeTimer = window.setTimeout(() => { notice.hidden = true; }, 7000);
+      }
+
+      function toLogin() { window.location.replace("/?login=1"); }
+
+      function embedFor(url) {
+        const u = String(url || "").trim();
+        if (!u) return null;
+        let m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+        if (m) return { kind: "iframe", src: "https://www.youtube.com/embed/" + m[1] };
+        m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+        if (m) return { kind: "iframe", src: "https://player.vimeo.com/video/" + m[1] };
+        if (/\.(mp4|webm|ogv|mov)(\?|#|$)/i.test(u)) return { kind: "video", src: u };
+        return { kind: "iframe", src: u };
+      }
+
+      function clearPlayer() {
+        const existing = screenFrame.querySelector("video, iframe");
+        if (existing) existing.remove();
+      }
+
+      function renderPlayer() {
+        const spec = embedFor(PORTAL_VIDEO_URL);
+        if (!spec) return;
+        stateNoSource.hidden = true;
+        stateReady.hidden = true;
+        stateApproval.hidden = true;
+        if (screenFrame.querySelector("video, iframe")) return;
+        let node;
+        if (spec.kind === "video") {
+          node = document.createElement("video");
+          node.src = spec.src;
+          node.controls = true;
+          node.playsInline = true;
+          node.autoplay = true;
+          node.preload = "metadata";
         } else {
-          scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
-          drawWidth = image.naturalWidth * scale;
-          drawHeight = image.naturalHeight * scale;
-          x = (width - drawWidth) / 2;
-          y = (height - drawHeight) / 2;
+          node = document.createElement("iframe");
+          node.src = spec.src;
+          node.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture; fullscreen";
+          node.allowFullscreen = true;
+          node.title = "Torque Underwriting feature film";
         }
-
-        ctx.drawImage(image, x, y, drawWidth, drawHeight);
-        lastDrawn = resolved;
+        screenFrame.appendChild(node);
+        screenState.textContent = "Viewing in progress";
       }
 
-      const rawAtEffective = new Float64Array(LUT_SIZE + 1);
+      function updateScreen() {
+        if (!session) return;
+        const hasSource = Boolean(embedFor(PORTAL_VIDEO_URL));
+        if (!hasSource) {
+          clearPlayer();
+          stateNoSource.hidden = false;
+          stateReady.hidden = true;
+          stateApproval.hidden = true;
+          screenState.textContent = "No source";
+          return;
+        }
+        if (isUnlocked(session.user)) { renderPlayer(); return; }
+        clearPlayer();
+        const used = viewsFor(session.user);
+        stateNoSource.hidden = true;
+        if (used < INCLUDED_VIEWS) {
+          stateReady.hidden = false;
+          stateApproval.hidden = true;
+          readyNote.textContent = "One viewing is included. Starting the film uses it.";
+          screenState.textContent = (INCLUDED_VIEWS - used) + " viewing available";
+        } else {
+          stateReady.hidden = true;
+          stateApproval.hidden = false;
+          approvalRef.textContent = session.user;
+          approvalError.hidden = true;
+          screenState.textContent = "Approval required";
+        }
+      }
 
-      function buildDwellLut() {
-        let total = 0;
-        const density = new Float64Array(LUT_SIZE + 1);
-        for (let i = 0; i <= LUT_SIZE; i += 1) {
-          const effective = i / LUT_SIZE;
-          let value = 1;
-          for (const center of DWELL_CENTERS) {
-            const delta = (effective - center) / DWELL_WIDTH;
-            value += DWELL_PEAK * Math.exp(-0.5 * delta * delta);
+      /* ---- Activity log --------------------------------------------
+         Add or remove names here. When the list holds ACTIVITY_ROWS or
+         more names, each row gets a different one; with fewer names
+         than rows, names may repeat. Timestamps are random within the
+         last 24 hours and are regenerated each time the portal opens. */
+      const ACTIVITY_NAMES = [
+        "McKinsey",
+        "PwC Consulting",
+        "Slalom Consulting",
+        "Anthemis Group"
+      ];
+      const ACTIVITY_ROWS = 6;
+
+      const activityList = document.getElementById("activity-list");
+      let activityEntries = [];
+
+      function buildActivity() {
+        const entries = [];
+        const distinct = ACTIVITY_NAMES.length >= ACTIVITY_ROWS;
+        const pool = ACTIVITY_NAMES.slice();
+        for (let i = 0; i < ACTIVITY_ROWS; i += 1) {
+          let name;
+          if (distinct) {
+            name = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+          } else {
+            name = ACTIVITY_NAMES[Math.floor(Math.random() * ACTIVITY_NAMES.length)];
           }
-          density[i] = value;
-          if (i > 0) total += (density[i - 1] + value) * 0.5;
-          rawAtEffective[i] = total;
+          entries.push({ name: name, at: Date.now() - Math.floor(Math.random() * 86400000) });
         }
-        for (let i = 0; i <= LUT_SIZE; i += 1) rawAtEffective[i] /= total;
+        entries.sort((a, b) => b.at - a.at);
+        return entries;
       }
 
-      function remapProgress(raw) {
-        let low = 0;
-        let high = LUT_SIZE;
-        while (low < high) {
-          const mid = (low + high) >> 1;
-          if (rawAtEffective[mid] < raw) low = mid + 1;
-          else high = mid;
-        }
-        const index = Math.max(1, low);
-        const leftRaw = rawAtEffective[index - 1];
-        const rightRaw = rawAtEffective[index];
-        const span = rightRaw - leftRaw || 1;
-        const mix = (raw - leftRaw) / span;
-        return Math.max(0, Math.min(1, (index - 1 + mix) / LUT_SIZE));
+      function pad2(n) { return String(n).padStart(2, "0"); }
+
+      function agoLabel(ts) {
+        const mins = Math.max(0, Math.floor((Date.now() - ts) / 60000));
+        if (mins < 1) return "just now";
+        if (mins < 60) return mins + "m ago";
+        return Math.floor(mins / 60) + "h " + pad2(mins % 60) + "m ago";
       }
 
-      function rawScrollProgress() {
-        return Math.max(0, Math.min(1, (window.scrollY - sequenceTop) / sequenceDistance));
-      }
-
-      function updateChapters(effective) {
-        let active = chapters[0];
-        let nearest = Infinity;
-        for (const chapter of chapters) {
-          const center = Number(chapter.dataset.center);
-          const windowSize = Number(chapter.dataset.window);
-          const distance = Math.abs(effective - center);
-          const visible = distance <= windowSize;
-          if (chapterVisibility.get(chapter) !== visible) {
-            chapterVisibility.set(chapter, visible);
-            chapter.classList.toggle("is-visible", visible);
-            chapter.setAttribute("aria-hidden", String(!visible));
-          }
-          if (distance < nearest) {
-            nearest = distance;
-            active = chapter;
-          }
-        }
-        if (telemetryChapter.textContent !== active.dataset.label) {
-          telemetryChapter.textContent = active.dataset.label;
-        }
-      }
-
-      function updateInterface(raw, effective, frame) {
-        document.documentElement.style.setProperty("--frame-progress", raw.toFixed(4));
-        document.documentElement.style.setProperty("--title-wdth", String(Math.round(78 + effective * 24)));
-        telemetryFrame.textContent = `F ${String(frame + 1).padStart(4, "0")} / ${String(FRAME_COUNT).padStart(4, "0")}`;
-        const reelLabel = frame < REEL_SPLIT ? "R01 · Survey" : "R02 · On risk";
-        if (telemetryReel.textContent !== reelLabel) telemetryReel.textContent = reelLabel;
-        const edge = Math.min(effective, 1 - effective) / 0.08;
-        stage.style.setProperty("--scrim-opacity", String(Math.min(0.82, 0.5 + edge * 0.23)));
-      }
-
-      function dismissLoader() {
-        setLoaderProgress(1);
-        loader.classList.add("is-done");
-        document.body.classList.remove("is-loading");
-        window.setTimeout(() => loader.remove(), 1000);
-      }
-
-      function showLoadError() {
-        loaderLabel.textContent = "Frames unavailable — reload the page";
-        loaderCount.textContent = "ERROR";
-        loaderCount.style.color = "var(--signal)";
-        loader.setAttribute("aria-label", "The film frames could not be loaded. Reload the page to try again.");
-      }
-
-      function renderReducedPoster(frame) {
-        currentFrame = frame;
-        targetFrame = frame;
-        drawFrame(frame);
-        chapters.forEach((chapter, index) => {
-          const visible = index === 0;
-          chapterVisibility.set(chapter, visible);
-          chapter.classList.toggle("is-visible", visible);
-          chapter.setAttribute("aria-hidden", String(!visible));
+      function renderActivity() {
+        if (!activityList) return;
+        activityList.textContent = "";
+        activityEntries.forEach((entry) => {
+          const li = document.createElement("li");
+          const name = document.createElement("span");
+          name.className = "activity__name";
+          name.textContent = entry.name;
+          const time = document.createElement("time");
+          time.className = "activity__time";
+          time.dateTime = new Date(entry.at).toISOString();
+          time.textContent = agoLabel(entry.at);
+          li.append(name, time);
+          activityList.appendChild(li);
         });
       }
 
-      function tick() {
-        if (!pageVisible || reducedMotion || portalActive) return;
-        const raw = rawScrollProgress();
-        const effective = remapProgress(raw);
-        targetFrame = Math.round(effective * (FRAME_COUNT - 1));
-        currentFrame += (targetFrame - currentFrame) * LERP_FACTOR;
-        const frame = Math.round(currentFrame);
-        drawFrame(frame);
-        updateChapters(effective);
-        updateInterface(raw, effective, frame);
-        updateCrest();
-        rafId = requestAnimationFrame(tick);
+      function refreshActivity() {
+        activityEntries = buildActivity();
+        renderActivity();
       }
+
+      function tickSession() {
+        if (!session) return;
+        const left = Math.max(0, session.exp * 1000 - Date.now());
+        const totalSeconds = Math.floor(left / 1000);
+        sessionTimer.textContent =
+          pad2(Math.floor(totalSeconds / 3600)) + ":" +
+          pad2(Math.floor(totalSeconds / 60) % 60) + ":" +
+          pad2(totalSeconds % 60);
+        sessionTimer.classList.toggle("is-low", left <= 120000);
+        if (left <= 0) toLogin();
+      }
+
+      logoutBtn.addEventListener("click", async () => {
+        try { await fetch("/api/logout", { method: "POST" }); } catch (e) { /* cookie may outlive this attempt */ }
+        window.location.href = "/";
+      });
+
+      watchBtn.addEventListener("click", () => {
+        if (!session) { toLogin(); return; }
+        if (viewsFor(session.user) >= INCLUDED_VIEWS) { updateScreen(); return; }
+        bumpViews(session.user);
+        setUnlocked(session.user);
+        renderPlayer();
+      });
+
+      approvalForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (!session) { toLogin(); return; }
+        if (codeValid(session.user, approvalInput.value)) {
+          bumpViews(session.user);
+          setUnlocked(session.user);
+          approvalError.hidden = true;
+          approvalInput.value = "";
+          renderPlayer();
+        } else {
+          approvalError.hidden = false;
+          approvalInput.value = "";
+          approvalInput.focus();
+        }
+      });
 
       async function init() {
-        buildDwellLut();
-        resizeCanvas();
-        updateSequenceMetrics();
-        setLoaderProgress(0.06);
-
-        if (reducedMotion) {
-          const posterFrame = Math.round(0.48 * (FRAME_COUNT - 1));
-          const poster = await loadFrame(posterFrame);
-          if (!poster) {
-            showLoadError();
-            return;
-          }
-          renderReducedPoster(posterFrame);
-          dismissLoader();
-          return;
-        }
-
-        const critical = Array.from(new Set([
-          0,
-          ...DWELL_CENTERS.map((center) => Math.round(center * (FRAME_COUNT - 1))),
-          REEL_SPLIT - 1,
-          REEL_SPLIT,
-          FRAME_COUNT - 1
-        ])).sort((a, b) => a - b);
-
-        const firstFrame = await loadFrame(0);
-        if (firstFrame) {
-          drawFrame(0);
-          setLoaderProgress(0.28);
-        }
-
-        const criticalTail = critical.filter((index) => index !== 0);
-        let prepared = 0;
-        await Promise.all(criticalTail.map(async (index) => {
-          const image = await loadFrame(index);
-          prepared += 1;
-          setLoaderProgress(0.28 + 0.68 * (prepared / criticalTail.length));
-          return image;
-        }));
-
-        const readyFrame = nearestLoaded(0);
-        if (readyFrame < 0) {
-          showLoadError();
-          return;
-        }
-        drawFrame(readyFrame);
-        dismissLoader();
-        tick();
-
-        const remaining = Array.from({ length: FRAME_COUNT }, (_, index) => index)
-          .filter((index) => !critical.includes(index));
-        loadInBatches(remaining);
-      }
-
-      async function swapFrameSet(event) {
-        useMobileFrames = event.matches;
-        activeStore = useMobileFrames ? frameStores.mobile : frameStores.desktop;
-        lastDrawn = -1;
-        resizeCanvas();
-        updateSequenceMetrics();
-
-        const frame = Math.max(0, Math.min(FRAME_COUNT - 1, Math.round(currentFrame)));
-        const image = await loadFrame(frame, activeStore);
-        if (!image) return;
-        drawFrame(frame);
-
-        const byDistance = Array.from({ length: FRAME_COUNT }, (_, index) => index)
-          .sort((a, b) => Math.abs(a - frame) - Math.abs(b - frame));
-        loadInBatches(byDistance, 8, activeStore);
-      }
-
-      window.addEventListener("resize", () => {
-        resizeCanvas();
-        updateSequenceMetrics();
-      }, { passive: true });
-      mobileMedia.addEventListener("change", swapFrameSet);
-      document.addEventListener("visibilitychange", () => {
-        pageVisible = !document.hidden;
-        if (pageVisible && !reducedMotion) {
-          cancelAnimationFrame(rafId);
-          tick();
-        }
-      });
-
-
-      /* ---- Client login (server-side session) ----------------------
-         Credentials are verified by the Worker (POST /api/login) and a
-         signed HttpOnly session cookie gates /portal/. No credential
-         material ships in this page. */
-
-      const authModal = document.getElementById("auth");
-      const authForm = document.getElementById("auth-form");
-      const authUser = document.getElementById("auth-user");
-      const authPass = document.getElementById("auth-pass");
-      const authError = document.getElementById("auth-error");
-      const authSubmit = authForm.querySelector(".auth__submit");
-      const loginOpen = document.getElementById("login-open");
-      const portalLink = document.getElementById("portal-link");
-      let lastFocus = null;
-
-      function openAuth() {
-        lastFocus = document.activeElement;
-        authError.hidden = true;
-        authForm.reset();
-        authSubmit.disabled = false;
-        authModal.hidden = false;
-        window.setTimeout(() => authUser.focus(), 20);
-      }
-
-      function closeAuth() {
-        authModal.hidden = true;
-        if (lastFocus && lastFocus.focus) lastFocus.focus();
-      }
-
-      loginOpen.addEventListener("click", openAuth);
-      document.getElementById("auth-close").addEventListener("click", closeAuth);
-      authModal.querySelector("[data-auth-close]").addEventListener("click", closeAuth);
-      document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && !authModal.hidden) closeAuth();
-      });
-
-      authForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        authError.hidden = true;
-        authSubmit.disabled = true;
-        let redirect = null;
-        try {
-          const response = await fetch("/api/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              username: authUser.value.trim().toLowerCase(),
-              password: authPass.value
-            })
-          });
-          if (response.ok) {
-            const body = await response.json();
-            redirect = (body && body.redirect) || "/portal/";
-          }
-        } catch (e) { /* network failure falls through to the error path */ }
-        if (redirect) {
-          window.location.href = redirect;
-          return;
-        }
-        authError.hidden = false;
-        authPass.value = "";
-        authPass.focus();
-        authSubmit.disabled = false;
-      });
-
-      fetch("/api/session").then((response) => {
-        if (response.ok) {
-          loginOpen.hidden = true;
-          portalLink.hidden = false;
-        }
-      }).catch(() => { /* signed-out default already shown */ });
-
-      if (new URLSearchParams(window.location.search).get("login") === "1") {
-        history.replaceState(null, "", window.location.pathname);
-        openAuth();
+        let response = null;
+        try { response = await fetch("/api/session"); } catch (e) { /* treated as signed out */ }
+        if (!response || !response.ok) { toLogin(); return; }
+        session = await response.json();
+        sessionUser.textContent = session.user;
+        tickSession();
+        window.setInterval(tickSession, 1000);
+        window.setInterval(renderActivity, 30000);
+        refreshActivity();
+        updateScreen();
+        showNotice("Signed in as " + session.user + ".");
       }
 
       init();

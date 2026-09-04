@@ -42,3 +42,9 @@ control-swa/**/*.zip
 *SECRET*
 *.pfx
 *.pem
+
+# Cloudflare Worker local dev vars - never commit
+.dev.vars
+**/.dev.vars
+.wrangler/
+**/.wrangler/

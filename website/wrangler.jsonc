@@ -1,12 +1,19 @@
 // torque-website — Cloudflare Worker with static assets
 // Baseline reconstructed 2026-09-04 from the live site + Workers API
-// (original deploy directory unavailable). Live worker at reconstruction
-// time was an assets-only deployment: has_assets=true, has_modules=false,
-// no bindings, compatibility_date 2026-08-28.
+// (original deploy directory unavailable); server-side session auth added
+// on top (see src/worker.js and the ADR).
+//
+// Secrets (wrangler secret put, never committed): SESSION_SECRET, CRED_HASHES_V2.
 {
   "name": "torque-website",
+  "main": "src/worker.js",
   "compatibility_date": "2026-08-28",
   "assets": {
-    "directory": "./public"
+    "directory": "./public",
+    "binding": "ASSETS",
+    // Protected paths and the auth API must hit the Worker before asset
+    // serving — otherwise /portal/* would be served publicly straight from
+    // the asset layer.
+    "run_worker_first": ["/portal", "/portal/*", "/api/*"]
   }
 }
