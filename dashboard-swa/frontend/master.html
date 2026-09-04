@@ -27,6 +27,9 @@ header .sub{color:#94a3b8;font-size:13px;margin-bottom:22px}
 svg{width:100%;height:auto;display:block}
 .callout{border-left:3px solid #f59e0b;background:rgba(245,158,11,.08);padding:11px 14px;border-radius:0 8px 8px 0;margin:14px 0;font-size:12.5px;color:#e2e8f0}
 .callout b{color:#fff}
+/* full-reveal narrative callouts: hidden until the book completes, then fade in */
+.callout.fullreveal.in{animation:fadein .6s ease}
+@keyframes fadein{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 footer{color:#64748b;font-size:11.5px;margin-top:26px;line-height:1.7}
 /* Kent's table + pill idiom (copied from the static original) for Tab 3 */
 table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:10px}
@@ -90,6 +93,7 @@ Internal only &mdash; contains named insureds. Live view: bindings reveal with t
       computed over the bindings revealed so far.</p>
     <svg id="classbars" viewBox="0 0 1080 340" xmlns="http://www.w3.org/2000/svg" role="img"
       aria-label="Charged rate per $100 of agreed value — median by vehicle class"></svg>
+    <div class="callout fullreveal" id="co-classbars" hidden><b>The book softened 14.2% between periods</b> and it softened in every one of the six classes, not in one or two cells that could be an account effect. Median rate fell from 1.498% to 1.285% per $100 of agreed value. The leave-one-out table below tests whether any single account is carrying that movement.</div>
   </div>
 </div>
 <div class="panel">
@@ -98,6 +102,7 @@ Internal only &mdash; contains named insureds. Live view: bindings reveal with t
       where the month carries fewer than five bindings, and hollow months are excluded from the rolling calculation.</p>
     <svg id="mc-rate" viewBox="0 0 1080 320" xmlns="http://www.w3.org/2000/svg" role="img"
       aria-label="Median charged rate per $100 by month"></svg>
+    <div class="callout fullreveal" id="co-mcrate" hidden>The rate decline is a steady grind across all twelve months rather than a step change at any single renewal date. That pattern is consistent with market-wide softening rather than with one large account renewing at a materially different price.</div>
   </div>
   <div class="card"><h2>Volume and exposure by month</h2>
     <p class="note">Policy count tests whether the book is growing; median agreed value tests whether the growth is
@@ -125,6 +130,7 @@ Internal only &mdash; contains named insureds. Live view: bindings reveal with t
       on the right axis. Bars turn amber above 4% of book and red above 8%.</p>
     <svg id="t3-states" viewBox="0 0 1080 380" xmlns="http://www.w3.org/2000/svg" role="img"
       aria-label="Net catastrophe exposure to capacity by garaging state — top 12"></svg>
+    <div class="callout fullreveal" id="co-t3states" hidden><b>State shares here sum to 100%, and that is a property of this book rather than a normalisation.</b> Every policy garages one vehicle at one address, so no policy is exposed in two states at once and there is no double count to reveal. The largest single-state accumulation is CA at 5.7% of book — a well spread position across 50 states. This is the opposite of the concentration problem a property book usually has, and it is the one number here that would change most if the book grew through a regional producer.</div>
   </div>
 </div>
 <div class="panel">
@@ -134,11 +140,28 @@ Internal only &mdash; contains named insureds. Live view: bindings reveal with t
     <svg id="t4-markets" viewBox="0 0 1080 360" xmlns="http://www.w3.org/2000/svg" role="img"
       aria-label="Gross written premium at signed line, by market"></svg>
   </div>
+  <div class="card"><h2>The panel</h2>
+    <p class="note">Ten markets at flat 10% signed lines; full per-market figures in the full-book analytical view.</p>
+    <div class="scroll"><table id="t4-roster"><thead><tr><th>Syndicate</th><th>Managing agent / market</th><th>Signed line</th></tr></thead><tbody>
+      <tr><td><b>2623 / 623</b></td><td>Beazley Furlonge Ltd</td><td class="num">10.00%</td></tr>
+      <tr><td><b>33</b></td><td>Hiscox Syndicates Ltd</td><td class="num">10.00%</td></tr>
+      <tr><td><b>1084</b></td><td>Chaucer Syndicates Ltd</td><td class="num">10.00%</td></tr>
+      <tr><td><b>4020</b></td><td>Ark Syndicate Management</td><td class="num">10.00%</td></tr>
+      <tr><td><b>2987</b></td><td>Brit Syndicates Ltd</td><td class="num">10.00%</td></tr>
+      <tr><td><b>4444</b></td><td>Canopius Managing Agents</td><td class="num">10.00%</td></tr>
+      <tr><td><b>1969</b></td><td>Apollo Syndicate Management</td><td class="num">10.00%</td></tr>
+      <tr><td><b>1274</b></td><td>Antares Managing Agency</td><td class="num">10.00%</td></tr>
+      <tr><td><b>2001</b></td><td>MS Amlin Underwriting</td><td class="num">10.00%</td></tr>
+      <tr><td><b>1414</b></td><td>Ascot Underwriting Ltd</td><td class="num">10.00%</td></tr>
+      <tr class="tot"><td>Total order hereon</td><td></td><td class="num">100.00%</td></tr>
+    </tbody></table></div>
+  </div>
   <div class="card"><h2>Premium into the panel by month</h2>
     <p class="note">Gross written premium at 100% by month of inception. This is the volume the panel is absorbing;
       each market takes 10% of it. Solid line is a three-month trailing mean; dashed is the raw monthly figure.</p>
     <svg id="t4-monthly" viewBox="0 0 1080 320" xmlns="http://www.w3.org/2000/svg" role="img"
       aria-label="Gross written premium written into the panel by month (100%)"></svg>
+    <div class="callout fullreveal" id="co-t4monthly" hidden>Premium into the panel is growing while the rate per $100 of agreed value falls 14.2%. The panel is writing more cars at a lower price, so premium growth here is volume, not rate. Tab 2 separates the two.</div>
   </div>
 </div>
 
@@ -335,6 +358,15 @@ function t3BarColor(sharePct,t3){
   if(sharePct>t3.thresholds.red_share_pct) return "#ef4444";
   if(sharePct>t3.thresholds.amber_share_pct) return "#f59e0b";
   return "#3b82f6";
+}
+// ---- Stage 5: full-reveal narrative callouts ----
+// The book is COMPLETE when playback is inactive (full book) or the cursor has
+// clamped to the final day of the book — the same condition the AI panel's
+// final-row "(N at ultimate)" suffix uses (its resolved row idx===last).
+// Kent's completed-year narrative callouts render only then; at every earlier
+// cursor (and in the zero state) their claims are not yet true, so they hide.
+function bookComplete(state,lastDay){
+  return state.mode==='full' || (state.mode==='cursor' && state.day>=lastDay);
 }
 /*__PURE_END__*/
 
@@ -697,6 +729,15 @@ function setStatus(state){
 }
 
 // ---- render on reveal change only ----
+function setCallouts(show){
+  document.querySelectorAll(".callout.fullreveal").forEach(el=>{
+    if(show){
+      if(el.hidden){ el.hidden=false; el.classList.remove("in"); void el.offsetWidth; el.classList.add("in"); }
+    }else{
+      el.hidden=true; el.classList.remove("in");
+    }
+  });
+}
 function render(){
   if(!T1) return;
   const state=resolveReveal(snapshot,T1.d0);
@@ -704,7 +745,8 @@ function render(){
   if(key===curKey) return;
   curKey=key;
   const limit=revealLimit(state);
-  drawScatter(limit); drawBars(limit); drawTab2(limit); drawTab3(limit); drawTab4(limit); setStatus(state);
+  drawScatter(limit); drawBars(limit); drawTab2(limit); drawTab3(limit); drawTab4(limit);
+  setCallouts(bookComplete(state,364)); setStatus(state);
 }
 async function poll(){
   try{
