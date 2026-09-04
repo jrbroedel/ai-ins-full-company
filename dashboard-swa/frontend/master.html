@@ -78,9 +78,22 @@ Internal only &mdash; contains named insureds. Live view: bindings reveal with t
       aria-label="Charged rate per $100 of agreed value — median by vehicle class"></svg>
   </div>
 </div>
-<div class="panel"><div class="card stagecard"><h2>Monthly Consistency</h2>
-  <p>Full-book analytical view &mdash; live conversion in progress.</p>
-  <a class="linkbtn" href="/master-static.html">Open the full-book static dashboard</a></div></div>
+<div class="panel">
+  <div class="card"><h2>Monthly rate consistency</h2>
+    <p class="note">Solid line is a three-month trailing mean; dashed is the raw monthly median. Points are hollow
+      where the month carries fewer than five bindings, and hollow months are excluded from the rolling calculation.</p>
+    <svg id="mc-rate" viewBox="0 0 1080 320" xmlns="http://www.w3.org/2000/svg" role="img"
+      aria-label="Median charged rate per $100 by month"></svg>
+  </div>
+  <div class="card"><h2>Volume and exposure by month</h2>
+    <p class="note">Policy count tests whether the book is growing; median agreed value tests whether the growth is
+      coming from more cars or from more expensive cars.</p>
+    <svg id="mc-count" viewBox="0 0 1080 320" xmlns="http://www.w3.org/2000/svg" role="img"
+      aria-label="Policies bound by month"></svg>
+    <svg id="mc-av" viewBox="0 0 1080 320" xmlns="http://www.w3.org/2000/svg" role="img"
+      aria-label="Median agreed value by month"></svg>
+  </div>
+</div>
 <div class="panel"><div class="card stagecard"><h2>Cat Aggregation</h2>
   <p>Full-book analytical view &mdash; live conversion in progress.</p>
   <a class="linkbtn" href="/master-static.html">Open the full-book static dashboard</a></div></div>
@@ -161,6 +174,59 @@ function classStats(points,nClasses,limit){
     const med=n ? (n%2 ? rs[(n-1)/2] : (rs[n/2-1]+rs[n/2])/2) : null;
     return {n:n, median:med};
   }));
+}
+// ---- Tab 2 (stage 2): monthly series over the SAME reveal limit ----
+// The 12 binder-year month slots (Aug-25..Jul-26) as day-offset ranges from d0.
+function monthSlots(){
+  const len=[31,30,31,30,31,31,28,31,30,31,30,31];
+  const out=[]; let s=0;
+  for(const l of len){ out.push({start:s,end:s+l-1}); s+=l; }
+  return out;
+}
+// One monthly series over the revealed points. agg: 'medianR' (rate median),
+// 'count' (policies bound), 'medianV' (agreed-value median). Each of the 12
+// slots -> null (month entirely after the cursor: renders nothing) or
+// {n, value, hollow, final}. Kent's rules: hollow when the month carries fewer
+// than five revealed bindings; a month is final once its last day <= cursor,
+// else it is the cursor's partial month. value=null when n=0 (no median exists).
+function monthlySeries(points,limit,agg){
+  const slots=monthSlots();
+  const buckets=slots.map(()=>[]);
+  for(const p of points){
+    if(p.d>limit) continue;
+    for(let i=11;i>=0;i--){ if(p.d>=slots[i].start){ buckets[i].push(agg==='medianV'?p.v:p.r); break; } }
+  }
+  return slots.map((s,i)=>{
+    if(limit<s.start) return null;
+    const n=buckets[i].length, final=limit>=s.end;
+    if(agg==='count') return {n:n,value:n,hollow:n<5,final:final};
+    if(!n) return {n:0,value:null,hollow:true,final:final};
+    const vs=buckets[i].sort((a,b)=>a-b);
+    const med=vs.length%2 ? vs[(vs.length-1)/2] : (vs[vs.length/2-1]+vs[vs.length/2])/2;
+    return {n:n,value:med,hollow:n<5,final:final};
+  });
+}
+// Three-month trailing mean over NON-HOLLOW months only (Kent's rule: "hollow
+// months are excluded from the rolling calculation"). The window is the slot
+// and its two predecessors; a rolling point is drawn only where at least two
+// non-hollow values contribute — his static line starts at the second month.
+function rollingMean(series){
+  return series.map((m,i)=>{
+    const w=[];
+    for(let k=Math.max(0,i-2);k<=i;k++){
+      const s=series[k];
+      if(s && !s.hollow && s.value!=null) w.push(s.value);
+    }
+    return w.length>=2 ? w.reduce((a,b)=>a+b,0)/w.length : null;
+  });
+}
+// Kent's y-scale rule, decoded from all three static charts: lo=0.92*min of
+// the plotted values, hi=1.08*max (his printed tick labels reproduce exactly).
+function yScale(vals){
+  if(!vals.length) return null;
+  let lo=Math.min.apply(null,vals)*0.92, hi=Math.max.apply(null,vals)*1.08;
+  if(hi<=lo) hi=lo+1;
+  return {lo:lo,hi:hi};
 }
 /*__PURE_END__*/
 
@@ -306,6 +372,64 @@ function drawBars(limit){
   document.getElementById("classbars").innerHTML=s;
 }
 
+// ---- Tab 2: three monthly charts in Kent's exact idiom (SVG, 1080x320,
+// plot x 70..1064 across 12 fixed slots, y 274..20, 6 gridlines, dashed raw
+// line + solid 3-month rolling line + r=4.5 point circles + his legend). ----
+const MC_PERIODS=["2025-08","2025-09","2025-10","2025-11","2025-12","2026-01","2026-02","2026-03","2026-04","2026-05","2026-06","2026-07"];
+const MC_X=i=>70+i*(994/11);
+function drawMonthly(svgId,series,fmtY,fmtTip){
+  const roll=rollingMean(series);
+  let s="";
+  // fixed x slots for all 12 months
+  for(let i=0;i<12;i++){
+    const p=MC_PERIODS[i];
+    s+=`<text x="${MC_X(i).toFixed(1)}" y="292" fill="#94a3b8" font-size="10" text-anchor="middle">${p.slice(2,4)}-${p.slice(5,7)}</text>`;
+  }
+  const vals=[];
+  series.forEach(m=>{ if(m&&m.value!=null) vals.push(m.value); });
+  roll.forEach(v=>{ if(v!=null) vals.push(v); });
+  const sc=yScale(vals);
+  if(!sc){
+    // zero state: axes + empty slots, house awaiting idiom
+    for(let i=0;i<6;i++){
+      const y=(274-i*50.8).toFixed(1);
+      s+=`<line x1="70" y1="${y}" x2="1064" y2="${y}" stroke="#334155" stroke-width="1"/>`;
+    }
+    s+=`<text x="567" y="152" fill="#64748b" font-size="15" font-weight="600" text-anchor="middle">Awaiting playback — no bound business revealed</text>`;
+    document.getElementById(svgId).innerHTML=s;
+    return;
+  }
+  const Y=v=>274-(v-sc.lo)/(sc.hi-sc.lo)*254;
+  for(let i=0;i<6;i++){
+    const y=(274-i*50.8).toFixed(1), v=sc.lo+i*(sc.hi-sc.lo)/5;
+    s+=`<line x1="70" y1="${y}" x2="1064" y2="${y}" stroke="#334155" stroke-width="1"/>`+
+       `<text x="62" y="${(+y+4).toFixed(1)}" fill="#94a3b8" font-size="11" text-anchor="end">${fmtY(v)}</text>`;
+  }
+  const rawPts=[], rollPts=[];
+  series.forEach((m,i)=>{ if(m&&m.value!=null) rawPts.push(`${MC_X(i).toFixed(1)},${Y(m.value).toFixed(1)}`); });
+  roll.forEach((v,i)=>{ if(v!=null) rollPts.push(`${MC_X(i).toFixed(1)},${Y(v).toFixed(1)}`); });
+  if(rawPts.length>1) s+=`<polyline points="${rawPts.join(" ")}" fill="none" stroke="#94a3b8" stroke-width="1.3" stroke-dasharray="5,4"/>`;
+  if(rollPts.length>1) s+=`<polyline points="${rollPts.join(" ")}" fill="none" stroke="#f59e0b" stroke-width="3" stroke-linejoin="round"/>`;
+  series.forEach((m,i)=>{
+    if(!m||m.value==null) return;
+    // hollow point (n<5): card-background fill, amber ring — Kent's stated idiom
+    const fill=m.hollow ? "#1e293b" : "#f59e0b";
+    s+=`<circle cx="${MC_X(i).toFixed(1)}" cy="${Y(m.value).toFixed(1)}" r="4.5" fill="${fill}" stroke="#f59e0b" stroke-width="2">`+
+       `<title>${MC_PERIODS[i]}: ${fmtTip(m.value)} (n=${m.n})${m.hollow?" — hollow, excluded from rolling mean":(m.final?"":" — month in progress")}</title></circle>`;
+  });
+  s+=`<rect x="70" y="2" width="14" height="3" fill="#f59e0b"/><text x="90" y="9" fill="#94a3b8" font-size="11">3-month rolling mean</text>`+
+     `<line x1="230" y1="4" x2="244" y2="4" stroke="#94a3b8" stroke-width="1.3" stroke-dasharray="5,4"/><text x="250" y="9" fill="#94a3b8" font-size="11">raw monthly</text>`;
+  document.getElementById(svgId).innerHTML=s;
+}
+function drawTab2(limit){
+  drawMonthly("mc-rate", monthlySeries(T1.points,limit,'medianR'),
+    v=>v.toFixed(2)+"%", v=>v.toFixed(2)+"%");
+  drawMonthly("mc-count", monthlySeries(T1.points,limit,'count'),
+    v=>String(Math.round(v)), v=>String(v));
+  drawMonthly("mc-av", monthlySeries(T1.points,limit,'medianV'),
+    v=>"$"+Math.round(v/1e3)+"K", v=>"$"+Math.round(v/1e3)+"K");
+}
+
 // ---- status line ----
 const MO=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function dayLabel(day){
@@ -327,7 +451,7 @@ function render(){
   if(key===curKey) return;
   curKey=key;
   const limit=revealLimit(state);
-  drawScatter(limit); drawBars(limit); setStatus(state);
+  drawScatter(limit); drawBars(limit); drawTab2(limit); setStatus(state);
 }
 async function poll(){
   try{
