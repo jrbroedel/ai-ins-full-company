@@ -1,0 +1,211 @@
+{
+ "tier": {
+  "CA": "High",
+  "TX": "High",
+  "FL": "High",
+  "NY": "Moderate",
+  "PA": "Low",
+  "WA": "High",
+  "MI": "Moderate",
+  "IL": "Moderate",
+  "NJ": "Moderate",
+  "MA": "Moderate",
+  "OH": "Moderate",
+  "CO": "High",
+  "AR": "Moderate",
+  "LA": "High",
+  "MO": "Moderate",
+  "OR": "High",
+  "DE": "Moderate",
+  "WV": "Low",
+  "MD": "Moderate",
+  "SC": "High",
+  "RI": "Moderate",
+  "ID": "High",
+  "IN": "Moderate",
+  "AK": "High",
+  "VA": "Moderate",
+  "NE": "High",
+  "KY": "Moderate",
+  "NC": "High",
+  "CT": "Moderate",
+  "TN": "Moderate",
+  "WY": "High",
+  "ND": "High",
+  "AL": "High",
+  "KS": "High",
+  "MN": "Moderate",
+  "OK": "High",
+  "GA": "High",
+  "SD": "High",
+  "NV": "High",
+  "ME": "Moderate",
+  "UT": "High",
+  "IA": "High",
+  "MT": "High",
+  "AZ": "High",
+  "WI": "Moderate",
+  "NH": "Moderate",
+  "VT": "Low",
+  "NM": "High",
+  "HI": "High",
+  "MS": "High"
+ },
+ "basis": {
+  "CA": "flat",
+  "TX": "pct",
+  "FL": "pct",
+  "NY": "pct",
+  "PA": "flat",
+  "WA": "flat",
+  "MI": "flat",
+  "IL": "flat",
+  "NJ": "pct",
+  "MA": "pct",
+  "OH": "flat",
+  "CO": "flat",
+  "AR": "flat",
+  "LA": "pct",
+  "MO": "flat",
+  "OR": "flat",
+  "DE": "pct",
+  "WV": "flat",
+  "MD": "pct",
+  "SC": "pct",
+  "RI": "pct",
+  "ID": "flat",
+  "IN": "flat",
+  "AK": "flat",
+  "VA": "pct",
+  "NE": "flat",
+  "KY": "flat",
+  "NC": "pct",
+  "CT": "pct",
+  "TN": "flat",
+  "WY": "flat",
+  "ND": "flat",
+  "AL": "pct",
+  "KS": "flat",
+  "MN": "flat",
+  "OK": "flat",
+  "GA": "pct",
+  "SD": "flat",
+  "NV": "flat",
+  "ME": "pct",
+  "UT": "flat",
+  "IA": "flat",
+  "MT": "flat",
+  "AZ": "flat",
+  "WI": "flat",
+  "NH": "pct",
+  "VT": "flat",
+  "NM": "flat",
+  "HI": "flat",
+  "MS": "pct"
+ },
+ "ded_rule": {
+  "flat": 5000,
+  "pct": 0.02,
+  "pct_min": 10000,
+  "capacity_share": 0.75
+ },
+ "thresholds": {
+  "amber_share_pct": 4.0,
+  "red_share_pct": 8.0
+ },
+ "top12": [
+  "CA",
+  "TX",
+  "FL",
+  "NY",
+  "PA",
+  "WA",
+  "MI",
+  "IL",
+  "NJ",
+  "MA",
+  "OH",
+  "CO"
+ ],
+ "verify_full_book": {
+  "tiers": {
+   "High": {
+    "policies": 4095,
+    "accounts": 549,
+    "av": 2883540000,
+    "gwp": 37389240.2,
+    "median": 1.34,
+    "net": 2848201100.0,
+    "cap": 2136150825.0
+   },
+   "Moderate": {
+    "policies": 3096,
+    "accounts": 545,
+    "av": 2214470000,
+    "gwp": 29770110.66,
+    "median": 1.39,
+    "net": 2182210700.0,
+    "cap": 1636658025.0
+   },
+   "Low": {
+    "policies": 464,
+    "accounts": 302,
+    "av": 329840000,
+    "gwp": 4141861.78,
+    "median": 1.3,
+    "net": 327520000,
+    "cap": 245640000.0
+   }
+  },
+  "states": {
+   "CA": {
+    "cap": 230535000.0,
+    "share": 6.42
+   },
+   "TX": {
+    "cap": 199274925.0,
+    "share": 4.75
+   },
+   "FL": {
+    "cap": 185196450.0,
+    "share": 5.39
+   },
+   "NY": {
+    "cap": 184167075.0,
+    "share": 5.0
+   },
+   "PA": {
+    "cap": 126345000.0,
+    "share": 2.59
+   },
+   "WA": {
+    "cap": 123742500.0,
+    "share": 2.51
+   },
+   "MI": {
+    "cap": 122193750.0,
+    "share": 3.86
+   },
+   "IL": {
+    "cap": 121946250.0,
+    "share": 3.31
+   },
+   "NJ": {
+    "cap": 116172600.0,
+    "share": 2.21
+   },
+   "MA": {
+    "cap": 115573650.0,
+    "share": 3.0
+   },
+   "OH": {
+    "cap": 107722500.0,
+    "share": 3.18
+   },
+   "CO": {
+    "cap": 106623750.0,
+    "share": 2.56
+   }
+  }
+ }
+}

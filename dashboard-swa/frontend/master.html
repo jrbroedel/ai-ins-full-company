@@ -28,6 +28,20 @@ svg{width:100%;height:auto;display:block}
 .callout{border-left:3px solid #f59e0b;background:rgba(245,158,11,.08);padding:11px 14px;border-radius:0 8px 8px 0;margin:14px 0;font-size:12.5px;color:#e2e8f0}
 .callout b{color:#fff}
 footer{color:#64748b;font-size:11.5px;margin-top:26px;line-height:1.7}
+/* Kent's table + pill idiom (copied from the static original) for Tab 3 */
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:10px}
+th{text-align:left;color:#94a3b8;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #334155;padding:8px 8px;white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid #23304a}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.tot td{font-weight:700;border-top:2px solid #334155}
+.pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap}
+.pill.t-high{color:#fca5a5;background:rgba(239,68,68,.2)}
+.pill.t-moderate{color:#fcd34d;background:rgba(245,158,11,.2)}
+.pill.t-low{color:#7dd3fc;background:rgba(56,189,248,.2)}
+.scroll{overflow-x:auto}
+/* three-segment proportional bar under the tier table (net-to-capacity share) */
+.propbar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:#0f172a;margin:14px 0 4px}
+.propbar div{height:100%}
 /* Tab 1 live charts */
 .scatterbox{position:relative}
 .scatterbox canvas{width:100%;display:block}
@@ -94,9 +108,25 @@ Internal only &mdash; contains named insureds. Live view: bindings reveal with t
       aria-label="Median agreed value by month"></svg>
   </div>
 </div>
-<div class="panel"><div class="card stagecard"><h2>Cat Aggregation</h2>
-  <p>Full-book analytical view &mdash; live conversion in progress.</p>
-  <a class="linkbtn" href="/master-static.html">Open the full-book static dashboard</a></div></div>
+<div class="panel">
+  <div class="card"><h2>Hazard tier summary</h2>
+    <p class="note">Catastrophe zone as recorded on the certificate, grouped into three tiers. Net cat exposure is
+      agreed value less the applicable catastrophe deductible; net to capacity applies the 75% share after the 25%
+      ceding commission.</p>
+    <div class="scroll"><table><thead><tr><th>Hazard tier</th><th>Policies</th><th>Accounts</th><th>Agreed value</th>
+      <th>GWP (100%)</th><th>Median rate</th><th>Net of deductible</th><th>Net to capacity</th></tr></thead>
+      <tbody id="t3-tbody"></tbody></table></div>
+    <div class="propbar" id="t3-propbar" title="Net to capacity by hazard tier"></div>
+    <p class="note" style="margin:0 0 4px">Net to capacity by hazard tier &mdash; <span style="color:#fca5a5">high</span> /
+      <span style="color:#fcd34d">moderate</span> / <span style="color:#7dd3fc">low</span></p>
+  </div>
+  <div class="card"><h2>State accumulation</h2>
+    <p class="note">Bars are net catastrophe exposure to capacity; the overlaid line is that state's share of the book
+      on the right axis. Bars turn amber above 4% of book and red above 8%.</p>
+    <svg id="t3-states" viewBox="0 0 1080 380" xmlns="http://www.w3.org/2000/svg" role="img"
+      aria-label="Net catastrophe exposure to capacity by garaging state — top 12"></svg>
+  </div>
+</div>
 <div class="panel"><div class="card stagecard"><h2>Syndicate Panel</h2>
   <p>Full-book analytical view &mdash; live conversion in progress.</p>
   <a class="linkbtn" href="/master-static.html">Open the full-book static dashboard</a></div></div>
@@ -137,6 +167,7 @@ function show(i){
 const SNAPSHOT_URL="/api/snapshot", POLL_MS=5000;
 const BLUE="#3b82f6", AMBER="#f59e0b";   // Kent's period palette
 let T1=null;          // frozen payload
+let T3=null;          // Tab 3 payload: tier/basis maps, ded rule, thresholds, top12
 let snapshot=null;
 let curKey=null;      // last applied reveal key — re-render on change only
 
@@ -227,6 +258,59 @@ function yScale(vals){
   let lo=Math.min.apply(null,vals)*0.92, hi=Math.max.apply(null,vals)*1.08;
   if(hi<=lo) hi=lo+1;
   return {lo:lo,hi:hi};
+}
+// ---- Tab 3 (stage 3): hazard tiers + state accumulation over the SAME limit ----
+// deductible(point): $5,000 where the state's basis is flat, else max(2% of
+// agreed value, $10,000); net = av - deductible; capacity = net * 75%.
+function t3Deductible(p,t3){
+  return t3.basis[p.s]==='flat' ? t3.ded_rule.flat : Math.max(t3.ded_rule.pct*p.v, t3.ded_rule.pct_min);
+}
+// Per-tier aggregates over the revealed points. accounts = COUNT DISTINCT
+// insured name WITHIN the tier (names dedupe across states inside a tier).
+// median is the raw midpoint median of r (null when the tier is empty).
+function tierSummary(points,limit,t3){
+  const out={};
+  for(const t of ["High","Moderate","Low"])
+    out[t]={policies:0,accounts:0,av:0,gwp:0,net:0,cap:0,median:null,_names:new Set(),_rs:[]};
+  for(const p of points){
+    if(p.d>limit) continue;
+    const a=out[t3.tier[p.s]];
+    const net=p.v-t3Deductible(p,t3);
+    a.policies++; a.av+=p.v; a.gwp+=p.g; a.net+=net; a.cap+=net*t3.ded_rule.capacity_share;
+    a._names.add(p.n); a._rs.push(p.r);
+  }
+  for(const t of ["High","Moderate","Low"]){
+    const a=out[t];
+    a.accounts=a._names.size;
+    if(a._rs.length){
+      const rs=a._rs.sort((x,y)=>x-y), n=rs.length;
+      a.median=n%2 ? rs[(n-1)/2] : (rs[n/2-1]+rs[n/2])/2;
+    }
+    delete a._names; delete a._rs;
+  }
+  return out;
+}
+// State accumulation over the revealed points, in the FIXED t3.top12 order
+// (Kent's final ranking; slots never re-rank during playback). share = state
+// revealed GWP / total revealed GWP, percent. Colour thresholds are evaluated
+// LIVE on these revealed shares.
+function stateAccum(points,limit,t3){
+  const cap={}, g={}; let totalG=0;
+  for(const s of t3.top12){ cap[s]=0; g[s]=0; }
+  for(const p of points){
+    if(p.d>limit) continue;
+    totalG+=p.g;
+    if(cap[p.s]!==undefined){
+      cap[p.s]+=(p.v-t3Deductible(p,t3))*t3.ded_rule.capacity_share;
+      g[p.s]+=p.g;
+    }
+  }
+  return t3.top12.map(s=>({s:s, cap:cap[s], share: totalG? g[s]/totalG*100 : 0}));
+}
+function t3BarColor(sharePct,t3){
+  if(sharePct>t3.thresholds.red_share_pct) return "#ef4444";
+  if(sharePct>t3.thresholds.amber_share_pct) return "#f59e0b";
+  return "#3b82f6";
 }
 /*__PURE_END__*/
 
@@ -430,6 +514,89 @@ function drawTab2(limit){
     v=>"$"+Math.round(v/1e3)+"K", v=>"$"+Math.round(v/1e3)+"K");
 }
 
+// ---- Tab 3: hazard tier table + proportional bar + state accumulation ----
+// Money format: the shared fmtUSD's $X.XXB roll past $1B, with Kent's 2dp-$M
+// convention below it (his static table prints $37.39M / $329.84M — the
+// exact-display convergence gate wins over the ops board's $37.4M style).
+function fmtT3(v){
+  if(!v) return "$0";
+  return v>=1e9 ? "$"+(v/1e9).toFixed(2)+"B" : "$"+(v/1e6).toFixed(2)+"M";
+}
+const T3_TIERS=[["High","t-high","High hazard"],["Moderate","t-moderate","Moderate hazard"],["Low","t-low","Low hazard"]];
+const T3_COLORS={High:"#ef4444",Moderate:"#f59e0b",Low:"#3b82f6"};
+function renderT3Table(sum){
+  let html="", tot={policies:0,av:0,gwp:0,net:0,cap:0};
+  for(const [key,cls,label] of T3_TIERS){
+    const a=sum[key];
+    tot.policies+=a.policies; tot.av+=a.av; tot.gwp+=a.gwp; tot.net+=a.net; tot.cap+=a.cap;
+    html+=`<tr><td><span class="pill ${cls}">${label}</span></td>`+
+      `<td class="num">${a.policies.toLocaleString("en-US")}</td>`+
+      `<td class="num">${a.accounts.toLocaleString("en-US")}</td>`+
+      `<td class="num">${fmtT3(a.av)}</td><td class="num">${fmtT3(a.gwp)}</td>`+
+      `<td class="num">${a.median==null?"--":a.median.toFixed(2)+"%"}</td>`+
+      `<td class="num">${fmtT3(a.net)}</td><td class="num">${fmtT3(a.cap)}</td></tr>`;
+  }
+  html+=`<tr class="tot"><td>Book total</td><td class="num">${tot.policies.toLocaleString("en-US")}</td>`+
+    `<td class="num">--</td><td class="num">${fmtT3(tot.av)}</td><td class="num">${fmtT3(tot.gwp)}</td>`+
+    `<td class="num">--</td><td class="num">${fmtT3(tot.net)}</td><td class="num">${fmtT3(tot.cap)}</td></tr>`;
+  document.getElementById("t3-tbody").innerHTML=html;
+  // proportional bar: three segments sized by net-to-capacity share
+  const bar=document.getElementById("t3-propbar");
+  bar.innerHTML = tot.cap ? T3_TIERS.map(([key,,label])=>{
+    const pct=sum[key].cap/tot.cap*100;
+    return `<div style="width:${pct.toFixed(2)}%;background:${T3_COLORS[key]}" title="${label}: ${fmtT3(sum[key].cap)} (${pct.toFixed(1)}%)"></div>`;
+  }).join("") : "";
+}
+// nice axis ceiling: 25% headroom rounded up to a half-decade step (this rule
+// reproduces Kent's static $300M / 7.5% axis tops from his data maxima)
+function t3Nice(max){
+  if(max<=0) return 1;
+  const raw=max*1.25, unit=Math.pow(10,Math.floor(Math.log10(raw))), step=unit/2;
+  return Math.ceil(raw/step)*step;
+}
+function renderT3Chart(rows){
+  const X0=74,X1=1020,BASE=324,TOP=24,PITCH=(X1-X0)/12;
+  let s="<title>Net catastrophe exposure to capacity by garaging state — top 12</title>";
+  const hasData=rows.some(r=>r.cap>0);
+  const capHi=t3Nice(Math.max.apply(null,rows.map(r=>r.cap))), shHi=t3Nice(Math.max.apply(null,rows.map(r=>r.share)));
+  for(let i=0;i<6;i++){
+    const y=(BASE-i*60).toFixed(1);
+    s+=`<line x1="${X0}" y1="${y}" x2="${X1}" y2="${y}" stroke="#334155" stroke-width="1"/>`;
+    if(hasData){
+      const cv=capHi*i/5, sv=shHi*i/5;
+      s+=`<text x="${X0-8}" y="${(+y+4).toFixed(1)}" fill="#94a3b8" font-size="11" text-anchor="end">${cv?fmtT3(cv):"$0"}</text>`+
+         `<text x="${X1+8}" y="${(+y+4).toFixed(1)}" fill="#94a3b8" font-size="11">${sv.toFixed(1)}%</text>`;
+    }
+  }
+  rows.forEach((r,i)=>{
+    s+=`<text x="${(X0+PITCH*(i+0.5)).toFixed(1)}" y="344" fill="#f1f5f9" font-size="12" text-anchor="middle">${r.s}</text>`;
+  });
+  if(hasData){
+    const yC=v=>BASE-(v/capHi)*(BASE-TOP), yS=v=>BASE-(v/shHi)*(BASE-TOP);
+    rows.forEach((r,i)=>{
+      if(r.cap<=0) return;
+      const cx=X0+PITCH*(i+0.5), top=yC(r.cap);
+      s+=`<rect x="${(cx-20).toFixed(1)}" y="${top.toFixed(1)}" width="40.0" height="${(BASE-top).toFixed(1)}" fill="${t3BarColor(r.share,T3)}" rx="2">`+
+         `<title>${r.s}: ${fmtT3(r.cap)} — ${r.share.toFixed(1)}% of book</title></rect>`;
+    });
+    const pts=rows.map((r,i)=>`${(X0+PITCH*(i+0.5)).toFixed(1)},${yS(r.share).toFixed(1)}`);
+    s+=`<polyline points="${pts.join(" ")}" fill="none" stroke="#e2e8f0" stroke-width="1.5"/>`;
+    rows.forEach((r,i)=>{
+      s+=`<circle cx="${(X0+PITCH*(i+0.5)).toFixed(1)}" cy="${yS(r.share).toFixed(1)}" r="3.5" fill="#e2e8f0">`+
+         `<title>${r.s}: ${r.share.toFixed(1)}% of book</title></circle>`;
+    });
+    s+=`<text x="${X0}" y="13" fill="#94a3b8" font-size="11">bars: net cat exposure to capacity (left)  &#183;  line: share of book (right)</text>`;
+  }else{
+    s+=`<text x="547" y="180" fill="#64748b" font-size="15" font-weight="600" text-anchor="middle">Awaiting playback — no bound business revealed</text>`;
+  }
+  document.getElementById("t3-states").innerHTML=s;
+}
+function drawTab3(limit){
+  if(!T3) return;
+  renderT3Table(tierSummary(T1.points,limit,T3));
+  renderT3Chart(stateAccum(T1.points,limit,T3));
+}
+
 // ---- status line ----
 const MO=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function dayLabel(day){
@@ -451,7 +618,7 @@ function render(){
   if(key===curKey) return;
   curKey=key;
   const limit=revealLimit(state);
-  drawScatter(limit); drawBars(limit); drawTab2(limit); setStatus(state);
+  drawScatter(limit); drawBars(limit); drawTab2(limit); drawTab3(limit); setStatus(state);
 }
 async function poll(){
   try{
@@ -473,6 +640,11 @@ async function poll(){
   }catch(err){ console.warn("master_t1 fetch failed:",err&&err.message?err.message:err); return; }
   GMAX=T1.points.reduce((m,p)=>p.g>m?p.g:m,1);
   document.getElementById("cap-pct").textContent=T1.axes.y_max_pct.toFixed(1);
+  try{
+    const r3=await fetch("/master_t3.json",{headers:{Accept:"application/json"},cache:"no-store"});
+    if(!r3.ok) throw new Error("HTTP "+r3.status);
+    T3=await r3.json();
+  }catch(err){ console.warn("master_t3 fetch failed (Tab 3 stays empty):",err&&err.message?err.message:err); }
   render();                       // zero state (empty plot with axes) until first snapshot
   poll(); setInterval(poll,POLL_MS);
 })();
