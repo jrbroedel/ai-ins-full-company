@@ -1,0 +1,78 @@
+{
+ "title": "AI Predictive Analysis",
+ "subtitle": "SHAP-style attribution over the frozen demo book \u00b7 synthetic data",
+ "attribution": {
+  "caption": "What drives premium across the book (share of premium variance, rating-basis decomposition, log scale)",
+  "drivers": [
+   {
+    "label": "Vehicle value (agreed-value band)",
+    "share": 76.8
+   },
+   {
+    "label": "Vehicle class (base rate)",
+    "share": 17.3
+   },
+   {
+    "label": "Territory (garaging state)",
+    "share": 4.0
+   },
+   {
+    "label": "Market cycle (softening index)",
+    "share": 1.8
+   }
+  ]
+ },
+ "referral_triggers": {
+  "caption": "Referrals to predictive review",
+  "rules": [
+   {
+    "rule": "3+ claims in lookback",
+    "count": 2056,
+    "unit": "submissions routed to predictive review"
+   },
+   {
+    "rule": "Any claim > $1,000,000",
+    "count": 4,
+    "unit": "policy-period claims flagged"
+   }
+  ],
+  "book": {
+   "submissions": 10500,
+   "bound": 7655
+  }
+ },
+ "legislation": {
+  "caption": "Legislation impacting policies",
+  "items": [
+   {
+    "item": "CA \u2014 Prop 103 / credit-score ban",
+    "effect": "Policies rated without credit-based scoring; mileage & record primary factors",
+    "policies": 447,
+    "status": "compliant"
+   },
+   {
+    "item": "NY \u2014 DFS Circular Letter 2024-7 (AI/ECDIS oversight)",
+    "effect": "Explainability + decision logs required for AI-assisted underwriting",
+    "policies": 365,
+    "status": "decision-log ready"
+   },
+   {
+    "item": "CO \u2014 C.R.S. 10-3-1104.9 (predictive-model fairness)",
+    "effect": "External data & predictive models tested for unfair discrimination",
+    "policies": 222,
+    "status": "bias-testing tracked"
+   },
+   {
+    "item": "MA / HI / MI \u2014 credit-information bans",
+    "effect": "Rated without credit inputs in all three states",
+    "policies": 528,
+    "status": "compliant"
+   }
+  ]
+ },
+ "provenance": {
+  "dataset_sha": "5a2be288360c84289225ee75ff782c947bcb6a014f7627cb16a7d45946789ac2",
+  "adr": "0045/0049",
+  "computed": "2026-09-03"
+ }
+}

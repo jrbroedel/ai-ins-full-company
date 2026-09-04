@@ -219,10 +219,77 @@
     font-size:10.5px;color:var(--faint);display:flex;justify-content:space-between}
   .footnote .sim-note{color:var(--sim)}
 
+  /* ---- AI Predictive Analysis (frozen precomputed payload — static, not playback-driven) ---- */
+  .ai-panel{
+    background:
+      radial-gradient(900px 320px at 12% -30%, rgba(201,162,75,.10), transparent 65%),
+      linear-gradient(180deg,var(--ground-2),rgba(27,36,48,.55));
+    border:1px solid var(--brass-dim);border-radius:var(--radius);
+    box-shadow:0 0 0 1px rgba(201,162,75,.12), 0 0 26px rgba(201,162,75,.10);
+    padding:20px 22px 16px;margin-bottom:20px;position:relative;overflow:hidden;
+  }
+  .ai-panel::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--brass) 18%,var(--brass) 82%,transparent)}
+  .ai-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+  .ai-badge{font-family:'JetBrains Mono';font-size:10px;font-weight:700;letter-spacing:.14em;
+    color:var(--ground);background:var(--brass);border-radius:4px;padding:2px 7px;
+    text-transform:uppercase;transform:translateY(-2px);display:inline-block}
+  .ai-title{font-family:'Fraunces',serif;font-size:20px;font-weight:600;letter-spacing:.01em;color:var(--ivory)}
+  .ai-subtitle{font-size:11.5px;color:var(--muted);margin-bottom:16px}
+  .ai-zones{display:grid;grid-template-columns:1.35fr 1fr 1.35fr;gap:0}
+  .ai-zone{padding:0 22px;border-left:1px solid var(--line);min-width:0}
+  .ai-zone:first-child{padding-left:0;border-left:none}
+  .ai-zone:last-child{padding-right:0}
+  .ai-zone h4{font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--brass);margin-bottom:12px}
+  .ai-cap{font-size:10px;color:var(--faint);margin-top:12px;line-height:1.4}
+
+  /* zone 1: SHAP-style driver bars */
+  .shap-rows{display:flex;flex-direction:column;gap:10px}
+  .shap-row .shap-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:4px}
+  .shap-row .shap-label{font-size:11.5px;color:var(--ivory);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .shap-row .shap-share{font-family:'JetBrains Mono';font-size:11px;font-weight:500;color:var(--brass)}
+  .shap-track{height:9px;background:var(--ground-3);border:1px solid var(--line);border-radius:5px;overflow:hidden}
+  .shap-fill{height:100%;border-radius:4px;
+    background:linear-gradient(90deg,var(--brass-dim),var(--brass));
+    box-shadow:0 0 8px rgba(201,162,75,.35);
+    width:0;transition:width .9s cubic-bezier(.22,.9,.35,1)}
+
+  /* zone 2: referral-trigger counters */
+  .trig-rows{display:flex;flex-direction:column;gap:14px}
+  .trig{display:flex;align-items:baseline;gap:14px}
+  .trig .trig-count{font-family:'Fraunces',serif;font-size:38px;font-weight:600;line-height:1;
+    color:var(--ivory);letter-spacing:-.01em;min-width:96px;text-align:right}
+  .trig .trig-meta{min-width:0}
+  .trig .trig-rule{font-size:12px;font-weight:600;color:var(--ivory)}
+  .trig .trig-unit{font-size:10.5px;color:var(--muted);margin-top:2px}
+
+  /* zone 3: legislation watch */
+  .leg-rows{display:flex;flex-direction:column;gap:0}
+  .leg{display:flex;gap:12px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line)}
+  .leg:first-child{padding-top:0}
+  .leg:last-child{border-bottom:none;padding-bottom:0}
+  .leg .leg-main{flex:1;min-width:0}
+  .leg .leg-item{font-size:11.5px;font-weight:600;color:var(--ivory)}
+  .leg .leg-effect{font-size:10.5px;color:var(--muted);line-height:1.35;margin-top:1px}
+  .leg .leg-side{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+  .leg .leg-pol{font-family:'JetBrains Mono';font-size:11px;color:var(--ivory);white-space:nowrap}
+  .leg .leg-status{font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;
+    padding:1px 6px;border-radius:3px;white-space:nowrap;
+    background:rgba(214,162,78,.16);color:var(--review)}
+  .leg .leg-status.ok{background:rgba(127,167,128,.16);color:var(--proceed)}
+
+  .ai-foot{margin-top:14px;padding-top:10px;border-top:1px solid var(--line);
+    font-size:9.5px;color:var(--faint);font-family:'JetBrains Mono';letter-spacing:.02em}
+
   @media(max-width:1200px){
     .totals{grid-template-columns:repeat(3,1fr)}
     .lower{grid-template-columns:1fr}
     .pipeline{grid-template-columns:repeat(5,1fr);font-size:10px}
+    .ai-zones{grid-template-columns:1fr}
+    .ai-zone{padding:16px 0;border-left:none;border-top:1px solid var(--line)}
+    .ai-zone:first-child{padding-top:0;border-top:none}
+    .trig .trig-count{min-width:78px;font-size:32px}
   }
 </style>
 </head>
@@ -240,6 +307,33 @@
       <span class="live-pill"><span class="live-dot"></span>Live · updated <span id="ago">5s</span> ago</span>
     </div>
   </header>
+
+  <!-- AI PREDICTIVE ANALYSIS — frozen precomputed payload (shap_tile.json); static, does NOT follow the playback cursor -->
+  <section class="ai-panel" id="ai-panel" hidden>
+    <div class="ai-head">
+      <span class="ai-badge">AI</span>
+      <span class="ai-title" id="ai-title">AI Predictive Analysis</span>
+    </div>
+    <div class="ai-subtitle" id="ai-subtitle"></div>
+    <div class="ai-zones">
+      <div class="ai-zone">
+        <h4>Premium Driver Attribution</h4>
+        <div class="shap-rows" id="ai-shap-rows"></div>
+        <div class="ai-cap" id="ai-shap-cap"></div>
+      </div>
+      <div class="ai-zone">
+        <h4>Referral Triggers</h4>
+        <div class="trig-rows" id="ai-trig-rows"></div>
+        <div class="ai-cap" id="ai-trig-cap"></div>
+      </div>
+      <div class="ai-zone">
+        <h4>Legislation Watch</h4>
+        <div class="leg-rows" id="ai-leg-rows"></div>
+        <div class="ai-cap" id="ai-leg-cap"></div>
+      </div>
+    </div>
+    <div class="ai-foot" id="ai-foot"></div>
+  </section>
 
   <!-- HERO PIPELINE -->
   <section class="hero">
@@ -755,5 +849,87 @@ poll(); setInterval(poll, POLL_MS);          // fetch real data now, then on cad
 setInterval(spawnNext, SPAWN_MS);            // replay real apps through the pipeline
 </script>
 
+<script>
+// ============================================================================
+// AI Predictive Analysis panel — PURE RENDERER over shap_tile.json, a FROZEN
+// precomputed payload (same-origin, so it sits inside the same Entra lock as
+// the rest of the site). Fetched ONCE at load; like the loss-ratio tile it is
+// static frozen fact and does NOT move with the playback cursor. No number in
+// the payload is recomputed or altered here — values render exactly as given.
+// ============================================================================
+(async function(){
+  const panel=document.getElementById("ai-panel");
+  let d;
+  try{
+    const res=await fetch("/shap_tile.json",{headers:{Accept:"application/json"},cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    d=await res.json();
+  }catch(err){
+    console.warn("shap_tile fetch failed:",err&&err.message?err.message:err);
+    return;               // panel stays hidden rather than rendering empty zones
+  }
+  const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n};
+
+  document.getElementById("ai-title").textContent=d.title;
+  document.getElementById("ai-subtitle").textContent=d.subtitle;
+
+  // Zone 1 — premium driver attribution: order as given, widest bar = 100% width
+  const shapRows=document.getElementById("ai-shap-rows");
+  const maxShare=Math.max(...d.attribution.drivers.map(x=>x.share));
+  for(const drv of d.attribution.drivers){
+    const row=el("div","shap-row");
+    const top=el("div","shap-top");
+    top.appendChild(el("span","shap-label",drv.label));
+    top.appendChild(el("span","shap-share",drv.share.toFixed(1)+"%"));
+    const track=el("div","shap-track");
+    const fill=el("div","shap-fill");
+    fill.dataset.w=(drv.share/maxShare*100).toFixed(2)+"%";
+    track.appendChild(fill);
+    row.appendChild(top);row.appendChild(track);
+    shapRows.appendChild(row);
+  }
+  document.getElementById("ai-shap-cap").textContent=d.attribution.caption;
+
+  // Zone 2 — referral triggers as big-number counters
+  const trigRows=document.getElementById("ai-trig-rows");
+  for(const r of d.referral_triggers.rules){
+    const t=el("div","trig");
+    t.appendChild(el("div","trig-count",r.count.toLocaleString("en-US")));
+    const meta=el("div","trig-meta");
+    meta.appendChild(el("div","trig-rule",r.rule));
+    meta.appendChild(el("div","trig-unit",r.unit));
+    t.appendChild(meta);
+    trigRows.appendChild(t);
+  }
+  const book=d.referral_triggers.book;
+  document.getElementById("ai-trig-cap").textContent=
+    d.referral_triggers.caption+" · book: "+book.submissions.toLocaleString("en-US")+
+    " submissions, "+book.bound.toLocaleString("en-US")+" bound";
+
+  // Zone 3 — legislation watch
+  const legRows=document.getElementById("ai-leg-rows");
+  for(const it of d.legislation.items){
+    const row=el("div","leg");
+    const main=el("div","leg-main");
+    main.appendChild(el("div","leg-item",it.item));
+    main.appendChild(el("div","leg-effect",it.effect));
+    const side=el("div","leg-side");
+    side.appendChild(el("span","leg-pol",it.policies.toLocaleString("en-US")+" policies"));
+    side.appendChild(el("span","leg-status"+(it.status==="compliant"?" ok":""),it.status));
+    row.appendChild(main);row.appendChild(side);
+    legRows.appendChild(row);
+  }
+  document.getElementById("ai-leg-cap").textContent=d.legislation.caption;
+
+  document.getElementById("ai-foot").textContent=
+    "dataset "+d.provenance.dataset_sha.slice(0,8)+" · ADR "+d.provenance.adr+
+    " · computed "+d.provenance.computed+" · precomputed frozen payload";
+
+  panel.hidden=false;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{   // let layout settle, then animate bars in
+    for(const f of panel.querySelectorAll(".shap-fill")) f.style.width=f.dataset.w;
+  }));
+})();
+</script>
 
 </body></html>
