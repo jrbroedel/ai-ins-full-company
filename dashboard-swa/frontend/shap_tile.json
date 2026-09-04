@@ -74,5 +74,254 @@
   "dataset_sha": "5a2be288360c84289225ee75ff782c947bcb6a014f7627cb16a7d45946789ac2",
   "adr": "0045/0049",
   "computed": "2026-09-03"
+ },
+ "series": {
+  "note": "Cumulative book revealed through each playback month. drivers order matches attribution.drivers; legislation order matches legislation.items.",
+  "ultimate": {
+   "trig_1m": 4,
+   "note": "one >$1M claim emerges 2026-11 (post-window); ultimate count 4"
+  },
+  "months": [
+   {
+    "month_index": 0,
+    "label": "Aug 2025",
+    "submissions_cum": 703,
+    "bound_cum": 506,
+    "drivers": [
+     79.4,
+     16.9,
+     3.7,
+     0.0
+    ],
+    "trig_3claims": 148,
+    "trig_1m": 0,
+    "legislation": [
+     34,
+     33,
+     8,
+     30
+    ]
+   },
+   {
+    "month_index": 1,
+    "label": "Sep 2025",
+    "submissions_cum": 1362,
+    "bound_cum": 983,
+    "drivers": [
+     78.5,
+     17.6,
+     3.8,
+     0.1
+    ],
+    "trig_3claims": 277,
+    "trig_1m": 0,
+    "legislation": [
+     59,
+     58,
+     24,
+     62
+    ]
+   },
+   {
+    "month_index": 2,
+    "label": "Oct 2025",
+    "submissions_cum": 2164,
+    "bound_cum": 1588,
+    "drivers": [
+     78.3,
+     17.7,
+     4.0,
+     0.1
+    ],
+    "trig_3claims": 419,
+    "trig_1m": 0,
+    "legislation": [
+     94,
+     94,
+     37,
+     101
+    ]
+   },
+   {
+    "month_index": 3,
+    "label": "Nov 2025",
+    "submissions_cum": 2953,
+    "bound_cum": 2163,
+    "drivers": [
+     78.5,
+     17.4,
+     4.0,
+     0.2
+    ],
+    "trig_3claims": 577,
+    "trig_1m": 0,
+    "legislation": [
+     115,
+     128,
+     55,
+     141
+    ]
+   },
+   {
+    "month_index": 4,
+    "label": "Dec 2025",
+    "submissions_cum": 3804,
+    "bound_cum": 2789,
+    "drivers": [
+     78.5,
+     17.3,
+     3.9,
+     0.2
+    ],
+    "trig_3claims": 745,
+    "trig_1m": 0,
+    "legislation": [
+     152,
+     160,
+     79,
+     180
+    ]
+   },
+   {
+    "month_index": 5,
+    "label": "Jan 2026",
+    "submissions_cum": 4659,
+    "bound_cum": 3404,
+    "drivers": [
+     78.2,
+     17.5,
+     4.0,
+     0.3
+    ],
+    "trig_3claims": 924,
+    "trig_1m": 1,
+    "legislation": [
+     191,
+     188,
+     95,
+     226
+    ]
+   },
+   {
+    "month_index": 6,
+    "label": "Feb 2026",
+    "submissions_cum": 5558,
+    "bound_cum": 4062,
+    "drivers": [
+     78.0,
+     17.5,
+     4.1,
+     0.4
+    ],
+    "trig_3claims": 1091,
+    "trig_1m": 1,
+    "legislation": [
+     231,
+     215,
+     114,
+     279
+    ]
+   },
+   {
+    "month_index": 7,
+    "label": "Mar 2026",
+    "submissions_cum": 6559,
+    "bound_cum": 4804,
+    "drivers": [
+     77.8,
+     17.5,
+     4.1,
+     0.6
+    ],
+    "trig_3claims": 1283,
+    "trig_1m": 1,
+    "legislation": [
+     275,
+     248,
+     138,
+     332
+    ]
+   },
+   {
+    "month_index": 8,
+    "label": "Apr 2026",
+    "submissions_cum": 7465,
+    "bound_cum": 5453,
+    "drivers": [
+     77.6,
+     17.5,
+     4.1,
+     0.8
+    ],
+    "trig_3claims": 1471,
+    "trig_1m": 2,
+    "legislation": [
+     317,
+     267,
+     152,
+     377
+    ]
+   },
+   {
+    "month_index": 9,
+    "label": "May 2026",
+    "submissions_cum": 8402,
+    "bound_cum": 6124,
+    "drivers": [
+     77.5,
+     17.3,
+     4.1,
+     1.2
+    ],
+    "trig_3claims": 1658,
+    "trig_1m": 3,
+    "legislation": [
+     360,
+     297,
+     170,
+     420
+    ]
+   },
+   {
+    "month_index": 10,
+    "label": "Jun 2026",
+    "submissions_cum": 9533,
+    "bound_cum": 6948,
+    "drivers": [
+     77.1,
+     17.2,
+     4.1,
+     1.6
+    ],
+    "trig_3claims": 1875,
+    "trig_1m": 3,
+    "legislation": [
+     403,
+     336,
+     199,
+     480
+    ]
+   },
+   {
+    "month_index": 11,
+    "label": "Jul 2026",
+    "submissions_cum": 10500,
+    "bound_cum": 7655,
+    "drivers": [
+     76.8,
+     17.3,
+     4.0,
+     1.8
+    ],
+    "trig_3claims": 2056,
+    "trig_1m": 3,
+    "legislation": [
+     447,
+     365,
+     222,
+     528
+    ]
+   }
+  ]
  }
 }

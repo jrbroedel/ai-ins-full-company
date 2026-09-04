@@ -219,7 +219,7 @@
     font-size:10.5px;color:var(--faint);display:flex;justify-content:space-between}
   .footnote .sim-note{color:var(--sim)}
 
-  /* ---- AI Predictive Analysis (frozen precomputed payload — static, not playback-driven) ---- */
+  /* ---- AI Predictive Analysis (frozen precomputed payload; v2 series rows follow the playback cursor) ---- */
   .ai-panel{
     background:
       radial-gradient(900px 320px at 12% -30%, rgba(201,162,75,.10), transparent 65%),
@@ -263,6 +263,9 @@
   .trig .trig-meta{min-width:0}
   .trig .trig-rule{font-size:12px;font-weight:600;color:var(--ivory)}
   .trig .trig-unit{font-size:10.5px;color:var(--muted);margin-top:2px}
+  /* final-month-only qualifier on the >$1M counter ("(4 at ultimate)") */
+  .trig .trig-ult{font-family:'Inter';font-size:10px;font-weight:500;color:var(--faint);
+    margin-left:7px;letter-spacing:.02em;white-space:nowrap}
 
   /* zone 3: legislation watch */
   .leg-rows{display:flex;flex-direction:column;gap:0}
@@ -308,7 +311,8 @@
     </div>
   </header>
 
-  <!-- AI PREDICTIVE ANALYSIS — frozen precomputed payload (shap_tile.json); static, does NOT follow the playback cursor -->
+  <!-- AI PREDICTIVE ANALYSIS — frozen precomputed payload (shap_tile.json v2); follows the
+       playback cursor by resolving it to one precomputed monthly series row per snapshot tick -->
   <section class="ai-panel" id="ai-panel" hidden>
     <div class="ai-head">
       <span class="ai-badge">AI</span>
@@ -506,8 +510,23 @@ const ACTION_BUCKET = {
 };
 function bucket(action){ return ACTION_BUCKET[action] || {k:"review", cls:"review", tag:(action||"—")}; }
 
-function money(n){ return (n==null) ? "—" : "$"+Math.round(n).toLocaleString(); }
-function moneyK(n){ if(n==null) return "—"; return n>=1e6 ? "$"+(n/1e6).toFixed(1)+"M" : "$"+Math.round(n/1e3)+"K"; }
+// ---- shared currency formatter — the ONE source of truth for $ rendering ----
+// Units roll correctly past $1B (was "$1000M" on the TIV tile): >=$1B -> $X.XXB;
+// >=$1M -> $X.XM per existing house style, dropping the decimal from $100M so
+// there are never 4+ digits before the unit; >=$1K -> $XXXK. {exact:true} keeps
+// the full-dollar comma style used by the avg-premium tile and trend tooltips.
+function fmtUSD(n,opts){
+  if(n==null||!isFinite(n)) return "—";
+  const sign=n<0?"−":"", a=Math.abs(n);
+  if(opts&&opts.exact) return sign+"$"+Math.round(a).toLocaleString("en-US");
+  if(a>=1e9) return sign+"$"+(a/1e9).toFixed(2)+"B";
+  if(a>=1e8) return sign+"$"+Math.round(a/1e6)+"M";
+  if(a>=1e6) return sign+"$"+(a/1e6).toFixed(1)+"M";
+  if(a>=1e3) return sign+"$"+Math.round(a/1e3)+"K";
+  return sign+"$"+Math.round(a);
+}
+function money(n){ return fmtUSD(n,{exact:true}); }  // full-dollar call sites
+function moneyK(n){ return fmtUSD(n); }              // compact (unit-rolled) call sites
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function set(id,v){ const el=document.getElementById(id); if(el) el.textContent=(v==null?"—":v); }
 
@@ -699,7 +718,7 @@ function renderTrend(){
   const path=(key,color)=>`<path d="${view.map((p,i)=>`${i?'L':'M'}${X(i).toFixed(1)},${Y(p[key]).toFixed(1)}`).join(' ')}" fill="none" stroke="${color}" stroke-width="2.2"/>`;
   const dots=(key,color,withDollar)=>view.map((p,i)=>{
     const tip=withDollar
-      ? `${p.month} · $${Math.round(p.avgd).toLocaleString()} avg · index ${p.real.toFixed(1)}`
+      ? `${p.month} · ${fmtUSD(p.avgd,{exact:true})} avg · index ${p.real.toFixed(1)}`
       : `${p.month} · rate index ${p.rate.toFixed(1)}`;
     return `<circle cx="${X(i).toFixed(1)}" cy="${Y(p[key]).toFixed(1)}" r="3" fill="${color}"><title>${esc(tip)}</title></circle>`;
   }).join('');
@@ -798,6 +817,9 @@ function renderAll(){
   renderTrend();
   renderEfficiency(snapshot.time_saving);
   renderScenario(snapshot.scenario);
+  // AI panel rides the SAME poll — no second fetch loop (guarded: the panel's
+  // script block defines this after boot; polls are async so it exists by then).
+  if(typeof renderAiPlayback==="function") renderAiPlayback(snapshot);
 }
 
 // ---------- scenario marker (ADR 0048) ----------
@@ -853,10 +875,99 @@ setInterval(spawnNext, SPAWN_MS);            // replay real apps through the pip
 // ============================================================================
 // AI Predictive Analysis panel — PURE RENDERER over shap_tile.json, a FROZEN
 // precomputed payload (same-origin, so it sits inside the same Entra lock as
-// the rest of the site). Fetched ONCE at load; like the loss-ratio tile it is
-// static frozen fact and does NOT move with the playback cursor. No number in
-// the payload is recomputed or altered here — values render exactly as given.
+// the rest of the site). The payload is fetched ONCE at load; v2 adds a
+// `series` block: 12 precomputed monthly rows of the panel's numbers on the
+// cumulative book revealed through each month. The panel now FOLLOWS the
+// playback cursor by riding the SAME snapshot poll as every other live tile
+// (renderAll -> renderAiPlayback; there is NO second poll): each tick resolves
+// the cursor to one series row and renders that row. No number is recomputed
+// or altered here — rows render exactly as precomputed.
 // ============================================================================
+let aiData=null;    // frozen payload (null until fetched; panel hidden until then)
+let aiCurIdx=-1;    // series row currently rendered (-1 = none yet)
+const aiEls={shares:[],fills:[],trigCounts:[],legPols:[],trigUlt:null,footBase:"",trigCap:""};
+
+// Resolve the playback cursor to a series row index.
+// Preferred: snapshot.playback.cursor (the exporter's ISO demo-time position) ->
+// month index via the SAME month key the exporter uses ((y-2025)*12+(m-8);
+// month 0 = Aug 2025), clamped to the series — playback.active=false means the
+// full book is revealed, i.e. the last row. Fallback for a snapshot without a
+// `playback` block: the last row whose bound_cum <= the snapshot's cumulative
+// bound count (series rows carry submissions_cum/bound_cum for exactly this
+// mapping). No snapshot yet (pre-start/reset) -> the month-0 row, never blanks.
+function aiRowIndex(snap){
+  const months=aiData.series.months, last=months.length-1;
+  if(!snap) return 0;
+  const pb=snap.playback;
+  if(pb && typeof pb.active==="boolean"){
+    if(!pb.active || !pb.cursor) return last;      // full book revealed
+    const d=new Date(pb.cursor);
+    if(isNaN(d.getTime())) return last;
+    const mi=(d.getUTCFullYear()-2025)*12+(d.getUTCMonth()+1-8);
+    return Math.max(0,Math.min(last,mi));
+  }
+  const bound=snap.tiles&&snap.tiles.bound;
+  if(bound==null) return last;
+  let idx=0;
+  for(let i=0;i<months.length;i++){ if(months[i].bound_cum<=bound) idx=i; }
+  return idx;
+}
+
+// Counter tick in the house style: same decelerating feel as the bars' width
+// transition (.9s ease-out); the value always snaps exact at the end.
+function aiTween(el,to,fmt){
+  const from=(el._v==null)?0:el._v;
+  el._v=to;
+  if(el._raf) cancelAnimationFrame(el._raf);
+  if(from===to){ el.textContent=fmt(to); return; }
+  const t0=performance.now(), dur=900, ease=t=>1-Math.pow(1-t,3);
+  const step=now=>{
+    const p=Math.min(1,(now-t0)/dur);
+    el.textContent=fmt(p<1?from+(to-from)*ease(p):to);
+    if(p<1) el._raf=requestAnimationFrame(step);
+  };
+  el._raf=requestAnimationFrame(step);
+}
+const aiInt=v=>Math.round(v).toLocaleString("en-US");
+
+// Render one series row. Called from renderAll on every snapshot tick; no-ops
+// until the payload has loaded and whenever the resolved row hasn't changed.
+function renderAiPlayback(snap){
+  if(!aiData||!aiData.series||!aiData.series.months||!aiData.series.months.length) return;
+  const months=aiData.series.months, last=months.length-1;
+  const idx=aiRowIndex(snap);
+  if(idx===aiCurIdx) return;
+  aiCurIdx=idx;
+  const row=months[idx];
+
+  // Zone 1 — driver bars re-widen; row.drivers order matches attribution.drivers.
+  const maxShare=Math.max(...row.drivers)||1;
+  row.drivers.forEach((v,i)=>{
+    aiTween(aiEls.shares[i],v,x=>x.toFixed(1)+"%");
+    aiEls.fills[i].style.width=(v/maxShare*100).toFixed(2)+"%";
+  });
+
+  // Zone 2 — trigger counters tick; payload order: rules[0]=3+ claims,
+  // rules[1]=any claim >$1M. Final month only, the >$1M counter carries the
+  // "(N at ultimate)" suffix — one >$1M claim emerges after the playback window.
+  aiTween(aiEls.trigCounts[0],row.trig_3claims,aiInt);
+  aiTween(aiEls.trigCounts[1],row.trig_1m,aiInt);
+  const ult=aiData.series.ultimate;
+  const showUlt=(idx===last && ult && ult.trig_1m!=null);
+  if(aiEls.trigUlt){
+    aiEls.trigUlt.hidden=!showUlt;
+    aiEls.trigUlt.textContent=showUlt?"("+ult.trig_1m+" at ultimate)":"";
+  }
+  document.getElementById("ai-trig-cap").textContent=
+    aiEls.trigCap+" · book: "+aiInt(row.submissions_cum)+" submissions, "+aiInt(row.bound_cum)+" bound";
+
+  // Zone 3 — legislation counts tick; row.legislation order matches legislation.items.
+  row.legislation.forEach((v,i)=>aiTween(aiEls.legPols[i],v,x=>aiInt(x)+" policies"));
+
+  // Provenance foot — dynamic reveal marker from the row's own label.
+  document.getElementById("ai-foot").textContent=aiEls.footBase+" · revealed through "+row.label;
+}
+
 (async function(){
   const panel=document.getElementById("ai-panel");
   let d;
@@ -869,44 +980,57 @@ setInterval(spawnNext, SPAWN_MS);            // replay real apps through the pip
     return;               // panel stays hidden rather than rendering empty zones
   }
   const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n};
+  const hasSeries=!!(d.series&&d.series.months&&d.series.months.length);
 
   document.getElementById("ai-title").textContent=d.title;
   document.getElementById("ai-subtitle").textContent=d.subtitle;
 
-  // Zone 1 — premium driver attribution: order as given, widest bar = 100% width
+  // Zone 1 — premium driver attribution skeleton: static labels from the top-level
+  // payload; values/widths come per series row (or top-level when no series).
   const shapRows=document.getElementById("ai-shap-rows");
   const maxShare=Math.max(...d.attribution.drivers.map(x=>x.share));
   for(const drv of d.attribution.drivers){
     const row=el("div","shap-row");
     const top=el("div","shap-top");
     top.appendChild(el("span","shap-label",drv.label));
-    top.appendChild(el("span","shap-share",drv.share.toFixed(1)+"%"));
+    const share=el("span","shap-share",hasSeries?"0.0%":drv.share.toFixed(1)+"%");
+    top.appendChild(share);
     const track=el("div","shap-track");
     const fill=el("div","shap-fill");
     fill.dataset.w=(drv.share/maxShare*100).toFixed(2)+"%";
     track.appendChild(fill);
     row.appendChild(top);row.appendChild(track);
     shapRows.appendChild(row);
+    aiEls.shares.push(share);aiEls.fills.push(fill);
   }
   document.getElementById("ai-shap-cap").textContent=d.attribution.caption;
 
-  // Zone 2 — referral triggers as big-number counters
+  // Zone 2 — referral triggers: static rule/unit text; counts move with the row.
   const trigRows=document.getElementById("ai-trig-rows");
-  for(const r of d.referral_triggers.rules){
+  d.referral_triggers.rules.forEach((r,i)=>{
     const t=el("div","trig");
-    t.appendChild(el("div","trig-count",r.count.toLocaleString("en-US")));
+    const cnt=el("div","trig-count");
+    const cval=el("span",null,hasSeries?"0":r.count.toLocaleString("en-US"));
+    cnt.appendChild(cval);
+    if(i===1){  // the >$1M rule hosts the final-month "(N at ultimate)" suffix
+      const u=el("span","trig-ult");u.hidden=true;
+      cnt.appendChild(u);aiEls.trigUlt=u;
+    }
+    t.appendChild(cnt);
     const meta=el("div","trig-meta");
     meta.appendChild(el("div","trig-rule",r.rule));
     meta.appendChild(el("div","trig-unit",r.unit));
     t.appendChild(meta);
     trigRows.appendChild(t);
-  }
+    aiEls.trigCounts.push(cval);
+  });
+  aiEls.trigCap=d.referral_triggers.caption;
   const book=d.referral_triggers.book;
   document.getElementById("ai-trig-cap").textContent=
     d.referral_triggers.caption+" · book: "+book.submissions.toLocaleString("en-US")+
     " submissions, "+book.bound.toLocaleString("en-US")+" bound";
 
-  // Zone 3 — legislation watch
+  // Zone 3 — legislation watch: static item/effect/status; counts move with the row.
   const legRows=document.getElementById("ai-leg-rows");
   for(const it of d.legislation.items){
     const row=el("div","leg");
@@ -914,20 +1038,31 @@ setInterval(spawnNext, SPAWN_MS);            // replay real apps through the pip
     main.appendChild(el("div","leg-item",it.item));
     main.appendChild(el("div","leg-effect",it.effect));
     const side=el("div","leg-side");
-    side.appendChild(el("span","leg-pol",it.policies.toLocaleString("en-US")+" policies"));
+    const pol=el("span","leg-pol",hasSeries?"0 policies":it.policies.toLocaleString("en-US")+" policies");
+    side.appendChild(pol);
     side.appendChild(el("span","leg-status"+(it.status==="compliant"?" ok":""),it.status));
     row.appendChild(main);row.appendChild(side);
     legRows.appendChild(row);
+    aiEls.legPols.push(pol);
   }
   document.getElementById("ai-leg-cap").textContent=d.legislation.caption;
 
-  document.getElementById("ai-foot").textContent=
+  aiEls.footBase=
     "dataset "+d.provenance.dataset_sha.slice(0,8)+" · ADR "+d.provenance.adr+
     " · computed "+d.provenance.computed+" · precomputed frozen payload";
+  document.getElementById("ai-foot").textContent=aiEls.footBase;
 
+  aiData=d;
   panel.hidden=false;
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{   // let layout settle, then animate bars in
-    for(const f of panel.querySelectorAll(".shap-fill")) f.style.width=f.dataset.w;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{   // let layout settle, then animate in
+    if(hasSeries){
+      // First render at the current cursor (or the month-0 row before the first
+      // snapshot lands) — bars widen and counters tick up from zero.
+      renderAiPlayback(typeof snapshot!=="undefined"?snapshot:null);
+    }else{
+      // v1 payload fallback: static full-book render, bars animate in as before.
+      for(const f of panel.querySelectorAll(".shap-fill")) f.style.width=f.dataset.w;
+    }
   }));
 })();
 </script>
