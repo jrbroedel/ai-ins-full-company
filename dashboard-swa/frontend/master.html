@@ -127,9 +127,20 @@ Internal only &mdash; contains named insureds. Live view: bindings reveal with t
       aria-label="Net catastrophe exposure to capacity by garaging state — top 12"></svg>
   </div>
 </div>
-<div class="panel"><div class="card stagecard"><h2>Syndicate Panel</h2>
-  <p>Full-book analytical view &mdash; live conversion in progress.</p>
-  <a class="linkbtn" href="/master-static.html">Open the full-book static dashboard</a></div></div>
+<div class="panel">
+  <div class="card"><h2>Signed premium by market and period</h2>
+    <p class="note">Split by the two reporting periods. Equal bars are the expected result on a flat panel &mdash; an
+      unequal pair would mean a line changed mid-term and the bordereaux did not carry it through.</p>
+    <svg id="t4-markets" viewBox="0 0 1080 360" xmlns="http://www.w3.org/2000/svg" role="img"
+      aria-label="Gross written premium at signed line, by market"></svg>
+  </div>
+  <div class="card"><h2>Premium into the panel by month</h2>
+    <p class="note">Gross written premium at 100% by month of inception. This is the volume the panel is absorbing;
+      each market takes 10% of it. Solid line is a three-month trailing mean; dashed is the raw monthly figure.</p>
+    <svg id="t4-monthly" viewBox="0 0 1080 320" xmlns="http://www.w3.org/2000/svg" role="img"
+      aria-label="Gross written premium written into the panel by month (100%)"></svg>
+  </div>
+</div>
 
 <footer>
 <b>Limitations carried forward.</b> The 2025 period covers five months (August to December) against seven for 2026
@@ -225,13 +236,14 @@ function monthlySeries(points,limit,agg){
   const buckets=slots.map(()=>[]);
   for(const p of points){
     if(p.d>limit) continue;
-    for(let i=11;i>=0;i--){ if(p.d>=slots[i].start){ buckets[i].push(agg==='medianV'?p.v:p.r); break; } }
+    for(let i=11;i>=0;i--){ if(p.d>=slots[i].start){ buckets[i].push(agg==='medianV'?p.v:(agg==='sumG'?p.g:p.r)); break; } }
   }
   return slots.map((s,i)=>{
     if(limit<s.start) return null;
     const n=buckets[i].length, final=limit>=s.end;
     if(agg==='count') return {n:n,value:n,hollow:n<5,final:final};
     if(!n) return {n:0,value:null,hollow:true,final:final};
+    if(agg==='sumG') return {n:n,value:buckets[i].reduce((a,b)=>a+b,0),hollow:n<5,final:final};
     const vs=buckets[i].sort((a,b)=>a-b);
     const med=vs.length%2 ? vs[(vs.length-1)/2] : (vs[vs.length/2-1]+vs[vs.length/2])/2;
     return {n:n,value:med,hollow:n<5,final:final};
@@ -292,20 +304,32 @@ function tierSummary(points,limit,t3){
 }
 // State accumulation over the revealed points, in the FIXED t3.top12 order
 // (Kent's final ranking; slots never re-rank during playback). share = state
-// revealed GWP / total revealed GWP, percent. Colour thresholds are evaluated
-// LIVE on these revealed shares.
+// NET-CAPACITY / total revealed net capacity, percent — Kent's static basis
+// (stage-4 rider corrected this from the earlier GWP basis). Colour thresholds
+// are evaluated LIVE on these revealed capacity shares.
 function stateAccum(points,limit,t3){
-  const cap={}, g={}; let totalG=0;
-  for(const s of t3.top12){ cap[s]=0; g[s]=0; }
+  const cap={}; let totalCap=0;
+  for(const s of t3.top12) cap[s]=0;
   for(const p of points){
     if(p.d>limit) continue;
-    totalG+=p.g;
-    if(cap[p.s]!==undefined){
-      cap[p.s]+=(p.v-t3Deductible(p,t3))*t3.ded_rule.capacity_share;
-      g[p.s]+=p.g;
-    }
+    const c=(p.v-t3Deductible(p,t3))*t3.ded_rule.capacity_share;
+    totalCap+=c;
+    if(cap[p.s]!==undefined) cap[p.s]+=c;
   }
-  return t3.top12.map(s=>({s:s, cap:cap[s], share: totalG? g[s]/totalG*100 : 0}));
+  return t3.top12.map(s=>({s:s, cap:cap[s], share: totalCap? cap[s]/totalCap*100 : 0}));
+}
+// ---- Tab 4 (stage 4): panel intake over the SAME limit ----
+// Per-period revealed GWP x the flat 10% signed line — identical for every
+// market by construction (Kent's intro: equal bars are the expected result).
+// period comes from the point's p flag (0=2025 Aug-Dec, 1=2026 Jan-Jul; it
+// equals the year of the point's date — verified against d).
+function marketPeriodGWP(points,limit,lineShare){
+  let g25=0,g26=0,n25=0,n26=0;
+  for(const p of points){
+    if(p.d>limit) continue;
+    if(p.p===0){ g25+=p.g; n25++; } else { g26+=p.g; n26++; }
+  }
+  return {p2025:g25*lineShare, p2026:g26*lineShare, n2025:n25, n2026:n26};
 }
 function t3BarColor(sharePct,t3){
   if(sharePct>t3.thresholds.red_share_pct) return "#ef4444";
@@ -597,6 +621,68 @@ function drawTab3(limit){
   renderT3Chart(stateAccum(T1.points,limit,T3));
 }
 
+// ---- Tab 4: signed premium by market + panel intake by month ----
+// Market slots in Kent's static axis order; number -> name per his masthead
+// trio + the dataset's syndicate_shares (real Lloyd's numbering).
+const T4_MARKETS=[["2623 / 623","Beazley"],["33","Hiscox"],["1084","Chaucer"],["4020","Ark"],["2987","Brit"],
+                  ["4444","Canopius"],["1969","Apollo"],["1274","Antares"],["2001","MS Amlin"],["1414","Ascot"]];
+function fmtT4(v){
+  if(!v) return "$0";
+  if(v>=1e9) return "$"+(v/1e9).toFixed(2)+"B";
+  if(v>=1e6) return "$"+(v/1e6).toFixed(2)+"M";
+  if(v>=1e3) return "$"+Math.round(v/1e3)+"K";
+  return "$"+Math.round(v);
+}
+function t4Nice(max){   // $0-based bar axis: 8% headroom up to a half-decade step
+  if(max<=0) return 1;
+  const raw=max*1.08, unit=Math.pow(10,Math.floor(Math.log10(raw))), step=unit/2;
+  return Math.ceil(raw/step)*step;
+}
+function renderT4Markets(mp){
+  // Kent's geometry: 1080x360, plot x 72..1064 (10 slots, pitch 99.2), y 308..24
+  const X0=72,BASE=308,TOP=24,PITCH=99.2,BW=31;
+  let s="<title>Gross written premium at signed line, by market</title>";
+  const hasData=mp.n2025>0||mp.n2026>0;
+  const hi=t4Nice(Math.max(mp.p2025,mp.p2026));
+  for(let i=0;i<6;i++){
+    const y=(BASE-i*(BASE-TOP)/5).toFixed(1);
+    s+=`<line x1="${X0}" y1="${y}" x2="1064" y2="${y}" stroke="#334155" stroke-width="1"/>`;
+    if(hasData){
+      const v=hi*i/5;
+      s+=`<text x="${X0-8}" y="${(+y+4).toFixed(1)}" fill="#94a3b8" font-size="11" text-anchor="end">${v?fmtT4(v):"$0"}</text>`;
+    }
+  }
+  T4_MARKETS.forEach(([num],i)=>{
+    s+=`<text x="${(X0+PITCH*i+49.6).toFixed(1)}" y="328" fill="#f1f5f9" font-size="12" text-anchor="middle">${num}</text>`;
+  });
+  if(hasData){
+    const yV=v=>BASE-(v/hi)*(BASE-TOP);
+    T4_MARKETS.forEach(([num,name],i)=>{
+      const base=X0+PITCH*i;
+      if(mp.n2025>0){
+        const t=yV(mp.p2025);
+        s+=`<rect x="${(base+15.6).toFixed(1)}" y="${t.toFixed(1)}" width="31.0" height="${(BASE-t).toFixed(1)}" fill="#3b82f6" rx="2">`+
+           `<title>${num} ${name} — 2025 (Aug-Dec): ${fmtT4(mp.p2025)}</title></rect>`;
+      }
+      if(mp.n2026>0){
+        const t=yV(mp.p2026);
+        s+=`<rect x="${(base+49.6).toFixed(1)}" y="${t.toFixed(1)}" width="31.0" height="${(BASE-t).toFixed(1)}" fill="#f59e0b" rx="2">`+
+           `<title>${num} ${name} — 2026 (Jan-Jul): ${fmtT4(mp.p2026)}</title></rect>`;
+      }
+    });
+    s+=`<rect x="72" y="4" width="10" height="10" fill="#3b82f6"/><text x="87" y="13" fill="#94a3b8" font-size="11">2025 (Aug-Dec)</text>`+
+       `<rect x="181.6" y="4" width="10" height="10" fill="#f59e0b"/><text x="196.6" y="13" fill="#94a3b8" font-size="11">2026 (Jan-Jul)</text>`;
+  }else{
+    s+=`<text x="568" y="170" fill="#64748b" font-size="15" font-weight="600" text-anchor="middle">Awaiting playback — no bound business revealed</text>`;
+  }
+  document.getElementById("t4-markets").innerHTML=s;
+}
+function drawTab4(limit){
+  renderT4Markets(marketPeriodGWP(T1.points,limit,0.10));
+  // monthly 100% GWP line — Tab 2's exact machinery on the sumG aggregation
+  drawMonthly("t4-monthly", monthlySeries(T1.points,limit,'sumG'), fmtT4, fmtT4);
+}
+
 // ---- status line ----
 const MO=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function dayLabel(day){
@@ -618,7 +704,7 @@ function render(){
   if(key===curKey) return;
   curKey=key;
   const limit=revealLimit(state);
-  drawScatter(limit); drawBars(limit); drawTab2(limit); drawTab3(limit); setStatus(state);
+  drawScatter(limit); drawBars(limit); drawTab2(limit); drawTab3(limit); drawTab4(limit); setStatus(state);
 }
 async function poll(){
   try{
